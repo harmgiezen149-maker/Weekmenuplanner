@@ -9,7 +9,7 @@ export const HOOFDINGREDIENTEN = [
 
 export const MOEILIJKHEDEN = ["Makkelijk", "Gemiddeld", "Pittig werk"] as const;
 
-export const MAALTIJDEN = ["Ontbijt", "Lunch", "Avondeten"] as const;
+export const MAALTIJDEN = ["Ontbijt", "Lunch", "Avondeten", "Toetje"] as const;
 
 export const DAGEN = [
   "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag",
