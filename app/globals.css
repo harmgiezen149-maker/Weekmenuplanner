@@ -1,0 +1,54 @@
+:root {
+  --bg: #f4f5f9;
+  --surface: #ffffff;
+  --ink: #161927;
+  --sub: #777e96;
+  --line: #e6e8f0;
+  --accent: #5b5bf0;
+  --accent-soft: #ececfe;
+  --gold: #f0a93a;
+  --green: #1fae72;
+  --red: #e0563e;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
