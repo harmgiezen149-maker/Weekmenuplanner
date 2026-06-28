@@ -114,7 +114,7 @@ export default function App() {
         if (bestaand) {
           bestaand.hoev = Math.round((bestaand.hoev + extra) * 10) / 10;
         } else {
-          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: GEEN_WINKEL, gedaan: false });
+          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: GEEN_WINKEL, gedaan: false, bron: "hand" });
         }
       });
       return { items };
@@ -829,6 +829,7 @@ function BoodschappenPagina({
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
+  const [bevestigWisAlles, setBevestigWisAlles] = useState(false);
   const [filterWinkel, setFilterWinkel] = useState<string | null>(null); // null = alle winkels
 
   const genereerUitWeek = (): BoodschapItem[] => {
@@ -846,17 +847,36 @@ function BoodschappenPagina({
       });
     });
     return Object.values(acc).map((v) => ({
-      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid, winkel: GEEN_WINKEL, gedaan: false,
+      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid, winkel: GEEN_WINKEL, gedaan: false, bron: "week" as const,
     }));
   };
 
-  const genereer = () => { setBoodschappen({ items: genereerUitWeek() }); setBevestigGenereer(false); };
+  // Verversen: vervang alleen de week-items door een nieuwe set uit het weekmenu,
+  // en laat alle handmatig toegevoegde items ongemoeid. Bestaande winkel-toewijzing
+  // en gedaan-status van een week-item worden hergebruikt als naam+eenheid matchen.
+  const genereer = () => {
+    setBoodschappen((p) => {
+      const oudWeek = p.items.filter((it) => it.bron === "week");
+      const hand = p.items.filter((it) => it.bron !== "week");
+      const nieuwWeek = genereerUitWeek().map((nw) => {
+        const match = oudWeek.find(
+          (o) => o.naam.toLowerCase() === nw.naam.toLowerCase() && (o.eenheid || "").toLowerCase() === (nw.eenheid || "").toLowerCase()
+        );
+        return match ? { ...nw, winkel: match.winkel, gedaan: match.gedaan } : nw;
+      });
+      // Week-items eerst, daarna de handmatige (volgorde binnen elk blijft behouden).
+      return { items: [...nieuwWeek, ...hand] };
+    });
+    setBevestigGenereer(false);
+  };
+
+  const wisAlles = () => { setBoodschappen({ items: [] }); setBevestigWisAlles(false); };
 
   const setItem = (id: string, patch: Partial<BoodschapItem>) =>
     setBoodschappen((p) => ({ items: p.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) }));
   const delItem = (id: string) => setBoodschappen((p) => ({ items: p.items.filter((it) => it.id !== id) }));
   const addItem = () =>
-    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gedaan: false }] }));
+    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gedaan: false, bron: "hand" }] }));
 
   // --- Slepen ---------------------------------------------------------------
   // dragId = het item dat opgepakt is. dropDoel = waar het neerkomt: een winkel
@@ -967,13 +987,21 @@ function BoodschappenPagina({
   return (
     <div style={{ ...(dragId ? { touchAction: "none", userSelect: "none" } as React.CSSProperties : {}) }}>
       <div style={S.boodTopBar}>
-        <button onClick={() => (items.length ? setBevestigGenereer(true) : genereer())} style={S.boodTopBtn}>
-          <RefreshCw size={14} /> Uit weekmenu
+        <button
+          onClick={() => (items.some((it) => it.bron === "week") ? setBevestigGenereer(true) : genereer())}
+          style={S.boodTopBtn}
+        >
+          <RefreshCw size={14} /> Weekmenu verversen
         </button>
         <button onClick={() => setVerbergGedaan((v) => !v)} style={{ ...S.boodTopBtn, ...(verbergGedaan ? S.boodTopBtnOn : {}) }}>
           {verbergGedaan ? <Eye size={14} /> : <EyeOff size={14} />} {verbergGedaan ? "Toon gedaan" : "Verberg gedaan"}
         </button>
       </div>
+      {items.length > 0 && (
+        <button onClick={() => setBevestigWisAlles(true)} style={S.wisAllesBtn}>
+          <Trash2 size={14} /> Hele lijst leegmaken
+        </button>
+      )}
 
       {items.length === 0 ? (
         <p style={S.empty}>
@@ -1046,10 +1074,19 @@ function BoodschappenPagina({
 
       {bevestigGenereer && (
         <Bevestig
-          titel="Lijst opnieuw genereren?"
-          tekst="De huidige boodschappenlijst (inclusief handmatige items, winkels en volgorde) wordt vervangen door een nieuwe lijst uit het weekmenu."
-          bevestigLabel="Ja, opnieuw genereren"
+          titel="Weekmenu verversen?"
+          tekst="De items uit het weekmenu worden opnieuw berekend en vervangen. Handmatig toegevoegde items blijven staan. Winkel-indeling van bestaande weekmenu-items blijft behouden waar mogelijk."
+          bevestigLabel="Ja, verversen"
           onBevestig={genereer} onAnnuleer={() => setBevestigGenereer(false)}
+        />
+      )}
+
+      {bevestigWisAlles && (
+        <Bevestig
+          titel="Hele lijst leegmaken?"
+          tekst="Alle items worden verwijderd, ook de handmatig toegevoegde. Dit kan niet ongedaan worden gemaakt."
+          bevestigLabel="Ja, alles wissen"
+          onBevestig={wisAlles} onAnnuleer={() => setBevestigWisAlles(false)}
         />
       )}
     </div>
@@ -1267,6 +1304,7 @@ const S: Record<string, React.CSSProperties> = {
   boodTopBar: { display: "flex", gap: 8, marginBottom: 12 },
   boodTopBtn: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
   boodTopBtnOn: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "var(--accent)" },
+  wisAllesBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--red)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "2px 4px", marginBottom: 12, marginTop: -2 },
   winkelKop: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "4px 2px 8px" },
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },

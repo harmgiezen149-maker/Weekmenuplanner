@@ -47,14 +47,15 @@ export interface WeekState {
 }
 
 // Boodschappenlijst: één bewerkbare, opgeslagen lijst.
-// Items kunnen uit het weekmenu komen (bron: "week") of handmatig zijn (bron: "hand").
+// bron "week" = automatisch uit het weekmenu; "hand" = zelf toegevoegd.
 export interface BoodschapItem {
   id: string;
   naam: string;
   hoev: number;
   eenheid: string;
-  winkel: string; // een van WINKELS
+  winkel: string; // een van WINKELS, of "" (niet toegewezen)
   gedaan: boolean;
+  bron: "week" | "hand";
 }
 
 export interface Boodschappen {
