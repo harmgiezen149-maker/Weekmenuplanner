@@ -13,6 +13,8 @@ export const DAGEN = [
   "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag",
 ] as const;
 
+export const WINKELS = ["Lidl", "Jumbo", "AH", "Anders"] as const;
+
 export interface Ingredient {
   naam: string;
   hoev: number;
@@ -39,4 +41,19 @@ export type Week = Record<string, WeekSlot>;
 export interface WeekState {
   startDag: number; // 0 = Maandag
   slots: Week;
+}
+
+// Boodschappenlijst: één bewerkbare, opgeslagen lijst.
+// Items kunnen uit het weekmenu komen (bron: "week") of handmatig zijn (bron: "hand").
+export interface BoodschapItem {
+  id: string;
+  naam: string;
+  hoev: number;
+  eenheid: string;
+  winkel: string; // een van WINKELS
+  gedaan: boolean;
+}
+
+export interface Boodschappen {
+  items: BoodschapItem[];
 }

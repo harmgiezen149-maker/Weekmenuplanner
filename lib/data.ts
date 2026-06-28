@@ -1,17 +1,19 @@
 import { redis } from "./redis";
-import type { Recept, WeekState } from "./types";
+import type { Recept, WeekState, Boodschappen } from "./types";
 
 // ----------------------------------------------------------------------------
 // Redis key-indeling:
 //   recipe:<id>      -> JSON van één recept
 //   recipes:index    -> SET met alle recept-id's
 //   week:current     -> JSON van de weekplanning (startDag + slots)
+//   boodschappen     -> JSON van de bewerkbare boodschappenlijst
 // Eén app/huishouden. Wil je later meerdere gebruikers, prefix dan met userId.
 // ----------------------------------------------------------------------------
 
 const RECIPE = (id: string) => `recipe:${id}`;
 const RECIPE_INDEX = "recipes:index";
 const WEEK_KEY = "week:current";
+const BOODSCHAPPEN_KEY = "boodschappen:current";
 
 export async function getAllRecepten(): Promise<Recept[]> {
   const ids = await redis.smembers(RECIPE_INDEX);
@@ -45,6 +47,15 @@ export async function getWeek(): Promise<WeekState> {
 export async function saveWeek(week: WeekState): Promise<WeekState> {
   await redis.set(WEEK_KEY, week);
   return week;
+}
+
+export async function getBoodschappen(): Promise<Boodschappen> {
+  return (await redis.get<Boodschappen>(BOODSCHAPPEN_KEY)) ?? { items: [] };
+}
+
+export async function saveBoodschappen(b: Boodschappen): Promise<Boodschappen> {
+  await redis.set(BOODSCHAPPEN_KEY, b);
+  return b;
 }
 
 export function newId(): string {
