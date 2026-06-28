@@ -99,6 +99,28 @@ export default function App() {
     setRecepten((p) => p.filter((x) => x.id !== id));
   };
 
+  // Voegt de ingrediënten van een recept toe aan de boodschappenlijst (los van
+  // het weekmenu), geschaald naar het gekozen aantal personen. Bestaat een item
+  // met dezelfde naam+eenheid al, dan tellen we de hoeveelheid erbij op.
+  const voegReceptToeAanLijst = (recept: Recept, personen: number) => {
+    const factor = (personen || recept.personen) / (recept.personen || 1);
+    setBoodschappen((p) => {
+      const items = [...p.items];
+      recept.ingredienten.forEach((i) => {
+        const extra = (Number(i.hoev) || 0) * factor;
+        const bestaand = items.find(
+          (it) => it.naam.toLowerCase() === i.naam.toLowerCase() && it.eenheid.toLowerCase() === (i.eenheid || "").toLowerCase()
+        );
+        if (bestaand) {
+          bestaand.hoev = Math.round((bestaand.hoev + extra) * 10) / 10;
+        } else {
+          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: "AH", gedaan: false });
+        }
+      });
+      return { items };
+    });
+  };
+
   const tabs = [
     { id: "recepten", label: "Recepten", icon: BookOpen },
     { id: "toevoegen", label: "Toevoegen", icon: Plus },
@@ -123,7 +145,7 @@ export default function App() {
               <ReceptenLijst
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onDelete={deleteRecept} onScore={(id, s) => updateRecept(id, { score: s })}
-                onUpdate={updateRecept}
+                onUpdate={updateRecept} onNaarLijst={voegReceptToeAanLijst}
               />
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
@@ -250,11 +272,12 @@ function PlaatsInWeekDialog({
 // RECEPTENLIJST + FILTERS
 // ============================================================================
 function ReceptenLijst({
-  recepten, week, setWeek, dagen, onDelete, onScore, onUpdate,
+  recepten, week, setWeek, dagen, onDelete, onScore, onUpdate, onNaarLijst,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>;
   dagen: readonly string[]; onDelete: (id: string) => void; onScore: (id: string, s: number) => void;
   onUpdate: (id: string, patch: Partial<Recept>) => Promise<void>;
+  onNaarLijst: (recept: Recept, personen: number) => void;
 }) {
   const [zoek, setZoek] = useState("");
   const [fKeuken, setFKeuken] = useState("");
@@ -264,6 +287,7 @@ function ReceptenLijst({
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
   const [bewerk, setBewerk] = useState<Recept | null>(null);
+  const [naarLijst, setNaarLijst] = useState<Recept | null>(null);
 
   const gefilterd = recepten.filter((r) => {
     if (zoek && !r.titel.toLowerCase().includes(zoek.toLowerCase())) return false;
@@ -309,6 +333,7 @@ function ReceptenLijst({
           onScore={(s) => onScore(huidig.id, s)}
           onPlaats={() => { setPlaats(huidig); setOpen(null); }}
           onBewerk={() => { setBewerk(huidig); setOpen(null); }}
+          onNaarLijst={() => { setNaarLijst(huidig); setOpen(null); }}
         />
       )}
 
@@ -326,6 +351,41 @@ function ReceptenLijst({
           onClose={() => setPlaats(null)}
         />
       )}
+
+      {naarLijst && (
+        <NaarLijstDialog
+          recept={naarLijst}
+          onBevestig={(personen) => { onNaarLijst(naarLijst, personen); setNaarLijst(null); }}
+          onClose={() => setNaarLijst(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function NaarLijstDialog({
+  recept, onBevestig, onClose,
+}: {
+  recept: Recept; onBevestig: (personen: number) => void; onClose: () => void;
+}) {
+  const [personen, setPersonen] = useState(recept.personen || 4);
+  return (
+    <div style={S.modalBg} onClick={onClose}>
+      <div style={S.bevestigBox} onClick={(e) => e.stopPropagation()}>
+        <h2 style={S.bevestigTitel}>Aan boodschappenlijst</h2>
+        <p style={S.bevestigTekst}>
+          De ingrediënten van "{recept.titel}" worden aan je boodschappenlijst toegevoegd, los van het weekmenu. Voor hoeveel personen?
+        </p>
+        <div style={S.naarLijstPers}>
+          <button onClick={() => setPersonen((n) => Math.max(1, n - 1))} style={S.persBtn} aria-label="Minder"><Minus size={16} /></button>
+          <span style={S.naarLijstPersNum}>{personen} pers.</span>
+          <button onClick={() => setPersonen((n) => n + 1)} style={S.persBtn} aria-label="Meer"><Plus size={16} /></button>
+        </div>
+        <div style={S.bevestigKnoppen}>
+          <button onClick={onClose} style={S.bevestigAnnuleer}>Annuleren</button>
+          <button onClick={() => onBevestig(personen)} style={{ ...S.bevestigJa, background: "var(--accent)" }}>Toevoegen</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -352,9 +412,9 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
 }
 
 function ReceptModal({
-  r, onClose, onDelete, onScore, onPlaats, onBewerk,
+  r, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst,
 }: {
-  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void;
+  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void;
 }) {
   return (
     <div style={S.modalBg} onClick={onClose}>
@@ -372,9 +432,14 @@ function ReceptModal({
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
         </div>
 
-        <button onClick={onPlaats} style={{ ...S.primaryBtn, marginTop: 16 }}>
-          <CalendarPlus size={16} /> In weekmenu plaatsen
-        </button>
+        <div style={S.modalKnopRij}>
+          <button onClick={onPlaats} style={S.primaryBtn}>
+            <CalendarPlus size={16} /> In weekmenu
+          </button>
+          <button onClick={onNaarLijst} style={S.secondaryBtn}>
+            <ShoppingCart size={16} /> Naar lijst
+          </button>
+        </div>
 
         <div style={S.scoreEdit}>
           <span style={S.label}>Jouw score</span>
@@ -1139,6 +1204,10 @@ const S: Record<string, React.CSSProperties> = {
   ingRow: { display: "flex", gap: 6, marginBottom: 7, alignItems: "center" },
   addRowBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--accent-soft)", color: "var(--accent)", border: "none", padding: "8px 12px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 2 },
   primaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent)", color: "#fff", border: "none", padding: "13px", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
+  modalKnopRij: { display: "flex", gap: 8, marginTop: 16 },
+  secondaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent-soft)", color: "var(--accent)", border: "none", padding: "13px", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
+  naarLijstPers: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "12px", background: "var(--bg)", borderRadius: 12, marginBottom: 18 },
+  naarLijstPersNum: { fontSize: 16, fontWeight: 700, minWidth: 70, textAlign: "center" },
 
   importBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center", padding: "30px 20px", background: "var(--surface)", borderRadius: 16, border: "1.5px dashed var(--line)" },
   importText: { fontSize: 14, color: "var(--sub)", margin: 0, lineHeight: 1.5, maxWidth: 280 },
