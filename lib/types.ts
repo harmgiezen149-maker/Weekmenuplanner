@@ -15,6 +15,9 @@ export const DAGEN = [
 
 export const WINKELS = ["Lidl", "Jumbo", "AH", "Anders"] as const;
 
+// Beginwaarde voor een nieuw item: nog geen winkel toegewezen.
+export const GEEN_WINKEL = "";
+
 export interface Ingredient {
   naam: string;
   hoev: number;

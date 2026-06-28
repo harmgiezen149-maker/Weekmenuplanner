@@ -7,7 +7,7 @@ import {
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
 } from "lucide-react";
 import {
-  KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, DAGEN, WINKELS,
+  KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, DAGEN, WINKELS, GEEN_WINKEL,
   type Recept, type WeekState, type Boodschappen, type BoodschapItem,
 } from "@/lib/types";
 
@@ -114,7 +114,7 @@ export default function App() {
         if (bestaand) {
           bestaand.hoev = Math.round((bestaand.hoev + extra) * 10) / 10;
         } else {
-          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: "AH", gedaan: false });
+          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: GEEN_WINKEL, gedaan: false });
         }
       });
       return { items };
@@ -829,6 +829,7 @@ function BoodschappenPagina({
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
+  const [filterWinkel, setFilterWinkel] = useState<string | null>(null); // null = alle winkels
 
   const genereerUitWeek = (): BoodschapItem[] => {
     const acc: Record<string, { naam: string; eenheid: string; hoev: number }> = {};
@@ -845,7 +846,7 @@ function BoodschappenPagina({
       });
     });
     return Object.values(acc).map((v) => ({
-      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid, winkel: "AH", gedaan: false,
+      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid, winkel: GEEN_WINKEL, gedaan: false,
     }));
   };
 
@@ -855,7 +856,7 @@ function BoodschappenPagina({
     setBoodschappen((p) => ({ items: p.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) }));
   const delItem = (id: string) => setBoodschappen((p) => ({ items: p.items.filter((it) => it.id !== id) }));
   const addItem = () =>
-    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: "AH", gedaan: false }] }));
+    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gedaan: false }] }));
 
   // --- Slepen ---------------------------------------------------------------
   // dragId = het item dat opgepakt is. dropDoel = waar het neerkomt: een winkel
@@ -869,29 +870,37 @@ function BoodschappenPagina({
 
   const items = boodschappen.items;
   const zichtbaar = verbergGedaan ? items.filter((it) => !it.gedaan) : items;
-  const groepen = WINKELS.map((w) => ({ winkel: w, lijst: zichtbaar.filter((it) => it.winkel === w) }))
-    .filter((g) => g.lijst.length > 0);
+
+  // Vaste groepsvolgorde: eerst niet-toegewezen, dan de vier winkels. Alle vier
+  // winkelgroepen tonen altijd (ook leeg) zodat je items erin kunt slepen.
+  // GEEN_WINKEL ("") is de sleutel voor de niet-toegewezen groep.
+  const alleGroepKeys: string[] = [GEEN_WINKEL, ...WINKELS];
+  const groepLabel = (k: string) => (k === GEEN_WINKEL ? "Niet toegewezen" : k);
+
+  // Filter bepaalt welke groepen zichtbaar zijn (null = alle).
+  const zichtbareKeys = filterWinkel === null ? alleGroepKeys : [filterWinkel];
+  const groepen = zichtbareKeys.map((w) => ({
+    winkel: w,
+    lijst: zichtbaar.filter((it) => (it.winkel || GEEN_WINKEL) === w),
+  }));
 
   // Bepaal tijdens het slepen de doelwinkel + invoegpositie op basis van de y-coördinaat.
   const bepaalDoel = (y: number) => {
-    let gevondenWinkel: string | null = null;
-    // Welke winkelgroep bevat deze y? (gebruik de groepscontainer)
-    for (const w of WINKELS) {
+    const keys = groepen.map((g) => g.winkel);
+    let gevonden: string | null = null;
+    for (const w of keys) {
       const el = winkelRefs.current[w];
       if (!el) continue;
       const r = el.getBoundingClientRect();
-      if (y >= r.top && y <= r.bottom) { gevondenWinkel = w; break; }
+      if (y >= r.top && y <= r.bottom) { gevonden = w; break; }
     }
-    // Buiten alle groepen: pak de dichtstbijzijnde (boven eerste / onder laatste).
-    if (!gevondenWinkel) {
-      const aanwezig = groepen.map((g) => g.winkel);
-      if (aanwezig.length === 0) { setDropWinkel(null); setDropVoorId(null); return; }
-      const eersteEl = winkelRefs.current[aanwezig[0]];
-      if (eersteEl && y < eersteEl.getBoundingClientRect().top) gevondenWinkel = aanwezig[0];
-      else gevondenWinkel = aanwezig[aanwezig.length - 1];
+    if (gevonden === null) {
+      if (keys.length === 0) { setDropWinkel(null); setDropVoorId(null); return; }
+      const eersteEl = winkelRefs.current[keys[0]];
+      if (eersteEl && y < eersteEl.getBoundingClientRect().top) gevonden = keys[0];
+      else gevonden = keys[keys.length - 1];
     }
-    // Binnen de winkel: bepaal vóór welk item we komen.
-    const lijst = zichtbaar.filter((it) => it.winkel === gevondenWinkel && it.id !== dragId);
+    const lijst = zichtbaar.filter((it) => (it.winkel || GEEN_WINKEL) === gevonden && it.id !== dragId);
     let voorId: string | null = null;
     for (const it of lijst) {
       const el = rijRefs.current[it.id];
@@ -900,14 +909,14 @@ function BoodschappenPagina({
       const midden = r.top + r.height / 2;
       if (y < midden) { voorId = it.id; break; }
     }
-    setDropWinkel(gevondenWinkel);
+    setDropWinkel(gevonden);
     setDropVoorId(voorId);
   };
 
   const startDrag = (id: string, clientY: number) => {
     setDragId(id);
     setPointerY(clientY);
-    setDropWinkel(items.find((it) => it.id === id)?.winkel ?? null);
+    setDropWinkel(items.find((it) => it.id === id)?.winkel ?? GEEN_WINKEL);
     setDropVoorId(null);
     bepaalDoel(clientY);
   };
@@ -922,18 +931,16 @@ function BoodschappenPagina({
       setBoodschappen((p) => {
         const arr = [...p.items];
         const di = arr.findIndex((x) => x.id === dragId);
-        if (di === -1 || !dropWinkel) return p;
+        if (di === -1 || dropWinkel === null) return p;
         const [gesleept] = arr.splice(di, 1);
         gesleept.winkel = dropWinkel;
-        // bepaal invoeg-index: vóór dropVoorId, anders achteraan de winkelgroep
         let invoeg: number;
         if (dropVoorId) {
           invoeg = arr.findIndex((x) => x.id === dropVoorId);
           if (invoeg === -1) invoeg = arr.length;
         } else {
-          // laatste index van deze winkel + 1; anders eind
           let laatste = -1;
-          arr.forEach((x, i) => { if (x.winkel === dropWinkel) laatste = i; });
+          arr.forEach((x, i) => { if ((x.winkel || GEEN_WINKEL) === dropWinkel) laatste = i; });
           invoeg = laatste + 1;
         }
         arr.splice(invoeg, 0, gesleept);
@@ -978,29 +985,51 @@ function BoodschappenPagina({
         </div>
       )}
 
-      {groepen.map((g) => (
-        <div key={g.winkel} ref={(el) => { winkelRefs.current[g.winkel] = el; }}
+      {items.length > 0 && (
+        <div style={S.filterRow}>
+          <div style={S.chips}>
+            <button onClick={() => setFilterWinkel(null)} style={{ ...S.chip, ...(filterWinkel === null ? S.chipOn : {}) }}>Alle</button>
+            {alleGroepKeys.map((w) => {
+              const aantal = items.filter((it) => (it.winkel || GEEN_WINKEL) === w).length;
+              return (
+                <button key={w || "geen"} onClick={() => setFilterWinkel(filterWinkel === w ? null : w)}
+                  style={{ ...S.chip, ...(filterWinkel === w ? S.chipOn : {}) }}>
+                  {groepLabel(w)} {aantal > 0 ? `(${aantal})` : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {items.length > 0 && groepen.map((g) => (
+        <div key={g.winkel || "geen"} ref={(el) => { winkelRefs.current[g.winkel] = el; }}
           style={{ marginBottom: 14, ...(dragId && dropWinkel === g.winkel ? S.winkelActief : {}) }}>
-          <div style={S.winkelKop}><Store size={14} /> {g.winkel} <span style={S.winkelAantal}>{g.lijst.length}</span></div>
-          {g.lijst.map((it) => (
-            <React.Fragment key={it.id}>
-              {dragId && dropWinkel === g.winkel && dropVoorId === it.id && it.id !== dragId && <div style={S.dropLijn} />}
-              <BoodItem
-                it={it}
-                isDragging={dragId === it.id}
-                refCb={(el) => { rijRefs.current[it.id] = el; }}
-                onStartDrag={(y) => startDrag(it.id, y)}
-                onToggle={() => setItem(it.id, { gedaan: !it.gedaan })}
-                onNaam={(v) => setItem(it.id, { naam: v })}
-                onHoev={(v) => setItem(it.id, { hoev: v })}
-                onEenheid={(v) => setItem(it.id, { eenheid: v })}
-                onWinkel={(v) => setItem(it.id, { winkel: v })}
-                onDel={() => delItem(it.id)}
-              />
-            </React.Fragment>
-          ))}
-          {/* drop-indicator onderaan de groep */}
-          {dragId && dropWinkel === g.winkel && dropVoorId === null && <div style={S.dropLijn} />}
+          <div style={{ ...S.winkelKop, ...(g.winkel === GEEN_WINKEL ? S.winkelKopGeen : {}) }}>
+            <Store size={14} /> {groepLabel(g.winkel)} <span style={S.winkelAantal}>{g.lijst.length}</span>
+          </div>
+          {g.lijst.length === 0 ? (
+            <div style={S.winkelLeeg}>Sleep items hierheen</div>
+          ) : (
+            g.lijst.map((it) => (
+              <React.Fragment key={it.id}>
+                {dragId && dropWinkel === g.winkel && dropVoorId === it.id && it.id !== dragId && <div style={S.dropLijn} />}
+                <BoodItem
+                  it={it}
+                  isDragging={dragId === it.id}
+                  refCb={(el) => { rijRefs.current[it.id] = el; }}
+                  onStartDrag={(y) => startDrag(it.id, y)}
+                  onToggle={() => setItem(it.id, { gedaan: !it.gedaan })}
+                  onNaam={(v) => setItem(it.id, { naam: v })}
+                  onHoev={(v) => setItem(it.id, { hoev: v })}
+                  onEenheid={(v) => setItem(it.id, { eenheid: v })}
+                  onWinkel={(v) => setItem(it.id, { winkel: v })}
+                  onDel={() => delItem(it.id)}
+                />
+              </React.Fragment>
+            ))
+          )}
+          {dragId && dropWinkel === g.winkel && dropVoorId === null && g.lijst.length > 0 && <div style={S.dropLijn} />}
         </div>
       ))}
 
@@ -1069,7 +1098,8 @@ function BoodItem({
             <input style={{ ...S.input, flex: 1 }} type="number" placeholder="aantal" value={it.hoev} onChange={(e) => onHoev(Number(e.target.value))} />
             <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={it.eenheid} onChange={(e) => onEenheid(e.target.value)} />
             <select style={{ ...S.input, flex: 1.4 }} value={it.winkel} onChange={(e) => onWinkel(e.target.value)}>
-              {WINKELS.map((w) => <option key={w}>{w}</option>)}
+              <option value="">Niet toegewezen</option>
+              {WINKELS.map((w) => <option key={w} value={w}>{w}</option>)}
             </select>
           </div>
           <button onClick={onDel} style={S.boodDelBtn}><Trash2 size={13} /> Verwijder item</button>
@@ -1238,6 +1268,8 @@ const S: Record<string, React.CSSProperties> = {
   boodTopBtn: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
   boodTopBtnOn: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "var(--accent)" },
   winkelKop: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "4px 2px 8px" },
+  winkelKopGeen: { color: "var(--accent)" },
+  winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },
   winkelAantal: { background: "var(--line)", color: "var(--sub)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 },
   boodRow: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, marginBottom: 7, overflow: "hidden" },
   boodRowDragging: { opacity: 0.4, borderStyle: "dashed", borderColor: "var(--accent)" },
