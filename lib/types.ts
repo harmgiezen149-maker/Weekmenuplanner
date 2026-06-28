@@ -9,6 +9,8 @@ export const HOOFDINGREDIENTEN = [
 
 export const MOEILIJKHEDEN = ["Makkelijk", "Gemiddeld", "Pittig werk"] as const;
 
+export const MAALTIJDEN = ["Ontbijt", "Lunch", "Avondeten"] as const;
+
 export const DAGEN = [
   "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag",
 ] as const;
@@ -29,10 +31,12 @@ export interface Recept {
   titel: string;
   keuken: string;
   hoofd: string;
+  maaltijd: string; // Ontbijt, Lunch of Avondeten
   moeilijkheid: string;
   tijd: number;
   score: number;
   personen: number;
+  gegeten: number; // hoe vaak dit recept al gegeten is
   ingredienten: Ingredient[];
   bereiding: string;
 }

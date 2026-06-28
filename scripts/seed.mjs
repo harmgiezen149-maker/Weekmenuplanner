@@ -13,8 +13,8 @@ const RECEPTEN = [
   {
     id: "seed-puttanesca",
     titel: "Pasta alla Puttanesca",
-    keuken: "Italiaans", hoofd: "Pasta", moeilijkheid: "Makkelijk",
-    tijd: 25, score: 4, personen: 4,
+    keuken: "Italiaans", hoofd: "Pasta", maaltijd: "Avondeten", moeilijkheid: "Makkelijk",
+    tijd: 25, score: 4, personen: 4, gegeten: 0,
     ingredienten: [
       { naam: "Spaghetti", hoev: 400, eenheid: "g" },
       { naam: "Ansjovis", hoev: 6, eenheid: "filets" },
@@ -29,8 +29,8 @@ const RECEPTEN = [
   {
     id: "seed-gyros",
     titel: "Griekse gyros schotel",
-    keuken: "Grieks", hoofd: "Vlees", moeilijkheid: "Gemiddeld",
-    tijd: 40, score: 5, personen: 4,
+    keuken: "Grieks", hoofd: "Vlees", maaltijd: "Avondeten", moeilijkheid: "Gemiddeld",
+    tijd: 40, score: 5, personen: 4, gegeten: 0,
     ingredienten: [
       { naam: "Varkensreepjes", hoev: 600, eenheid: "g" },
       { naam: "Gyroskruiden", hoev: 2, eenheid: "el" },

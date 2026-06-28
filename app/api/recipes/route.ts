@@ -16,10 +16,12 @@ export async function POST(req: NextRequest) {
     titel: body.titel || "Naamloos recept",
     keuken: body.keuken || "Overig",
     hoofd: body.hoofd || "Vlees",
+    maaltijd: body.maaltijd || "Avondeten",
     moeilijkheid: body.moeilijkheid || "Makkelijk",
     tijd: Number(body.tijd) || 30,
     score: Number(body.score) || 0,
     personen: Number(body.personen) || 4,
+    gegeten: Number(body.gegeten) || 0,
     ingredienten: Array.isArray(body.ingredienten) ? body.ingredienten : [],
     bereiding: body.bereiding || "",
   };

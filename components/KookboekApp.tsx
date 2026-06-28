@@ -5,9 +5,10 @@ import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
+  Utensils, Repeat, ArrowDownNarrowWide,
 } from "lucide-react";
 import {
-  KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, DAGEN, WINKELS, GEEN_WINKEL,
+  KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
   type Recept, type WeekState, type Boodschappen, type BoodschapItem,
 } from "@/lib/types";
 
@@ -282,8 +283,10 @@ function ReceptenLijst({
   const [zoek, setZoek] = useState("");
   const [fKeuken, setFKeuken] = useState("");
   const [fHoofd, setFHoofd] = useState("");
+  const [fMaaltijd, setFMaaltijd] = useState("");
   const [fMoeil, setFMoeil] = useState("");
   const [fScore, setFScore] = useState(0);
+  const [sortering, setSortering] = useState<"naam" | "gegeten" | "score">("naam");
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
   const [bewerk, setBewerk] = useState<Recept | null>(null);
@@ -293,13 +296,18 @@ function ReceptenLijst({
     if (zoek && !r.titel.toLowerCase().includes(zoek.toLowerCase())) return false;
     if (fKeuken && r.keuken !== fKeuken) return false;
     if (fHoofd && r.hoofd !== fHoofd) return false;
+    if (fMaaltijd && r.maaltijd !== fMaaltijd) return false;
     if (fMoeil && r.moeilijkheid !== fMoeil) return false;
     if (fScore && r.score < fScore) return false;
     return true;
+  }).sort((a, b) => {
+    if (sortering === "gegeten") return (b.gegeten ?? 0) - (a.gegeten ?? 0) || a.titel.localeCompare(b.titel);
+    if (sortering === "score") return (b.score ?? 0) - (a.score ?? 0) || a.titel.localeCompare(b.titel);
+    return a.titel.localeCompare(b.titel);
   });
 
-  const reset = () => { setFKeuken(""); setFHoofd(""); setFMoeil(""); setFScore(0); setZoek(""); };
-  const anyFilter = fKeuken || fHoofd || fMoeil || fScore || zoek;
+  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setZoek(""); };
+  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || zoek;
   const huidig = open ? recepten.find((r) => r.id === open.id) || open : null;
 
   return (
@@ -309,6 +317,7 @@ function ReceptenLijst({
         <input style={S.searchInput} placeholder="Zoek recept..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
       </div>
 
+      <div style={S.filterRow}><Chips opts={MAALTIJDEN} val={fMaaltijd} set={setFMaaltijd} /></div>
       <div style={S.filterRow}><Chips opts={KEUKENS} val={fKeuken} set={setFKeuken} /></div>
       <div style={S.filterRow}><Chips opts={HOOFDINGREDIENTEN} val={fHoofd} set={setFHoofd} /></div>
       <div style={S.filterRow}>
@@ -316,6 +325,14 @@ function ReceptenLijst({
         <div style={{ flex: 1 }} />
         <ScoreFilter val={fScore} set={setFScore} />
       </div>
+
+      <div style={S.sorteerRij}>
+        <span style={S.sorteerLabel}><ArrowDownNarrowWide size={13} /> Sorteer</span>
+        <button onClick={() => setSortering("naam")} style={{ ...S.sorteerBtn, ...(sortering === "naam" ? S.sorteerBtnOn : {}) }}>Naam</button>
+        <button onClick={() => setSortering("score")} style={{ ...S.sorteerBtn, ...(sortering === "score" ? S.sorteerBtnOn : {}) }}>Score</button>
+        <button onClick={() => setSortering("gegeten")} style={{ ...S.sorteerBtn, ...(sortering === "gegeten" ? S.sorteerBtnOn : {}) }}>Vaakst gegeten</button>
+      </div>
+
       {anyFilter ? <button onClick={reset} style={S.resetBtn}><X size={13} /> Filters wissen</button> : null}
 
       <div style={{ marginTop: 8 }}>
@@ -331,6 +348,7 @@ function ReceptenLijst({
           r={huidig} onClose={() => setOpen(null)}
           onDelete={() => { onDelete(huidig.id); setOpen(null); }}
           onScore={(s) => onScore(huidig.id, s)}
+          onGegeten={(n) => onUpdate(huidig.id, { gegeten: n })}
           onPlaats={() => { setPlaats(huidig); setOpen(null); }}
           onBewerk={() => { setBewerk(huidig); setOpen(null); }}
           onNaarLijst={() => { setNaarLijst(huidig); setOpen(null); }}
@@ -399,9 +417,11 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
           <Sterren n={r.score} small />
         </div>
         <div style={S.cardMeta}>
+          <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
+          {(r.gegeten ?? 0) > 0 && <span style={S.metaItem}><Repeat size={12} /> {r.gegeten}×</span>}
         </div>
       </button>
       <button onClick={onPlaats} style={S.cardPlaatsBtn}>
@@ -412,9 +432,9 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
 }
 
 function ReceptModal({
-  r, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst,
+  r, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
 }: {
-  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void;
+  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
 }) {
   return (
     <div style={S.modalBg} onClick={onClose}>
@@ -427,6 +447,7 @@ function ReceptModal({
           </div>
         </div>
         <div style={S.cardMeta}>
+          <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
@@ -444,6 +465,17 @@ function ReceptModal({
         <div style={S.scoreEdit}>
           <span style={S.label}>Jouw score</span>
           <Sterren n={r.score} onSet={onScore} />
+        </div>
+
+        <div style={S.gegetenRij}>
+          <div>
+            <span style={S.label}>Keer gegeten</span>
+            <span style={S.gegetenNum}>{r.gegeten ?? 0}×</span>
+          </div>
+          <div style={S.gegetenKnoppen}>
+            <button onClick={() => onGegeten(Math.max(0, (r.gegeten ?? 0) - 1))} style={S.persBtn} aria-label="Minder"><Minus size={15} /></button>
+            <button onClick={() => onGegeten((r.gegeten ?? 0) + 1)} style={S.gegetenPlus}><Utensils size={14} /> +1 gegeten</button>
+          </div>
         </div>
 
         <h3 style={S.sectionH}>Ingrediënten ({r.personen} pers.)</h3>
@@ -507,8 +539,8 @@ function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
 
 function leegRecept(): Partial<Recept> {
   return {
-    titel: "", keuken: KEUKENS[0], hoofd: HOOFDINGREDIENTEN[0], moeilijkheid: MOEILIJKHEDEN[0],
-    tijd: 30, score: 0, personen: 4, ingredienten: [{ naam: "", hoev: 0, eenheid: "" }], bereiding: "",
+    titel: "", keuken: KEUKENS[0], hoofd: HOOFDINGREDIENTEN[0], maaltijd: "Avondeten", moeilijkheid: MOEILIJKHEDEN[0],
+    tijd: 30, score: 0, personen: 4, gegeten: 0, ingredienten: [{ naam: "", hoev: 0, eenheid: "" }], bereiding: "",
   };
 }
 
@@ -538,12 +570,16 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
         <Field label="Hoofdingrediënt"><Select opts={HOOFDINGREDIENTEN} val={r.hoofd!} set={(v) => set("hoofd", v)} /></Field>
       </div>
       <div style={S.grid2}>
+        <Field label="Maaltijd"><Select opts={MAALTIJDEN} val={r.maaltijd!} set={(v) => set("maaltijd", v)} /></Field>
         <Field label="Moeilijkheid"><Select opts={MOEILIJKHEDEN} val={r.moeilijkheid!} set={(v) => set("moeilijkheid", v)} /></Field>
-        <Field label="Tijd (min)"><input type="number" style={S.input} value={r.tijd} onChange={(e) => set("tijd", e.target.value)} /></Field>
       </div>
       <div style={S.grid2}>
+        <Field label="Tijd (min)"><input type="number" style={S.input} value={r.tijd} onChange={(e) => set("tijd", e.target.value)} /></Field>
         <Field label="Personen"><input type="number" style={S.input} value={r.personen} onChange={(e) => set("personen", e.target.value)} /></Field>
+      </div>
+      <div style={S.grid2}>
         <Field label="Score"><Sterren n={r.score || 0} onSet={(s) => set("score", s)} /></Field>
+        <Field label="Keer gegeten"><input type="number" style={S.input} value={r.gegeten ?? 0} onChange={(e) => set("gegeten", Number(e.target.value))} /></Field>
       </div>
 
       <Field label="Ingrediënten">
@@ -645,8 +681,9 @@ function normaliseer(p: any): Partial<Recept> {
     titel: p.titel || "",
     keuken: KEUKENS.includes(p.keuken) ? p.keuken : KEUKENS[0],
     hoofd: HOOFDINGREDIENTEN.includes(p.hoofd) ? p.hoofd : HOOFDINGREDIENTEN[0],
+    maaltijd: MAALTIJDEN.includes(p.maaltijd) ? p.maaltijd : "Avondeten",
     moeilijkheid: MOEILIJKHEDEN.includes(p.moeilijkheid) ? p.moeilijkheid : MOEILIJKHEDEN[0],
-    tijd: Number(p.tijd) || 30, score: 0, personen: Number(p.personen) || 4,
+    tijd: Number(p.tijd) || 30, score: 0, personen: Number(p.personen) || 4, gegeten: 0,
     ingredienten: Array.isArray(p.ingredienten) && p.ingredienten.length
       ? p.ingredienten.map((i: any) => ({ naam: i.naam || "", hoev: Number(i.hoev) || 0, eenheid: i.eenheid || "" }))
       : [{ naam: "", hoev: 0, eenheid: "" }],
@@ -1194,7 +1231,9 @@ function Sterren({ n, onSet, small }: { n: number; onSet?: (s: number) => void; 
     </div>
   );
 }
-function Tag({ children }: { children: React.ReactNode }) { return <span style={S.tag}>{children}</span>; }
+function Tag({ children, tone }: { children: React.ReactNode; tone?: "maaltijd" }) {
+  return <span style={{ ...S.tag, ...(tone === "maaltijd" ? S.tagMaaltijd : {}) }}>{children}</span>;
+}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div style={{ marginBottom: 14 }}><span style={S.label}>{label}</span>{children}</div>;
 }
@@ -1238,6 +1277,7 @@ const S: Record<string, React.CSSProperties> = {
   cardMeta: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },
   tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 6 },
+  tagMaaltijd: { color: "#fff", background: "var(--accent)" },
   cardPlaatsBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px", background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderTop: "1px solid var(--line)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 
   empty: { textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
@@ -1248,6 +1288,14 @@ const S: Record<string, React.CSSProperties> = {
   modalTitle: { fontSize: 21, fontWeight: 800, margin: 0, lineHeight: 1.2 },
   dialogHint: { fontSize: 13, color: "var(--sub)", margin: "0 0 14px", lineHeight: 1.5 },
   scoreEdit: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0", padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)" },
+  sorteerRij: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 4, overflowX: "auto" },
+  sorteerLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, marginRight: 2 },
+  sorteerBtn: { whiteSpace: "nowrap", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
+  sorteerBtnOn: { background: "var(--ink)", color: "#fff", borderColor: "var(--ink)" },
+  gegetenRij: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "12px 0", padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)" },
+  gegetenNum: { fontSize: 18, fontWeight: 800, display: "block", marginTop: 2 },
+  gegetenKnoppen: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
+  gegetenPlus: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--green)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" },
   sectionH: { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "18px 0 8px" },
   ingList: { listStyle: "none", padding: 0, margin: 0 },
   ingLi: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 14 },

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN } from "@/lib/types";
+import { KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const SYSTEM =
   "Je extraheert recepten en geeft UITSLUITEND geldige JSON terug, geen uitleg, geen markdown. " +
-  'Schema: {"titel":string,"keuken":string,"hoofd":string,"moeilijkheid":string,"tijd":number,' +
+  'Schema: {"titel":string,"keuken":string,"hoofd":string,"maaltijd":string,"moeilijkheid":string,"tijd":number,' +
   '"personen":number,"ingredienten":[{"naam":string,"hoev":number,"eenheid":string}],"bereiding":string}. ' +
   "keuken kies uit: " + KEUKENS.join(", ") + ". hoofd kies uit: " + HOOFDINGREDIENTEN.join(", ") +
+  ". maaltijd kies uit: " + MAALTIJDEN.join(", ") +
   ". moeilijkheid kies uit: " + MOEILIJKHEDEN.join(", ") + ". tijd in minuten. Alles in het Nederlands.";
 
 function parseJson(text: string) {
