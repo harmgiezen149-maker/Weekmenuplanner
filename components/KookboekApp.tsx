@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
-  Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowUp, ArrowDown, Store,
+  Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, DAGEN, WINKELS,
@@ -123,6 +123,7 @@ export default function App() {
               <ReceptenLijst
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onDelete={deleteRecept} onScore={(id, s) => updateRecept(id, { score: s })}
+                onUpdate={updateRecept}
               />
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
@@ -249,10 +250,11 @@ function PlaatsInWeekDialog({
 // RECEPTENLIJST + FILTERS
 // ============================================================================
 function ReceptenLijst({
-  recepten, week, setWeek, dagen, onDelete, onScore,
+  recepten, week, setWeek, dagen, onDelete, onScore, onUpdate,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>;
   dagen: readonly string[]; onDelete: (id: string) => void; onScore: (id: string, s: number) => void;
+  onUpdate: (id: string, patch: Partial<Recept>) => Promise<void>;
 }) {
   const [zoek, setZoek] = useState("");
   const [fKeuken, setFKeuken] = useState("");
@@ -261,6 +263,7 @@ function ReceptenLijst({
   const [fScore, setFScore] = useState(0);
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
+  const [bewerk, setBewerk] = useState<Recept | null>(null);
 
   const gefilterd = recepten.filter((r) => {
     if (zoek && !r.titel.toLowerCase().includes(zoek.toLowerCase())) return false;
@@ -305,6 +308,15 @@ function ReceptenLijst({
           onDelete={() => { onDelete(huidig.id); setOpen(null); }}
           onScore={(s) => onScore(huidig.id, s)}
           onPlaats={() => { setPlaats(huidig); setOpen(null); }}
+          onBewerk={() => { setBewerk(huidig); setOpen(null); }}
+        />
+      )}
+
+      {bewerk && (
+        <BewerkRecept
+          recept={bewerk}
+          onClose={() => setBewerk(null)}
+          onSave={async (patch) => { await onUpdate(bewerk.id, patch); setBewerk(null); }}
         />
       )}
 
@@ -340,16 +352,19 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
 }
 
 function ReceptModal({
-  r, onClose, onDelete, onScore, onPlaats,
+  r, onClose, onDelete, onScore, onPlaats, onBewerk,
 }: {
-  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void;
+  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void;
 }) {
   return (
     <div style={S.modalBg} onClick={onClose}>
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
         <div style={S.modalHead}>
           <h2 style={S.modalTitle}>{r.titel}</h2>
-          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+            <button onClick={onBewerk} style={S.iconBtn} aria-label="Bewerken"><PencilLine size={19} /></button>
+            <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+          </div>
         </div>
         <div style={S.cardMeta}>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
@@ -383,6 +398,30 @@ function ReceptModal({
 }
 
 // ============================================================================
+// BEWERK RECEPT (hergebruikt HandmatigForm, voorgevuld)
+// ============================================================================
+function BewerkRecept({
+  recept, onClose, onSave,
+}: {
+  recept: Recept; onClose: () => void; onSave: (patch: Partial<Recept>) => Promise<void>;
+}) {
+  return (
+    <div style={S.modalBg} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Recept bewerken</span>
+            <h2 style={S.modalTitle}>{recept.titel}</h2>
+          </div>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+        </div>
+        <HandmatigForm onAdd={onSave} initial={recept} opslaanLabel="Wijzigingen opslaan" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
 // TOEVOEGEN
 // ============================================================================
 function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
@@ -408,7 +447,7 @@ function leegRecept(): Partial<Recept> {
   };
 }
 
-function HandmatigForm({ onAdd, initial }: { onAdd: (r: Partial<Recept>) => void; initial?: Partial<Recept> }) {
+function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Recept>) => void; initial?: Partial<Recept>; opslaanLabel?: string }) {
   const [r, setR] = useState<Partial<Recept>>(initial || leegRecept());
   const [bezig, setBezig] = useState(false);
   const set = (k: keyof Recept, v: any) => setR((p) => ({ ...p, [k]: v }));
@@ -457,7 +496,7 @@ function HandmatigForm({ onAdd, initial }: { onAdd: (r: Partial<Recept>) => void
       <Field label="Bereiding"><textarea style={S.textarea} rows={4} value={r.bereiding} onChange={(e) => set("bereiding", e.target.value)} placeholder="Beschrijf de stappen..." /></Field>
 
       <button onClick={opslaan} style={S.primaryBtn} disabled={bezig}>
-        {bezig ? <><Loader2 size={16} className="spin" /> Opslaan...</> : <><Check size={16} /> Recept opslaan</>}
+        {bezig ? <><Loader2 size={16} className="spin" /> Opslaan...</> : <><Check size={16} /> {opslaanLabel || "Recept opslaan"}</>}
       </button>
     </div>
   );
@@ -654,21 +693,11 @@ function Weekmenu({
       })}
 
       {kiesDag && (
-        <div style={S.modalBg} onClick={() => setKiesDag(null)}>
-          <div style={S.modal} onClick={(e) => e.stopPropagation()}>
-            <div style={S.modalHead}>
-              <h2 style={S.modalTitle}>Gerecht voor {kiesDag}</h2>
-              <button onClick={() => setKiesDag(null)} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
-            </div>
-            {recepten.length === 0 && <p style={S.empty}>Voeg eerst recepten toe.</p>}
-            {recepten.map((r) => (
-              <button key={r.id} onClick={() => setDag(kiesDag, r.id)} style={S.pickRow}>
-                <span style={S.cardTitle}>{r.titel}</span>
-                <Sterren n={r.score} small />
-              </button>
-            ))}
-          </div>
-        </div>
+        <KiesGerechtModal
+          dag={kiesDag} recepten={recepten}
+          onKies={(id) => setDag(kiesDag, id)}
+          onClose={() => setKiesDag(null)}
+        />
       )}
 
       {bevestigLeeg && (
@@ -679,6 +708,47 @@ function Weekmenu({
           onBevestig={leegmaken} onAnnuleer={() => setBevestigLeeg(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// KIES GERECHT (met zoekveld) — gebruikt in het weekmenu
+// ============================================================================
+function KiesGerechtModal({
+  dag, recepten, onKies, onClose,
+}: {
+  dag: string; recepten: Recept[]; onKies: (id: string) => void; onClose: () => void;
+}) {
+  const [zoek, setZoek] = useState("");
+  const gefilterd = recepten.filter((r) =>
+    !zoek || r.titel.toLowerCase().includes(zoek.toLowerCase())
+  );
+  return (
+    <div style={S.modalBg} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <h2 style={S.modalTitle}>Gerecht voor {dag}</h2>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+        </div>
+        {recepten.length === 0 ? (
+          <p style={S.empty}>Voeg eerst recepten toe.</p>
+        ) : (
+          <>
+            <div style={{ ...S.searchWrap, marginTop: 4 }}>
+              <Search size={18} style={{ color: "var(--sub)" }} />
+              <input style={S.searchInput} placeholder="Zoek op naam..." value={zoek} onChange={(e) => setZoek(e.target.value)} autoFocus />
+            </div>
+            {gefilterd.length === 0 && <p style={S.empty}>Geen recept gevonden voor "{zoek}".</p>}
+            {gefilterd.map((r) => (
+              <button key={r.id} onClick={() => onKies(r.id)} style={S.pickRow}>
+                <span style={S.cardTitle}>{r.titel}</span>
+                <Sterren n={r.score} small />
+              </button>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -722,32 +792,108 @@ function BoodschappenPagina({
   const addItem = () =>
     setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: "AH", gedaan: false }] }));
 
-  const verplaatsItem = (id: string, richting: -1 | 1) => {
-    setBoodschappen((p) => {
-      const items = [...p.items];
-      const idx = items.findIndex((it) => it.id === id);
-      if (idx === -1) return p;
-      const winkel = items[idx].winkel;
-      let doel = -1;
-      for (let j = idx + richting; j >= 0 && j < items.length; j += richting) {
-        if (items[j].winkel === winkel) { doel = j; break; }
-      }
-      if (doel === -1) return p;
-      [items[idx], items[doel]] = [items[doel], items[idx]];
-      return { items };
-    });
-  };
+  // --- Slepen ---------------------------------------------------------------
+  // dragId = het item dat opgepakt is. dropDoel = waar het neerkomt: een winkel
+  // plus de id van het item waarvóór het komt (of null = onderaan die winkel).
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropWinkel, setDropWinkel] = useState<string | null>(null);
+  const [dropVoorId, setDropVoorId] = useState<string | null>(null);
+  const [pointerY, setPointerY] = useState(0);
+  const rijRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const winkelRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const items = boodschappen.items;
   const zichtbaar = verbergGedaan ? items.filter((it) => !it.gedaan) : items;
   const groepen = WINKELS.map((w) => ({ winkel: w, lijst: zichtbaar.filter((it) => it.winkel === w) }))
     .filter((g) => g.lijst.length > 0);
 
+  // Bepaal tijdens het slepen de doelwinkel + invoegpositie op basis van de y-coördinaat.
+  const bepaalDoel = (y: number) => {
+    let gevondenWinkel: string | null = null;
+    // Welke winkelgroep bevat deze y? (gebruik de groepscontainer)
+    for (const w of WINKELS) {
+      const el = winkelRefs.current[w];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (y >= r.top && y <= r.bottom) { gevondenWinkel = w; break; }
+    }
+    // Buiten alle groepen: pak de dichtstbijzijnde (boven eerste / onder laatste).
+    if (!gevondenWinkel) {
+      const aanwezig = groepen.map((g) => g.winkel);
+      if (aanwezig.length === 0) { setDropWinkel(null); setDropVoorId(null); return; }
+      const eersteEl = winkelRefs.current[aanwezig[0]];
+      if (eersteEl && y < eersteEl.getBoundingClientRect().top) gevondenWinkel = aanwezig[0];
+      else gevondenWinkel = aanwezig[aanwezig.length - 1];
+    }
+    // Binnen de winkel: bepaal vóór welk item we komen.
+    const lijst = zichtbaar.filter((it) => it.winkel === gevondenWinkel && it.id !== dragId);
+    let voorId: string | null = null;
+    for (const it of lijst) {
+      const el = rijRefs.current[it.id];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const midden = r.top + r.height / 2;
+      if (y < midden) { voorId = it.id; break; }
+    }
+    setDropWinkel(gevondenWinkel);
+    setDropVoorId(voorId);
+  };
+
+  const startDrag = (id: string, clientY: number) => {
+    setDragId(id);
+    setPointerY(clientY);
+    setDropWinkel(items.find((it) => it.id === id)?.winkel ?? null);
+    setDropVoorId(null);
+    bepaalDoel(clientY);
+  };
+
+  // Globale pointer/touch-handlers tijdens een sleep.
+  useEffect(() => {
+    if (!dragId) return;
+    const move = (clientY: number) => { setPointerY(clientY); bepaalDoel(clientY); };
+    const onMouse = (e: MouseEvent) => { e.preventDefault(); move(e.clientY); };
+    const onTouch = (e: TouchEvent) => { if (e.touches[0]) { e.preventDefault(); move(e.touches[0].clientY); } };
+    const eind = () => {
+      setBoodschappen((p) => {
+        const arr = [...p.items];
+        const di = arr.findIndex((x) => x.id === dragId);
+        if (di === -1 || !dropWinkel) return p;
+        const [gesleept] = arr.splice(di, 1);
+        gesleept.winkel = dropWinkel;
+        // bepaal invoeg-index: vóór dropVoorId, anders achteraan de winkelgroep
+        let invoeg: number;
+        if (dropVoorId) {
+          invoeg = arr.findIndex((x) => x.id === dropVoorId);
+          if (invoeg === -1) invoeg = arr.length;
+        } else {
+          // laatste index van deze winkel + 1; anders eind
+          let laatste = -1;
+          arr.forEach((x, i) => { if (x.winkel === dropWinkel) laatste = i; });
+          invoeg = laatste + 1;
+        }
+        arr.splice(invoeg, 0, gesleept);
+        return { items: arr };
+      });
+      setDragId(null); setDropWinkel(null); setDropVoorId(null);
+    };
+    window.addEventListener("mousemove", onMouse, { passive: false });
+    window.addEventListener("touchmove", onTouch, { passive: false });
+    window.addEventListener("mouseup", eind);
+    window.addEventListener("touchend", eind);
+    return () => {
+      window.removeEventListener("mousemove", onMouse);
+      window.removeEventListener("touchmove", onTouch);
+      window.removeEventListener("mouseup", eind);
+      window.removeEventListener("touchend", eind);
+    };
+  }, [dragId, dropWinkel, dropVoorId, setBoodschappen]);
+
   const aantalDagen = dagen.filter((d) => week.slots[d]).length;
   const aantalGedaan = items.filter((it) => it.gedaan).length;
+  const gesleeptItem = dragId ? items.find((it) => it.id === dragId) : null;
 
   return (
-    <div>
+    <div style={{ ...(dragId ? { touchAction: "none", userSelect: "none" } as React.CSSProperties : {}) }}>
       <div style={S.boodTopBar}>
         <button onClick={() => (items.length ? setBevestigGenereer(true) : genereer())} style={S.boodTopBtn}>
           <RefreshCw size={14} /> Uit weekmenu
@@ -768,26 +914,41 @@ function BoodschappenPagina({
       )}
 
       {groepen.map((g) => (
-        <div key={g.winkel} style={{ marginBottom: 14 }}>
+        <div key={g.winkel} ref={(el) => { winkelRefs.current[g.winkel] = el; }}
+          style={{ marginBottom: 14, ...(dragId && dropWinkel === g.winkel ? S.winkelActief : {}) }}>
           <div style={S.winkelKop}><Store size={14} /> {g.winkel} <span style={S.winkelAantal}>{g.lijst.length}</span></div>
-          {g.lijst.map((it, idx) => (
-            <BoodItem
-              key={it.id} it={it}
-              isEerste={idx === 0} isLaatste={idx === g.lijst.length - 1}
-              onToggle={() => setItem(it.id, { gedaan: !it.gedaan })}
-              onNaam={(v) => setItem(it.id, { naam: v })}
-              onHoev={(v) => setItem(it.id, { hoev: v })}
-              onEenheid={(v) => setItem(it.id, { eenheid: v })}
-              onWinkel={(v) => setItem(it.id, { winkel: v })}
-              onDel={() => delItem(it.id)}
-              onUp={() => verplaatsItem(it.id, -1)}
-              onDown={() => verplaatsItem(it.id, 1)}
-            />
+          {g.lijst.map((it) => (
+            <React.Fragment key={it.id}>
+              {dragId && dropWinkel === g.winkel && dropVoorId === it.id && it.id !== dragId && <div style={S.dropLijn} />}
+              <BoodItem
+                it={it}
+                isDragging={dragId === it.id}
+                refCb={(el) => { rijRefs.current[it.id] = el; }}
+                onStartDrag={(y) => startDrag(it.id, y)}
+                onToggle={() => setItem(it.id, { gedaan: !it.gedaan })}
+                onNaam={(v) => setItem(it.id, { naam: v })}
+                onHoev={(v) => setItem(it.id, { hoev: v })}
+                onEenheid={(v) => setItem(it.id, { eenheid: v })}
+                onWinkel={(v) => setItem(it.id, { winkel: v })}
+                onDel={() => delItem(it.id)}
+              />
+            </React.Fragment>
           ))}
+          {/* drop-indicator onderaan de groep */}
+          {dragId && dropWinkel === g.winkel && dropVoorId === null && <div style={S.dropLijn} />}
         </div>
       ))}
 
       <button onClick={addItem} style={S.addItemBtn}><Plus size={16} /> Item toevoegen</button>
+
+      {/* zwevend item dat de cursor/vinger volgt */}
+      {gesleeptItem && (
+        <div style={{ ...S.dragGhost, top: pointerY }}>
+          <GripVertical size={16} style={{ color: "var(--accent)" }} />
+          <span style={S.boodNaam}>{gesleeptItem.naam || "Naamloos item"}</span>
+          <span style={S.boodHoev}>{gesleeptItem.hoev} {gesleeptItem.eenheid}</span>
+        </div>
+      )}
 
       {bevestigGenereer && (
         <Bevestig
@@ -802,17 +963,27 @@ function BoodschappenPagina({
 }
 
 function BoodItem({
-  it, isEerste, isLaatste, onToggle, onNaam, onHoev, onEenheid, onWinkel, onDel, onUp, onDown,
+  it, isDragging, refCb, onStartDrag, onToggle, onNaam, onHoev, onEenheid, onWinkel, onDel,
 }: {
-  it: BoodschapItem; isEerste: boolean; isLaatste: boolean;
+  it: BoodschapItem; isDragging: boolean;
+  refCb: (el: HTMLDivElement | null) => void;
+  onStartDrag: (clientY: number) => void;
   onToggle: () => void; onNaam: (v: string) => void; onHoev: (v: number) => void;
   onEenheid: (v: string) => void; onWinkel: (v: string) => void; onDel: () => void;
-  onUp: () => void; onDown: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div style={{ ...S.boodRow, ...(it.gedaan ? S.boodDone : {}) }}>
+    <div ref={refCb} style={{ ...S.boodRow, ...(it.gedaan ? S.boodDone : {}), ...(isDragging ? S.boodRowDragging : {}) }}>
       <div style={S.boodMain}>
+        <div
+          style={S.greep}
+          onMouseDown={(e) => { e.preventDefault(); onStartDrag(e.clientY); }}
+          onTouchStart={(e) => { if (e.touches[0]) onStartDrag(e.touches[0].clientY); }}
+          aria-label="Sleep om te verplaatsen"
+          role="button"
+        >
+          <GripVertical size={18} />
+        </div>
         <button onClick={onToggle} style={{ ...S.checkbox, ...(it.gedaan ? S.checkboxOn : {}) }} aria-label="Afvinken">
           {it.gedaan && <Check size={13} />}
         </button>
@@ -822,10 +993,6 @@ function BoodItem({
           </span>
           <span style={S.boodHoev}>{it.hoev} {it.eenheid}</span>
         </button>
-        <div style={S.boodVolgorde}>
-          <button onClick={onUp} disabled={isEerste} style={{ ...S.ordBtn, ...(isEerste ? S.ordBtnUit : {}) }} aria-label="Omhoog"><ArrowUp size={13} /></button>
-          <button onClick={onDown} disabled={isLaatste} style={{ ...S.ordBtn, ...(isLaatste ? S.ordBtnUit : {}) }} aria-label="Omlaag"><ArrowDown size={13} /></button>
-        </div>
       </div>
 
       {open && (
@@ -1004,16 +1171,18 @@ const S: Record<string, React.CSSProperties> = {
   winkelKop: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "4px 2px 8px" },
   winkelAantal: { background: "var(--line)", color: "var(--sub)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 },
   boodRow: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, marginBottom: 7, overflow: "hidden" },
+  boodRowDragging: { opacity: 0.4, borderStyle: "dashed", borderColor: "var(--accent)" },
   boodDone: { background: "var(--bg)" },
-  boodMain: { display: "flex", alignItems: "center", gap: 10, padding: "11px 12px" },
+  boodMain: { display: "flex", alignItems: "center", gap: 8, padding: "11px 12px" },
+  greep: { display: "flex", alignItems: "center", justifyContent: "center", width: 28, height: 32, flexShrink: 0, color: "var(--sub)", cursor: "grab", touchAction: "none", marginLeft: -4 },
   checkbox: { width: 22, height: 22, borderRadius: 6, border: "2px solid var(--line)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", background: "var(--surface)", cursor: "pointer", padding: 0 },
   checkboxOn: { background: "var(--green)", borderColor: "var(--green)" },
   boodNaamBtn: { flex: 1, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "none", border: "none", cursor: "pointer", textAlign: "left", minWidth: 0, padding: 0 },
   boodNaam: { fontSize: 14, fontWeight: 600, overflowWrap: "break-word", wordBreak: "break-word", minWidth: 0 },
   boodHoev: { fontSize: 13, color: "var(--sub)", fontWeight: 600, flexShrink: 0 },
-  boodVolgorde: { display: "flex", flexDirection: "column", gap: 2, flexShrink: 0 },
-  ordBtn: { width: 24, height: 18, borderRadius: 5, border: "1px solid var(--line)", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--sub)", padding: 0 },
-  ordBtnUit: { opacity: 0.3, cursor: "default" },
+  winkelActief: { background: "var(--accent-soft)", borderRadius: 12, padding: "2px 4px 4px", margin: "0 -4px 14px", outline: "1.5px dashed var(--accent)" },
+  dropLijn: { height: 3, background: "var(--accent)", borderRadius: 2, margin: "3px 4px" },
+  dragGhost: { position: "fixed", left: "50%", transform: "translate(-50%, -50%)", width: "min(448px, 92vw)", display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", border: "1.5px solid var(--accent)", borderRadius: 11, padding: "11px 12px", boxShadow: "0 8px 24px rgba(22,25,39,0.18)", zIndex: 100, pointerEvents: "none" },
   boodEdit: { padding: "0 12px 12px", borderTop: "1px solid var(--line)" },
   boodEditRow: { display: "flex", gap: 6, marginTop: 8 },
   boodDelBtn: { display: "inline-flex", alignItems: "center", gap: 5, marginTop: 10, background: "none", border: "1px solid var(--line)", color: "var(--red)", padding: "7px 11px", borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: "pointer" },
