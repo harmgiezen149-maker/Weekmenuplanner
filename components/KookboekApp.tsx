@@ -736,11 +736,23 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
 
       <Field label="Ingrediënten">
         {(r.ingredienten || []).map((i, idx) => (
-          <div key={idx} style={S.ingRow}>
-            <input style={{ ...S.input, flex: 2 }} placeholder="naam" value={i.naam} onChange={(e) => setIng(idx, "naam", e.target.value)} />
-            <input style={{ ...S.input, flex: 1 }} placeholder="aantal" value={i.hoev} onChange={(e) => setIng(idx, "hoev", e.target.value)} />
-            <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={i.eenheid} onChange={(e) => setIng(idx, "eenheid", e.target.value)} />
-            <button onClick={() => delIng(idx)} style={S.iconBtnSm} aria-label="Verwijder"><X size={15} /></button>
+          <div key={idx} style={S.ingBlok}>
+            <div style={S.ingRow}>
+              <input style={{ ...S.input, flex: 2 }} placeholder="naam" value={i.naam} onChange={(e) => setIng(idx, "naam", e.target.value)} />
+              <input style={{ ...S.input, flex: 1 }} placeholder="aantal" value={i.hoev} onChange={(e) => setIng(idx, "hoev", e.target.value)} />
+              <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={i.eenheid} onChange={(e) => setIng(idx, "eenheid", e.target.value)} />
+              <button onClick={() => delIng(idx)} style={S.iconBtnSm} aria-label="Verwijder"><X size={15} /></button>
+            </div>
+            <div style={S.ingRow2}>
+              <select style={{ ...S.input, ...S.ingSelect }} value={i.winkel || ""} onChange={(e) => setIng(idx, "winkel", e.target.value)}>
+                <option value="">Winkel…</option>
+                {WINKELS.map((w) => <option key={w} value={w}>{w}</option>)}
+              </select>
+              <select style={{ ...S.input, ...S.ingSelect }} value={i.gebied || ""} onChange={(e) => setIng(idx, "gebied", e.target.value)}>
+                <option value="">Afdeling…</option>
+                {WINKELGEBIEDEN.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </div>
           </div>
         ))}
         <button onClick={addIng} style={S.addRowBtn}><Plus size={14} /> Ingrediënt</button>
@@ -1063,49 +1075,61 @@ function IngredientenWizard({
   const [ingredienten, setIngredienten] = useState(() => recept.ingredienten.map((i) => ({ ...i })));
   const [laden, setLaden] = useState(true);
   const [idx, setIdx] = useState(0);
+  // De lijst met indices die we behandelen wordt ÉÉN keer vastgezet zodra de
+  // AI-gebieden binnen zijn. Daarna verandert hij niet meer terwijl je hem doorloopt,
+  // ook al raken items onderweg "compleet". Zo blijft de stap-indexering kloppen.
+  const [teDoen, setTeDoen] = useState<number[] | null>(null);
 
-  // indices van ingrediënten die nog winkel of gebied missen
-  const teDoen = ingredienten
-    .map((i, k) => ({ i, k }))
-    .filter(({ i }) => i.naam.trim() && (!i.winkel || !i.gebied))
-    .map(({ k }) => k);
-
-  // Bij openen: AI-gebieden ophalen voor alle ontbrekende-gebied-ingrediënten.
+  // Bij openen: AI-gebieden ophalen, daarna de te-behandelen-lijst vastzetten.
   useEffect(() => {
     (async () => {
-      const namen = ingredienten.filter((i) => i.naam.trim() && !i.gebied).map((i) => i.naam);
+      const namen = recept.ingredienten.filter((i) => i.naam.trim() && !i.gebied).map((i) => i.naam);
+      let verrijkt = recept.ingredienten.map((i) => ({ ...i }));
       if (namen.length) {
-        const gebieden = await api.bepaalGebieden(namen);
-        setIngredienten((prev) => prev.map((i) => (!i.gebied && gebieden[i.naam] ? { ...i, gebied: gebieden[i.naam] } : i)));
+        const gebieden = await api.bepaalGebieden(namen).catch(() => ({} as Record<string, string>));
+        verrijkt = verrijkt.map((i) => (!i.gebied && gebieden[i.naam] ? { ...i, gebied: gebieden[i.naam] } : i));
       }
+      // welke items missen nu nog winkel of gebied? die behandelen we, in vaste volgorde
+      const indices = verrijkt
+        .map((i, k) => ({ i, k }))
+        .filter(({ i }) => i.naam.trim() && (!i.winkel || !i.gebied))
+        .map(({ k }) => k);
+      setIngredienten(verrijkt);
+      setTeDoen(indices);
       setLaden(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const huidigeIdx = teDoen[idx];
+  const huidigeIdx = teDoen && idx < teDoen.length ? teDoen[idx] : null;
   const huidig = huidigeIdx != null ? ingredienten[huidigeIdx] : null;
 
   const setVeld = (k: number, patch: Partial<typeof ingredienten[number]>) =>
     setIngredienten((prev) => prev.map((i, ii) => (ii === k ? { ...i, ...patch } : i)));
 
+  const rondAf = async (verseIngredienten: typeof ingredienten) => {
+    await onUpdateRecept(recept.id, { ingredienten: verseIngredienten });
+    onKlaar({ ...recept, ingredienten: verseIngredienten });
+  };
+
   const volgende = async () => {
-    // ga naar het volgende item dat nog iets mist; sla items over die nu compleet zijn
-    let v = idx + 1;
-    while (v < teDoen.length) {
-      const i = ingredienten[teDoen[v]];
-      if (!i.winkel || !i.gebied) break;
-      v++;
-    }
-    if (v < teDoen.length) {
-      setIdx(v);
+    if (!teDoen) return;
+    if (idx + 1 < teDoen.length) {
+      setIdx(idx + 1);
     } else {
-      // klaar: alles wat nog miste is nu ingevuld → opslaan
-      const bijgewerkt: Recept = { ...recept, ingredienten };
-      await onUpdateRecept(recept.id, { ingredienten });
-      onKlaar(bijgewerkt);
+      // laatste item afgerond → opslaan in het recept en plaatsen
+      await rondAf(ingredienten);
     }
   };
+
+  // Als na het laden blijkt dat er niets (meer) te behandelen is, meteen afronden
+  // en plaatsen — anders zou het recept nooit in het weekmenu komen.
+  useEffect(() => {
+    if (!laden && teDoen && teDoen.length === 0) {
+      rondAf(ingredienten);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laden, teDoen]);
 
   if (laden) {
     return (
@@ -1121,10 +1145,11 @@ function IngredientenWizard({
   }
 
   if (!huidig) {
-    // niets meer te doen (kan gebeuren als AI alles vulde en winkels al bestonden)
+    // niets (meer) te doen — het afrond-effect hierboven plaatst het recept
     return null;
   }
 
+  const actieveIdx = huidigeIdx as number; // veilig: huidig is hier niet-null
   const gebiedDuidelijk = !!huidig.gebied;
 
   return (
@@ -1132,7 +1157,7 @@ function IngredientenWizard({
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
         <div style={S.modalHead}>
           <div>
-            <span style={S.label}>Ingrediënt {idx + 1} van {teDoen.length} · {recept.titel}</span>
+            <span style={S.label}>Ingrediënt {idx + 1} van {teDoen?.length ?? 0} · {recept.titel}</span>
             <h2 style={S.modalTitle}>{huidig.naam}</h2>
           </div>
           <button onClick={onAnnuleer} style={S.iconBtn} aria-label="Annuleren"><X size={20} /></button>
@@ -1141,7 +1166,7 @@ function IngredientenWizard({
         <span style={S.label}>In welke winkel koop je dit?</span>
         <div style={S.wizWinkelGrid}>
           {WINKELS.map((w) => (
-            <button key={w} onClick={() => setVeld(huidigeIdx, { winkel: w })}
+            <button key={w} onClick={() => setVeld(actieveIdx, { winkel: w })}
               style={{ ...S.wizWinkelBtn, ...(huidig.winkel === w ? S.wizWinkelBtnOn : {}) }}>
               <Store size={16} /> {w}
             </button>
@@ -1155,12 +1180,12 @@ function IngredientenWizard({
           {gebiedDuidelijk ? (
             <div style={S.wizGebiedGekozen}>
               <span>{huidig.gebied}</span>
-              <button onClick={() => setVeld(huidigeIdx, { gebied: "" })} style={S.wizGebiedWijzig}>Wijzig</button>
+              <button onClick={() => setVeld(actieveIdx, { gebied: "" })} style={S.wizGebiedWijzig}>Wijzig</button>
             </div>
           ) : (
             <div style={S.wizGebiedKeuze}>
               {WINKELGEBIEDEN.map((g) => (
-                <button key={g} onClick={() => setVeld(huidigeIdx, { gebied: g })} style={S.wizGebiedChip}>{g}</button>
+                <button key={g} onClick={() => setVeld(actieveIdx, { gebied: g })} style={S.wizGebiedChip}>{g}</button>
               ))}
             </div>
           )}
@@ -1171,7 +1196,7 @@ function IngredientenWizard({
           disabled={!huidig.winkel || !huidig.gebied}
           style={{ ...S.primaryBtn, marginTop: 22, ...(!huidig.winkel || !huidig.gebied ? { opacity: 0.5 } : {}) }}
         >
-          {idx + 1 < teDoen.length ? <>Volgende <ChevronRight size={16} /></> : <><Check size={16} /> Klaar en plaatsen</>}
+          {idx + 1 < (teDoen?.length ?? 0) ? <>Volgende <ChevronRight size={16} /></> : <><Check size={16} /> Klaar en plaatsen</>}
         </button>
       </div>
     </div>
@@ -1787,6 +1812,9 @@ const S: Record<string, React.CSSProperties> = {
   input: { width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none" },
   textarea: { width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none", resize: "vertical" },
   ingRow: { display: "flex", gap: 6, marginBottom: 7, alignItems: "center" },
+  ingBlok: { marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--line)" },
+  ingRow2: { display: "flex", gap: 6, alignItems: "center" },
+  ingSelect: { flex: 1, fontSize: 13, padding: "8px 8px", color: "var(--sub)", minWidth: 0 },
   addRowBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--accent-soft)", color: "var(--accent)", border: "none", padding: "8px 12px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 2 },
   primaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent)", color: "#fff", border: "none", padding: "13px", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
   modalKnopRij: { display: "flex", gap: 8, marginTop: 16 },
