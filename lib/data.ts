@@ -1,5 +1,5 @@
 import { redis } from "./redis";
-import type { Recept, WeekState, Boodschappen } from "./types";
+import type { Recept, WeekState, Boodschappen, GebiedVolgorde } from "./types";
 
 // ----------------------------------------------------------------------------
 // Redis key-indeling:
@@ -7,6 +7,7 @@ import type { Recept, WeekState, Boodschappen } from "./types";
 //   recipes:index    -> SET met alle recept-id's
 //   week:current     -> JSON van de weekplanning (startDag + slots)
 //   boodschappen     -> JSON van de bewerkbare boodschappenlijst
+//   gebiedvolgorde   -> JSON: per winkel de volgorde van winkelgebieden
 // Eén app/huishouden. Wil je later meerdere gebruikers, prefix dan met userId.
 // ----------------------------------------------------------------------------
 
@@ -14,6 +15,7 @@ const RECIPE = (id: string) => `recipe:${id}`;
 const RECIPE_INDEX = "recipes:index";
 const WEEK_KEY = "week:current";
 const BOODSCHAPPEN_KEY = "boodschappen:current";
+const GEBIEDVOLGORDE_KEY = "gebiedvolgorde:current";
 
 export async function getAllRecepten(): Promise<Recept[]> {
   const ids = await redis.smembers(RECIPE_INDEX);
@@ -56,6 +58,15 @@ export async function getBoodschappen(): Promise<Boodschappen> {
 export async function saveBoodschappen(b: Boodschappen): Promise<Boodschappen> {
   await redis.set(BOODSCHAPPEN_KEY, b);
   return b;
+}
+
+export async function getGebiedVolgorde(): Promise<GebiedVolgorde> {
+  return (await redis.get<GebiedVolgorde>(GEBIEDVOLGORDE_KEY)) ?? {};
+}
+
+export async function saveGebiedVolgorde(g: GebiedVolgorde): Promise<GebiedVolgorde> {
+  await redis.set(GEBIEDVOLGORDE_KEY, g);
+  return g;
 }
 
 export function newId(): string {

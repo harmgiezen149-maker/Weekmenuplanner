@@ -5,11 +5,12 @@ import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
-  Utensils, Repeat, ArrowDownNarrowWide,
+  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
-  type Recept, type WeekState, type Boodschappen, type BoodschapItem,
+  WINKELGEBIEDEN, GEEN_GEBIED,
+  type Recept, type WeekState, type Boodschappen, type BoodschapItem, type GebiedVolgorde,
 } from "@/lib/types";
 
 // ============================================================================
@@ -40,6 +41,19 @@ const api = {
   async saveBoodschappen(b: Boodschappen): Promise<Boodschappen> {
     const res = await fetch("/api/boodschappen", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }); return res.json();
   },
+  async getGebiedVolgorde(): Promise<GebiedVolgorde> {
+    const r = await fetch("/api/gebiedvolgorde", { cache: "no-store" }); return r.json();
+  },
+  async saveGebiedVolgorde(g: GebiedVolgorde): Promise<GebiedVolgorde> {
+    const res = await fetch("/api/gebiedvolgorde", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(g) }); return res.json();
+  },
+  async bepaalGebieden(namen: string[]): Promise<Record<string, string>> {
+    try {
+      const res = await fetch("/api/gebieden", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ namen }) });
+      const data = await res.json();
+      return data.gebieden || {};
+    } catch { return {}; }
+  },
   async importRecept(payload: any): Promise<any> {
     const res = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Import mislukt"); }
@@ -49,6 +63,41 @@ const api = {
 
 const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 
+// ---------------------------------------------------------------------------
+// Afbeeldings-helpers. We slaan afbeeldingen op als gecomprimeerde JPEG data-URL,
+// zodat ze binnen de Upstash-limiet (~1MB per waarde) passen.
+// ---------------------------------------------------------------------------
+const MAX_DIM = 1000; // langste zijde in px na compressie
+
+function fileNaarDataUrl(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result as string);
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+// Schaalt + comprimeert een afbeelding (data-URL) naar een JPEG data-URL.
+function comprimeerAfbeelding(bron: string, kwaliteit = 0.82): Promise<string> {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > height && width > MAX_DIM) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
+      else if (height > MAX_DIM) { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return rej(new Error("geen canvas"));
+      ctx.drawImage(img, 0, 0, width, height);
+      res(canvas.toDataURL("image/jpeg", kwaliteit));
+    };
+    img.onerror = rej;
+    img.src = bron;
+  });
+}
+
 // ============================================================================
 // APP
 // ============================================================================
@@ -56,13 +105,14 @@ export default function App() {
   const [recepten, setRecepten] = useState<Recept[]>([]);
   const [week, setWeek] = useState<WeekState>({ startDag: 0, slots: {} });
   const [boodschappen, setBoodschappen] = useState<Boodschappen>({ items: [] });
+  const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
   const [tab, setTab] = useState("recepten");
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [r, w, b] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen()]);
-      setRecepten(r); setWeek(w); setBoodschappen(b); setLaden(false);
+      const [r, w, b, g] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde()]);
+      setRecepten(r); setWeek(w); setBoodschappen(b); setGebiedVolgorde(g); setLaden(false);
     })();
   }, []);
 
@@ -80,6 +130,14 @@ export default function App() {
     const t = setTimeout(() => api.saveBoodschappen(boodschappen), 400);
     return () => clearTimeout(t);
   }, [boodschappen, laden]);
+
+  const eersteGebied = useRef(true);
+  useEffect(() => {
+    if (laden) return;
+    if (eersteGebied.current) { eersteGebied.current = false; return; }
+    const t = setTimeout(() => api.saveGebiedVolgorde(gebiedVolgorde), 400);
+    return () => clearTimeout(t);
+  }, [gebiedVolgorde, laden]);
 
   const dagenInVolgorde = useMemo(
     () => [...Array(7)].map((_, i) => DAGEN[(week.startDag + i) % 7]),
@@ -114,8 +172,10 @@ export default function App() {
         );
         if (bestaand) {
           bestaand.hoev = Math.round((bestaand.hoev + extra) * 10) / 10;
+          if (!bestaand.winkel && i.winkel) bestaand.winkel = i.winkel;
+          if (!bestaand.gebied && i.gebied) bestaand.gebied = i.gebied;
         } else {
-          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: GEEN_WINKEL, gedaan: false, bron: "hand" });
+          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: i.winkel || GEEN_WINKEL, gebied: i.gebied || GEEN_GEBIED, gedaan: false, bron: "hand" });
         }
       });
       return { items };
@@ -127,6 +187,7 @@ export default function App() {
     { id: "toevoegen", label: "Toevoegen", icon: Plus },
     { id: "week", label: "Weekmenu", icon: Calendar },
     { id: "boodschappen", label: "Lijst", icon: ShoppingCart },
+    { id: "winkels", label: "Winkels", icon: Store },
   ];
 
   return (
@@ -151,13 +212,20 @@ export default function App() {
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
             {tab === "week" && (
-              <Weekmenu recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde} />
+              <Weekmenu
+                recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
+                onUpdateRecept={updateRecept}
+              />
             )}
             {tab === "boodschappen" && (
               <BoodschappenPagina
                 recepten={recepten} week={week} dagen={dagenInVolgorde}
                 boodschappen={boodschappen} setBoodschappen={setBoodschappen}
+                gebiedVolgorde={gebiedVolgorde}
               />
+            )}
+            {tab === "winkels" && (
+              <WinkelsPagina gebiedVolgorde={gebiedVolgorde} setGebiedVolgorde={setGebiedVolgorde} />
             )}
           </>
         )}
@@ -179,37 +247,64 @@ export default function App() {
 // PLAATS-IN-WEEK DIALOOG (gedeeld door Recepten)
 // ============================================================================
 function PlaatsInWeekDialog({
-  recept, recepten, week, dagen, setWeek, onClose,
+  recept, recepten, week, dagen, setWeek, onClose, onUpdateRecept,
 }: {
   recept: Recept; recepten: Recept[]; week: WeekState; dagen: readonly string[];
   setWeek: React.Dispatch<React.SetStateAction<WeekState>>; onClose: () => void;
+  onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
 }) {
   const [conflict, setConflict] = useState<string | null>(null);
+  // Recept dat door de wizard loopt voordat het geplaatst wordt; de bijbehorende
+  // plaatsings-actie wordt vastgehouden tot de wizard klaar is.
+  const [wizard, setWizard] = useState<{ doel: (r: Recept) => void } | null>(null);
+
+  // Voert een plaatsing uit, maar eerst door de wizard als winkel/gebied ontbreekt.
+  const metControle = (doe: (r: Recept) => void) => {
+    if (mistGegevens(recept)) setWizard({ doel: doe });
+    else doe(recept);
+  };
 
   const plaatsOpLegeDag = (dag: string) => {
-    setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: recept.id, personen: recept.personen } } }));
-    onClose();
+    metControle((r) => {
+      setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: r.id, personen: r.personen } } }));
+      onClose();
+    });
   };
   const kiesDag = (dag: string) => { if (week.slots[dag]) setConflict(dag); else plaatsOpLegeDag(dag); };
 
   const vervang = () => {
     if (!conflict) return;
-    setWeek((p) => ({ ...p, slots: { ...p.slots, [conflict]: { recipeId: recept.id, personen: recept.personen } } }));
-    onClose();
+    metControle((r) => {
+      setWeek((p) => ({ ...p, slots: { ...p.slots, [conflict]: { recipeId: r.id, personen: r.personen } } }));
+      onClose();
+    });
   };
   const verplaatsBestaande = (naarDag: string) => {
     if (!conflict) return;
-    setWeek((p) => {
-      const bestaand = p.slots[conflict];
-      const slots = { ...p.slots };
-      slots[naarDag] = bestaand;
-      slots[conflict] = { recipeId: recept.id, personen: recept.personen };
-      return { ...p, slots };
+    metControle((r) => {
+      setWeek((p) => {
+        const bestaand = p.slots[conflict];
+        const slots = { ...p.slots };
+        slots[naarDag] = bestaand;
+        slots[conflict] = { recipeId: r.id, personen: r.personen };
+        return { ...p, slots };
+      });
+      onClose();
     });
-    onClose();
   };
 
   const legeDagen = dagen.filter((d) => !week.slots[d]);
+
+  if (wizard) {
+    return (
+      <IngredientenWizard
+        recept={recept}
+        onUpdateRecept={onUpdateRecept}
+        onKlaar={(bijgewerkt) => { wizard.doel(bijgewerkt); setWizard(null); }}
+        onAnnuleer={() => setWizard(null)}
+      />
+    );
+  }
 
   return (
     <div style={S.modalBg} onClick={onClose}>
@@ -366,7 +461,7 @@ function ReceptenLijst({
       {plaats && (
         <PlaatsInWeekDialog
           recept={plaats} recepten={recepten} week={week} dagen={dagen} setWeek={setWeek}
-          onClose={() => setPlaats(null)}
+          onClose={() => setPlaats(null)} onUpdateRecept={onUpdate}
         />
       )}
 
@@ -412,6 +507,9 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
   return (
     <div style={S.card}>
       <button onClick={onOpen} style={S.cardBody}>
+        {r.afbeelding && (
+          <div style={S.cardAfbWrap}><img src={r.afbeelding} alt={r.titel} style={S.cardAfb} loading="lazy" /></div>
+        )}
         <div style={S.cardTop}>
           <span style={S.cardTitle}>{r.titel}</span>
           <Sterren n={r.score} small />
@@ -436,6 +534,7 @@ function ReceptModal({
 }: {
   r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
 }) {
+  const [zoom, setZoom] = useState(false);
   return (
     <div style={S.modalBg} onClick={onClose}>
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
@@ -446,12 +545,22 @@ function ReceptModal({
             <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
           </div>
         </div>
+
+        {r.afbeelding && (
+          <button onClick={() => setZoom(true)} style={S.detailAfbWrap}>
+            <img src={r.afbeelding} alt={r.titel} style={S.detailAfb} />
+            <span style={S.detailAfbZoom}><ZoomIn size={16} /></span>
+          </button>
+        )}
+
         <div style={S.cardMeta}>
           <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
         </div>
+
+        {zoom && r.afbeelding && <AfbeeldingZoom src={r.afbeelding} onClose={() => setZoom(false)} />}
 
         <div style={S.modalKnopRij}>
           <button onClick={onPlaats} style={S.primaryBtn}>
@@ -540,8 +649,48 @@ function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
 function leegRecept(): Partial<Recept> {
   return {
     titel: "", keuken: KEUKENS[0], hoofd: HOOFDINGREDIENTEN[0], maaltijd: "Avondeten", moeilijkheid: MOEILIJKHEDEN[0],
-    tijd: 30, score: 0, personen: 4, gegeten: 0, ingredienten: [{ naam: "", hoev: 0, eenheid: "" }], bereiding: "",
+    tijd: 30, score: 0, personen: 4, gegeten: 0, afbeelding: "", ingredienten: [{ naam: "", hoev: 0, eenheid: "" }], bereiding: "",
   };
+}
+
+function AfbeeldingKiezer({ waarde, onChange }: { waarde: string; onChange: (v: string) => void }) {
+  const [bezig, setBezig] = useState(false);
+  const [err, setErr] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const kies = async (file: File) => {
+    setErr(""); setBezig(true);
+    try {
+      const raw = await fileNaarDataUrl(file);
+      const klein = await comprimeerAfbeelding(raw);
+      onChange(klein);
+    } catch {
+      setErr("Kon de afbeelding niet verwerken.");
+    } finally { setBezig(false); }
+  };
+
+  return (
+    <div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
+        onChange={(e) => e.target.files?.[0] && kies(e.target.files[0])} />
+      {waarde ? (
+        <div style={S.afbVoorbeeldWrap}>
+          <img src={waarde} alt="Recept" style={S.afbVoorbeeld} />
+          <div style={S.afbKnoppen}>
+            <button onClick={() => fileRef.current?.click()} style={S.afbKnop} disabled={bezig}>
+              {bezig ? <Loader2 size={14} className="spin" /> : <ImageIcon size={14} />} Vervangen
+            </button>
+            <button onClick={() => onChange("")} style={{ ...S.afbKnop, color: "var(--red)" }}><X size={14} /> Verwijderen</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => fileRef.current?.click()} style={S.afbLeeg} disabled={bezig}>
+          {bezig ? <><Loader2 size={16} className="spin" /> Bezig...</> : <><ImageIcon size={18} /> Afbeelding kiezen</>}
+        </button>
+      )}
+      {err && <p style={S.errText}>{err}</p>}
+    </div>
+  );
 }
 
 function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Recept>) => void; initial?: Partial<Recept>; opslaanLabel?: string }) {
@@ -565,6 +714,9 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
   return (
     <div>
       <Field label="Titel"><input style={S.input} value={r.titel} onChange={(e) => set("titel", e.target.value)} placeholder="bijv. Risotto met paddenstoelen" /></Field>
+      <Field label="Afbeelding">
+        <AfbeeldingKiezer waarde={r.afbeelding || ""} onChange={(v) => set("afbeelding", v)} />
+      </Field>
       <div style={S.grid2}>
         <Field label="Keuken"><Select opts={KEUKENS} val={r.keuken!} set={(v) => set("keuken", v)} /></Field>
         <Field label="Hoofdingrediënt"><Select opts={HOOFDINGREDIENTEN} val={r.hoofd!} set={(v) => set("hoofd", v)} /></Field>
@@ -612,11 +764,13 @@ function FotoImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   const verwerk = async (file: File) => {
     setErr(""); setBusy(true); setParsed(null);
     try {
-      const b64 = await new Promise<string>((res, rej) => {
-        const fr = new FileReader(); fr.onload = () => res((fr.result as string).split(",")[1]); fr.onerror = rej; fr.readAsDataURL(file);
-      });
-      const data = await api.importRecept({ type: "foto", mediaType: file.type, data: b64 });
-      setParsed(normaliseer(data));
+      const raw = await fileNaarDataUrl(file);
+      const b64 = raw.split(",")[1];
+      const res = await api.importRecept({ type: "foto", mediaType: file.type, data: b64 });
+      const recept = normaliseer(res.recept || res);
+      // Bewaar de gebruikte foto (gecomprimeerd) als receptafbeelding.
+      recept.afbeelding = await comprimeerAfbeelding(raw).catch(() => "");
+      setParsed(recept);
     } catch (e: any) { setErr(e.message || "Kon het recept niet uitlezen."); }
     finally { setBusy(false); }
   };
@@ -626,7 +780,7 @@ function FotoImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   return (
     <div style={S.importBox}>
       <Camera size={36} style={{ color: "var(--accent)" }} />
-      <p style={S.importText}>Maak of kies een foto van een recept uit een magazine of kookboek.</p>
+      <p style={S.importText}>Maak of kies een foto van een recept uit een magazine of kookboek. De foto wordt bewaard als afbeelding bij het recept.</p>
       <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && verwerk(e.target.files[0])} />
       <button onClick={() => fileRef.current?.click()} style={S.primaryBtn} disabled={busy}>
         {busy ? <><Loader2 size={16} className="spin" /> Bezig met uitlezen...</> : <><Camera size={16} /> Foto kiezen</>}
@@ -640,19 +794,30 @@ function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   const [url, setUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<Partial<Recept> | null>(null);
+  const [afbKeuze, setAfbKeuze] = useState<string[] | null>(null);
   const [err, setErr] = useState("");
 
   const verwerk = async () => {
     if (!url.trim()) return;
-    setErr(""); setBusy(true); setParsed(null);
+    setErr(""); setBusy(true); setParsed(null); setAfbKeuze(null);
     try {
-      const data = await api.importRecept({ type: "link", url });
-      setParsed(normaliseer(data));
+      const res = await api.importRecept({ type: "link", url });
+      const recept = normaliseer(res.recept || res);
+      setParsed(recept);
+      if (Array.isArray(res.afbeeldingen) && res.afbeeldingen.length) setAfbKeuze(res.afbeeldingen);
     } catch (e: any) { setErr(e.message || "Kon de pagina niet uitlezen."); }
     finally { setBusy(false); }
   };
 
-  if (parsed) return <BevestigImport parsed={parsed} onAdd={onAdd} onCancel={() => setParsed(null)} />;
+  if (parsed) {
+    return (
+      <BevestigImport
+        parsed={parsed} onAdd={onAdd}
+        afbKeuze={afbKeuze}
+        onCancel={() => { setParsed(null); setAfbKeuze(null); }}
+      />
+    );
+  }
 
   return (
     <div style={S.importBox}>
@@ -667,11 +832,47 @@ function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   );
 }
 
-function BevestigImport({ parsed, onAdd, onCancel }: { parsed: Partial<Recept>; onAdd: (r: Partial<Recept>) => void; onCancel: () => void }) {
+function BevestigImport({
+  parsed, onAdd, onCancel, afbKeuze,
+}: {
+  parsed: Partial<Recept>; onAdd: (r: Partial<Recept>) => void; onCancel: () => void; afbKeuze?: string[] | null;
+}) {
+  const [recept, setRecept] = useState<Partial<Recept>>(parsed);
+  const [bezigAfb, setBezigAfb] = useState<string | null>(null);
+  const [formKey, setFormKey] = useState(0);
+
+  const kiesAfb = async (url: string) => {
+    setBezigAfb(url);
+    try {
+      const res = await api.importRecept({ type: "afbeelding-proxy", url });
+      const klein = await comprimeerAfbeelding(res.dataUrl);
+      setRecept((p) => ({ ...p, afbeelding: klein }));
+      setFormKey((k) => k + 1); // herinitialiseer het formulier met de nieuwe afbeelding
+    } catch {
+      // stil falen; gebruiker kan een andere kiezen of handmatig uploaden
+    } finally { setBezigAfb(null); }
+  };
+
   return (
     <div>
       <div style={S.infoBar}><Check size={15} /> Recept uitgelezen. Controleer en pas aan.<button onClick={onCancel} style={S.linkBtn}>Opnieuw</button></div>
-      <HandmatigForm onAdd={onAdd} initial={parsed} />
+
+      {afbKeuze && afbKeuze.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <span style={S.label}>Kies een afbeelding van de site</span>
+          <div style={S.afbKeuzeStrip}>
+            {afbKeuze.map((url) => (
+              <button key={url} onClick={() => kiesAfb(url)} style={S.afbKeuzeItem}>
+                <img src={url} alt="" style={S.afbKeuzeImg} loading="lazy" />
+                {bezigAfb === url && <div style={S.afbKeuzeBezig}><Loader2 size={18} className="spin" /></div>}
+                {recept.afbeelding && bezigAfb !== url && <span style={S.afbKeuzeCheck} />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <HandmatigForm key={formKey} onAdd={onAdd} initial={recept} />
     </div>
   );
 }
@@ -683,7 +884,7 @@ function normaliseer(p: any): Partial<Recept> {
     hoofd: HOOFDINGREDIENTEN.includes(p.hoofd) ? p.hoofd : HOOFDINGREDIENTEN[0],
     maaltijd: MAALTIJDEN.includes(p.maaltijd) ? p.maaltijd : "Avondeten",
     moeilijkheid: MOEILIJKHEDEN.includes(p.moeilijkheid) ? p.moeilijkheid : MOEILIJKHEDEN[0],
-    tijd: Number(p.tijd) || 30, score: 0, personen: Number(p.personen) || 4, gegeten: 0,
+    tijd: Number(p.tijd) || 30, score: 0, personen: Number(p.personen) || 4, gegeten: 0, afbeelding: p.afbeelding || "",
     ingredienten: Array.isArray(p.ingredienten) && p.ingredienten.length
       ? p.ingredienten.map((i: any) => ({ naam: i.naam || "", hoev: Number(i.hoev) || 0, eenheid: i.eenheid || "" }))
       : [{ naam: "", hoev: 0, eenheid: "" }],
@@ -695,19 +896,33 @@ function normaliseer(p: any): Partial<Recept> {
 // WEEKMENU
 // ============================================================================
 function Weekmenu({
-  recepten, week, setWeek, dagen,
+  recepten, week, setWeek, dagen, onUpdateRecept,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>; dagen: readonly string[];
+  onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
 }) {
   const [kiesDag, setKiesDag] = useState<string | null>(null);
   const [verplaatsVan, setVerplaatsVan] = useState<string | null>(null);
   const [bevestigLeeg, setBevestigLeeg] = useState(false);
+  const [kook, setKook] = useState<{ recept: Recept; personen: number } | null>(null);
+  // Wizard die ontbrekende winkel/gebied opvraagt voordat een gerecht geplaatst wordt.
+  const [wizard, setWizard] = useState<{ recept: Recept; dag: string } | null>(null);
+
+  const plaatsOpDag = (dag: string, recept: Recept) => {
+    setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: recept.id, personen: recept.personen || 4 } } }));
+  };
 
   const setStartDag = (d: number) => setWeek((p) => ({ ...p, startDag: ((d % 7) + 7) % 7 }));
   const setDag = (dag: string, recipeId: string) => {
     const r = recepten.find((x) => x.id === recipeId);
-    setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId, personen: r?.personen || 4 } } }));
+    if (!r) return;
     setKiesDag(null);
+    // Controleer of alle ingrediënten een winkel én gebied hebben.
+    if (mistGegevens(r)) {
+      setWizard({ recept: r, dag });
+    } else {
+      plaatsOpDag(dag, r);
+    }
   };
   const wisDag = (dag: string) => setWeek((p) => { const slots = { ...p.slots }; delete slots[dag]; return { ...p, slots }; });
   const setPers = (dag: string, d: number) => setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { ...p.slots[dag], personen: Math.max(1, p.slots[dag].personen + d) } } }));
@@ -769,10 +984,10 @@ function Weekmenu({
                   </button>
                 ) : (
                   <>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    <button onClick={() => setKook({ recept: r, personen: slot.personen })} style={S.weekSlotOpen}>
                       <div style={S.weekRecept}>{r.titel}</div>
-                      <div style={S.weekMeta}>{r.keuken} · {r.tijd}m</div>
-                    </div>
+                      <div style={S.weekMeta}>{r.keuken} · {r.tijd}m · tik om te koken</div>
+                    </button>
                     <div style={S.weekActies}>
                       <div style={S.persWrap}>
                         <button onClick={() => setPers(dag, -1)} style={S.persBtn} aria-label="Minder"><Minus size={13} /></button>
@@ -810,6 +1025,220 @@ function Weekmenu({
           onBevestig={leegmaken} onAnnuleer={() => setBevestigLeeg(false)}
         />
       )}
+
+      {kook && (
+        <KookWeergave recept={kook.recept} personen={kook.personen} onClose={() => setKook(null)} />
+      )}
+
+      {wizard && (
+        <IngredientenWizard
+          recept={wizard.recept}
+          onUpdateRecept={onUpdateRecept}
+          onKlaar={(bijgewerkt) => { plaatsOpDag(wizard.dag, bijgewerkt); setWizard(null); }}
+          onAnnuleer={() => setWizard(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Controleert of een recept ingrediënten heeft zonder winkel of gebied.
+function mistGegevens(r: Recept): boolean {
+  return r.ingredienten.some((i) => i.naam.trim() && (!i.winkel || !i.gebied));
+}
+
+// ============================================================================
+// INGREDIËNTEN-WIZARD — vraagt per ontbrekend ingrediënt winkel + gebied.
+// Het gebied wordt vooraf via AI bepaald; alleen bij twijfel zelf kiezen.
+// ============================================================================
+function IngredientenWizard({
+  recept, onUpdateRecept, onKlaar, onAnnuleer,
+}: {
+  recept: Recept;
+  onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
+  onKlaar: (bijgewerkt: Recept) => void;
+  onAnnuleer: () => void;
+}) {
+  // Werkkopie van de ingrediënten die we onderweg bijwerken.
+  const [ingredienten, setIngredienten] = useState(() => recept.ingredienten.map((i) => ({ ...i })));
+  const [laden, setLaden] = useState(true);
+  const [idx, setIdx] = useState(0);
+
+  // indices van ingrediënten die nog winkel of gebied missen
+  const teDoen = ingredienten
+    .map((i, k) => ({ i, k }))
+    .filter(({ i }) => i.naam.trim() && (!i.winkel || !i.gebied))
+    .map(({ k }) => k);
+
+  // Bij openen: AI-gebieden ophalen voor alle ontbrekende-gebied-ingrediënten.
+  useEffect(() => {
+    (async () => {
+      const namen = ingredienten.filter((i) => i.naam.trim() && !i.gebied).map((i) => i.naam);
+      if (namen.length) {
+        const gebieden = await api.bepaalGebieden(namen);
+        setIngredienten((prev) => prev.map((i) => (!i.gebied && gebieden[i.naam] ? { ...i, gebied: gebieden[i.naam] } : i)));
+      }
+      setLaden(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const huidigeIdx = teDoen[idx];
+  const huidig = huidigeIdx != null ? ingredienten[huidigeIdx] : null;
+
+  const setVeld = (k: number, patch: Partial<typeof ingredienten[number]>) =>
+    setIngredienten((prev) => prev.map((i, ii) => (ii === k ? { ...i, ...patch } : i)));
+
+  const volgende = async () => {
+    // ga naar het volgende item dat nog iets mist; sla items over die nu compleet zijn
+    let v = idx + 1;
+    while (v < teDoen.length) {
+      const i = ingredienten[teDoen[v]];
+      if (!i.winkel || !i.gebied) break;
+      v++;
+    }
+    if (v < teDoen.length) {
+      setIdx(v);
+    } else {
+      // klaar: alles wat nog miste is nu ingevuld → opslaan
+      const bijgewerkt: Recept = { ...recept, ingredienten };
+      await onUpdateRecept(recept.id, { ingredienten });
+      onKlaar(bijgewerkt);
+    }
+  };
+
+  if (laden) {
+    return (
+      <div style={S.modalBg}>
+        <div style={S.bevestigBox}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, justifyContent: "center", padding: "10px 0" }}>
+            <Loader2 size={22} className="spin" style={{ color: "var(--accent)" }} />
+            <span style={{ fontWeight: 600 }}>Afdelingen bepalen...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!huidig) {
+    // niets meer te doen (kan gebeuren als AI alles vulde en winkels al bestonden)
+    return null;
+  }
+
+  const gebiedDuidelijk = !!huidig.gebied;
+
+  return (
+    <div style={S.modalBg}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Ingrediënt {idx + 1} van {teDoen.length} · {recept.titel}</span>
+            <h2 style={S.modalTitle}>{huidig.naam}</h2>
+          </div>
+          <button onClick={onAnnuleer} style={S.iconBtn} aria-label="Annuleren"><X size={20} /></button>
+        </div>
+
+        <span style={S.label}>In welke winkel koop je dit?</span>
+        <div style={S.wizWinkelGrid}>
+          {WINKELS.map((w) => (
+            <button key={w} onClick={() => setVeld(huidigeIdx, { winkel: w })}
+              style={{ ...S.wizWinkelBtn, ...(huidig.winkel === w ? S.wizWinkelBtnOn : {}) }}>
+              <Store size={16} /> {w}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ marginTop: 18 }}>
+          <span style={S.label}>
+            Afdeling {gebiedDuidelijk && <span style={S.wizAiHint}>· voorgesteld</span>}
+          </span>
+          {gebiedDuidelijk ? (
+            <div style={S.wizGebiedGekozen}>
+              <span>{huidig.gebied}</span>
+              <button onClick={() => setVeld(huidigeIdx, { gebied: "" })} style={S.wizGebiedWijzig}>Wijzig</button>
+            </div>
+          ) : (
+            <div style={S.wizGebiedKeuze}>
+              {WINKELGEBIEDEN.map((g) => (
+                <button key={g} onClick={() => setVeld(huidigeIdx, { gebied: g })} style={S.wizGebiedChip}>{g}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={volgende}
+          disabled={!huidig.winkel || !huidig.gebied}
+          style={{ ...S.primaryBtn, marginTop: 22, ...(!huidig.winkel || !huidig.gebied ? { opacity: 0.5 } : {}) }}
+        >
+          {idx + 1 < teDoen.length ? <>Volgende <ChevronRight size={16} /></> : <><Check size={16} /> Klaar en plaatsen</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// KOOKWEERGAVE — recept klaarmaken vanuit het weekmenu, geschaald naar personen
+// ============================================================================
+function KookWeergave({ recept, personen, onClose }: { recept: Recept; personen: number; onClose: () => void }) {
+  const [afgevinkt, setAfgevinkt] = useState<Record<number, boolean>>({});
+  const [zoom, setZoom] = useState(false);
+  const factor = (personen || recept.personen) / (recept.personen || 1);
+  const schaal = (h: number) => {
+    const v = (Number(h) || 0) * factor;
+    return Math.round(v * 100) / 100;
+  };
+  const geschaald = factor !== 1;
+
+  return (
+    <div style={S.modalBg} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Klaarmaken</span>
+            <h2 style={S.modalTitle}>{recept.titel}</h2>
+          </div>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+        </div>
+
+        {recept.afbeelding && (
+          <button onClick={() => setZoom(true)} style={S.detailAfbWrap}>
+            <img src={recept.afbeelding} alt={recept.titel} style={S.detailAfb} />
+            <span style={S.detailAfbZoom}><ZoomIn size={16} /></span>
+          </button>
+        )}
+        {zoom && recept.afbeelding && <AfbeeldingZoom src={recept.afbeelding} onClose={() => setZoom(false)} />}
+
+        <div style={S.cardMeta}>
+          <Tag tone="maaltijd">{recept.maaltijd || "Avondeten"}</Tag>
+          <Tag>{recept.keuken}</Tag>
+          <span style={S.metaItem}><Clock size={12} /> {recept.tijd}m</span>
+          <span style={S.metaItem}><ChefHat size={12} /> {recept.moeilijkheid}</span>
+        </div>
+
+        <h3 style={S.sectionH}>
+          Ingrediënten · {personen} pers.
+          {geschaald && <span style={S.kookSchaalHint}> (recept is voor {recept.personen})</span>}
+        </h3>
+        <ul style={S.kookIngList}>
+          {recept.ingredienten.map((i, k) => {
+            const done = afgevinkt[k];
+            return (
+              <li key={k}>
+                <button onClick={() => setAfgevinkt((p) => ({ ...p, [k]: !p[k] }))} style={S.kookIngRij}>
+                  <span style={{ ...S.checkbox, ...(done ? S.checkboxOn : {}) }}>{done && <Check size={13} />}</span>
+                  <span style={{ ...S.kookIngNaam, ...(done ? { textDecoration: "line-through", color: "#a9aec2" } : {}) }}>{i.naam}</span>
+                  <span style={S.kookIngAmt}>{schaal(i.hoev)} {i.eenheid}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        <h3 style={S.sectionH}>Bereiding</h3>
+        <p style={S.kookBereiding}>{recept.bereiding}</p>
+      </div>
     </div>
   );
 }
@@ -859,10 +1288,11 @@ function KiesGerechtModal({
 // BOODSCHAPPENLIJST
 // ============================================================================
 function BoodschappenPagina({
-  recepten, week, dagen, boodschappen, setBoodschappen,
+  recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde,
 }: {
   recepten: Recept[]; week: WeekState; dagen: readonly string[];
   boodschappen: Boodschappen; setBoodschappen: React.Dispatch<React.SetStateAction<Boodschappen>>;
+  gebiedVolgorde: GebiedVolgorde;
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
@@ -870,7 +1300,7 @@ function BoodschappenPagina({
   const [filterWinkel, setFilterWinkel] = useState<string | null>(null); // null = alle winkels
 
   const genereerUitWeek = (): BoodschapItem[] => {
-    const acc: Record<string, { naam: string; eenheid: string; hoev: number }> = {};
+    const acc: Record<string, { naam: string; eenheid: string; hoev: number; winkel: string; gebied: string }> = {};
     dagen.forEach((dag) => {
       const slot = week.slots[dag];
       if (!slot) return;
@@ -879,18 +1309,21 @@ function BoodschappenPagina({
       const factor = (slot.personen || r.personen) / (r.personen || 1);
       r.ingredienten.forEach((i) => {
         const key = (i.naam + "|" + i.eenheid).toLowerCase();
-        if (!acc[key]) acc[key] = { naam: i.naam, eenheid: i.eenheid, hoev: 0 };
+        if (!acc[key]) acc[key] = { naam: i.naam, eenheid: i.eenheid, hoev: 0, winkel: i.winkel || GEEN_WINKEL, gebied: i.gebied || GEEN_GEBIED };
         acc[key].hoev += (Number(i.hoev) || 0) * factor;
+        // vul winkel/gebied aan als nog leeg
+        if (!acc[key].winkel && i.winkel) acc[key].winkel = i.winkel;
+        if (!acc[key].gebied && i.gebied) acc[key].gebied = i.gebied;
       });
     });
     return Object.values(acc).map((v) => ({
-      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid, winkel: GEEN_WINKEL, gedaan: false, bron: "week" as const,
+      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid,
+      winkel: v.winkel, gebied: v.gebied, gedaan: false, bron: "week" as const,
     }));
   };
 
-  // Verversen: vervang alleen de week-items door een nieuwe set uit het weekmenu,
-  // en laat alle handmatig toegevoegde items ongemoeid. Bestaande winkel-toewijzing
-  // en gedaan-status van een week-item worden hergebruikt als naam+eenheid matchen.
+  // Verversen: vervang alleen de week-items, laat handmatige items staan. Bestaande
+  // winkel/gebied/gedaan van een week-item worden hergebruikt als naam+eenheid matchen.
   const genereer = () => {
     setBoodschappen((p) => {
       const oudWeek = p.items.filter((it) => it.bron === "week");
@@ -899,9 +1332,10 @@ function BoodschappenPagina({
         const match = oudWeek.find(
           (o) => o.naam.toLowerCase() === nw.naam.toLowerCase() && (o.eenheid || "").toLowerCase() === (nw.eenheid || "").toLowerCase()
         );
-        return match ? { ...nw, winkel: match.winkel, gedaan: match.gedaan } : nw;
+        return match
+          ? { ...nw, winkel: nw.winkel || match.winkel, gebied: nw.gebied || match.gebied, gedaan: match.gedaan }
+          : nw;
       });
-      // Week-items eerst, daarna de handmatige (volgorde binnen elk blijft behouden).
       return { items: [...nieuwWeek, ...hand] };
     });
     setBevestigGenereer(false);
@@ -913,116 +1347,44 @@ function BoodschappenPagina({
     setBoodschappen((p) => ({ items: p.items.map((it) => (it.id === id ? { ...it, ...patch } : it)) }));
   const delItem = (id: string) => setBoodschappen((p) => ({ items: p.items.filter((it) => it.id !== id) }));
   const addItem = () =>
-    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gedaan: false, bron: "hand" }] }));
+    setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gebied: GEEN_GEBIED, gedaan: false, bron: "hand" }] }));
 
-  // --- Slepen ---------------------------------------------------------------
-  // dragId = het item dat opgepakt is. dropDoel = waar het neerkomt: een winkel
-  // plus de id van het item waarvóór het komt (of null = onderaan die winkel).
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dropWinkel, setDropWinkel] = useState<string | null>(null);
-  const [dropVoorId, setDropVoorId] = useState<string | null>(null);
-  const [pointerY, setPointerY] = useState(0);
-  const rijRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const winkelRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Gebied-volgorde voor een winkel: opgeslagen volgorde, anders de standaard.
+  const gebiedIndex = (w: string, gebied: string): number => {
+    const volg = (gebiedVolgorde[w] && gebiedVolgorde[w].length) ? gebiedVolgorde[w] : (WINKELGEBIEDEN as readonly string[]);
+    const i = volg.indexOf(gebied);
+    return i === -1 ? 999 : i; // onbekend/leeg gebied achteraan
+  };
 
   const items = boodschappen.items;
   const zichtbaar = verbergGedaan ? items.filter((it) => !it.gedaan) : items;
 
-  // Vaste groepsvolgorde: eerst niet-toegewezen, dan de vier winkels. Alle vier
-  // winkelgroepen tonen altijd (ook leeg) zodat je items erin kunt slepen.
-  // GEEN_WINKEL ("") is de sleutel voor de niet-toegewezen groep.
   const alleGroepKeys: string[] = [GEEN_WINKEL, ...WINKELS];
   const groepLabel = (k: string) => (k === GEEN_WINKEL ? "Niet toegewezen" : k);
 
-  // Filter bepaalt welke groepen zichtbaar zijn (null = alle).
+  // Filter bepaalt welke winkelgroepen zichtbaar zijn (null = alle).
   const zichtbareKeys = filterWinkel === null ? alleGroepKeys : [filterWinkel];
-  const groepen = zichtbareKeys.map((w) => ({
-    winkel: w,
-    lijst: zichtbaar.filter((it) => (it.winkel || GEEN_WINKEL) === w),
-  }));
 
-  // Bepaal tijdens het slepen de doelwinkel + invoegpositie op basis van de y-coördinaat.
-  const bepaalDoel = (y: number) => {
-    const keys = groepen.map((g) => g.winkel);
-    let gevonden: string | null = null;
-    for (const w of keys) {
-      const el = winkelRefs.current[w];
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      if (y >= r.top && y <= r.bottom) { gevonden = w; break; }
-    }
-    if (gevonden === null) {
-      if (keys.length === 0) { setDropWinkel(null); setDropVoorId(null); return; }
-      const eersteEl = winkelRefs.current[keys[0]];
-      if (eersteEl && y < eersteEl.getBoundingClientRect().top) gevonden = keys[0];
-      else gevonden = keys[keys.length - 1];
-    }
-    const lijst = zichtbaar.filter((it) => (it.winkel || GEEN_WINKEL) === gevonden && it.id !== dragId);
-    let voorId: string | null = null;
-    for (const it of lijst) {
-      const el = rijRefs.current[it.id];
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      const midden = r.top + r.height / 2;
-      if (y < midden) { voorId = it.id; break; }
-    }
-    setDropWinkel(gevonden);
-    setDropVoorId(voorId);
-  };
-
-  const startDrag = (id: string, clientY: number) => {
-    setDragId(id);
-    setPointerY(clientY);
-    setDropWinkel(items.find((it) => it.id === id)?.winkel ?? GEEN_WINKEL);
-    setDropVoorId(null);
-    bepaalDoel(clientY);
-  };
-
-  // Globale pointer/touch-handlers tijdens een sleep.
-  useEffect(() => {
-    if (!dragId) return;
-    const move = (clientY: number) => { setPointerY(clientY); bepaalDoel(clientY); };
-    const onMouse = (e: MouseEvent) => { e.preventDefault(); move(e.clientY); };
-    const onTouch = (e: TouchEvent) => { if (e.touches[0]) { e.preventDefault(); move(e.touches[0].clientY); } };
-    const eind = () => {
-      setBoodschappen((p) => {
-        const arr = [...p.items];
-        const di = arr.findIndex((x) => x.id === dragId);
-        if (di === -1 || dropWinkel === null) return p;
-        const [gesleept] = arr.splice(di, 1);
-        gesleept.winkel = dropWinkel;
-        let invoeg: number;
-        if (dropVoorId) {
-          invoeg = arr.findIndex((x) => x.id === dropVoorId);
-          if (invoeg === -1) invoeg = arr.length;
-        } else {
-          let laatste = -1;
-          arr.forEach((x, i) => { if ((x.winkel || GEEN_WINKEL) === dropWinkel) laatste = i; });
-          invoeg = laatste + 1;
-        }
-        arr.splice(invoeg, 0, gesleept);
-        return { items: arr };
-      });
-      setDragId(null); setDropWinkel(null); setDropVoorId(null);
-    };
-    window.addEventListener("mousemove", onMouse, { passive: false });
-    window.addEventListener("touchmove", onTouch, { passive: false });
-    window.addEventListener("mouseup", eind);
-    window.addEventListener("touchend", eind);
-    return () => {
-      window.removeEventListener("mousemove", onMouse);
-      window.removeEventListener("touchmove", onTouch);
-      window.removeEventListener("mouseup", eind);
-      window.removeEventListener("touchend", eind);
-    };
-  }, [dragId, dropWinkel, dropVoorId, setBoodschappen]);
+  // Bouw per winkel een lijst van gebied-secties, gesorteerd op de looproute.
+  const groepen = zichtbareKeys.map((w) => {
+    const winkelItems = zichtbaar.filter((it) => (it.winkel || GEEN_WINKEL) === w);
+    // groepeer per gebied
+    const perGebied: Record<string, BoodschapItem[]> = {};
+    winkelItems.forEach((it) => {
+      const g = it.gebied || GEEN_GEBIED;
+      (perGebied[g] ||= []).push(it);
+    });
+    const secties = Object.entries(perGebied)
+      .map(([gebied, lijst]) => ({ gebied, lijst }))
+      .sort((a, b) => gebiedIndex(w, a.gebied) - gebiedIndex(w, b.gebied));
+    return { winkel: w, aantal: winkelItems.length, secties };
+  });
 
   const aantalDagen = dagen.filter((d) => week.slots[d]).length;
   const aantalGedaan = items.filter((it) => it.gedaan).length;
-  const gesleeptItem = dragId ? items.find((it) => it.id === dragId) : null;
 
   return (
-    <div style={{ ...(dragId ? { touchAction: "none", userSelect: "none" } as React.CSSProperties : {}) }}>
+    <div>
       <div style={S.boodTopBar}>
         <button
           onClick={() => (items.some((it) => it.bron === "week") ? setBevestigGenereer(true) : genereer())}
@@ -1067,52 +1429,37 @@ function BoodschappenPagina({
         </div>
       )}
 
-      {items.length > 0 && groepen.map((g) => (
-        <div key={g.winkel || "geen"} ref={(el) => { winkelRefs.current[g.winkel] = el; }}
-          style={{ marginBottom: 14, ...(dragId && dropWinkel === g.winkel ? S.winkelActief : {}) }}>
+      {items.length > 0 && groepen.filter((g) => g.aantal > 0).map((g) => (
+        <div key={g.winkel || "geen"} style={{ marginBottom: 16 }}>
           <div style={{ ...S.winkelKop, ...(g.winkel === GEEN_WINKEL ? S.winkelKopGeen : {}) }}>
-            <Store size={14} /> {groepLabel(g.winkel)} <span style={S.winkelAantal}>{g.lijst.length}</span>
+            <Store size={14} /> {groepLabel(g.winkel)} <span style={S.winkelAantal}>{g.aantal}</span>
           </div>
-          {g.lijst.length === 0 ? (
-            <div style={S.winkelLeeg}>Sleep items hierheen</div>
-          ) : (
-            g.lijst.map((it) => (
-              <React.Fragment key={it.id}>
-                {dragId && dropWinkel === g.winkel && dropVoorId === it.id && it.id !== dragId && <div style={S.dropLijn} />}
+          {g.secties.map((sec) => (
+            <div key={sec.gebied || "geen-gebied"} style={{ marginBottom: 6 }}>
+              <div style={S.gebiedKop}>{sec.gebied || "Onbekende afdeling"}</div>
+              {sec.lijst.map((it) => (
                 <BoodItem
-                  it={it}
-                  isDragging={dragId === it.id}
-                  refCb={(el) => { rijRefs.current[it.id] = el; }}
-                  onStartDrag={(y) => startDrag(it.id, y)}
+                  key={it.id} it={it}
                   onToggle={() => setItem(it.id, { gedaan: !it.gedaan })}
                   onNaam={(v) => setItem(it.id, { naam: v })}
                   onHoev={(v) => setItem(it.id, { hoev: v })}
                   onEenheid={(v) => setItem(it.id, { eenheid: v })}
                   onWinkel={(v) => setItem(it.id, { winkel: v })}
+                  onGebied={(v) => setItem(it.id, { gebied: v })}
                   onDel={() => delItem(it.id)}
                 />
-              </React.Fragment>
-            ))
-          )}
-          {dragId && dropWinkel === g.winkel && dropVoorId === null && g.lijst.length > 0 && <div style={S.dropLijn} />}
+              ))}
+            </div>
+          ))}
         </div>
       ))}
 
       <button onClick={addItem} style={S.addItemBtn}><Plus size={16} /> Item toevoegen</button>
 
-      {/* zwevend item dat de cursor/vinger volgt */}
-      {gesleeptItem && (
-        <div style={{ ...S.dragGhost, top: pointerY }}>
-          <GripVertical size={16} style={{ color: "var(--accent)" }} />
-          <span style={S.boodNaam}>{gesleeptItem.naam || "Naamloos item"}</span>
-          <span style={S.boodHoev}>{gesleeptItem.hoev} {gesleeptItem.eenheid}</span>
-        </div>
-      )}
-
       {bevestigGenereer && (
         <Bevestig
           titel="Weekmenu verversen?"
-          tekst="De items uit het weekmenu worden opnieuw berekend en vervangen. Handmatig toegevoegde items blijven staan. Winkel-indeling van bestaande weekmenu-items blijft behouden waar mogelijk."
+          tekst="De items uit het weekmenu worden opnieuw berekend en vervangen. Handmatig toegevoegde items blijven staan. Winkel en afdeling van bestaande weekmenu-items blijven behouden waar mogelijk."
           bevestigLabel="Ja, verversen"
           onBevestig={genereer} onAnnuleer={() => setBevestigGenereer(false)}
         />
@@ -1131,27 +1478,16 @@ function BoodschappenPagina({
 }
 
 function BoodItem({
-  it, isDragging, refCb, onStartDrag, onToggle, onNaam, onHoev, onEenheid, onWinkel, onDel,
+  it, onToggle, onNaam, onHoev, onEenheid, onWinkel, onGebied, onDel,
 }: {
-  it: BoodschapItem; isDragging: boolean;
-  refCb: (el: HTMLDivElement | null) => void;
-  onStartDrag: (clientY: number) => void;
+  it: BoodschapItem;
   onToggle: () => void; onNaam: (v: string) => void; onHoev: (v: number) => void;
-  onEenheid: (v: string) => void; onWinkel: (v: string) => void; onDel: () => void;
+  onEenheid: (v: string) => void; onWinkel: (v: string) => void; onGebied: (v: string) => void; onDel: () => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div ref={refCb} style={{ ...S.boodRow, ...(it.gedaan ? S.boodDone : {}), ...(isDragging ? S.boodRowDragging : {}) }}>
+    <div style={{ ...S.boodRow, ...(it.gedaan ? S.boodDone : {}) }}>
       <div style={S.boodMain}>
-        <div
-          style={S.greep}
-          onMouseDown={(e) => { e.preventDefault(); onStartDrag(e.clientY); }}
-          onTouchStart={(e) => { if (e.touches[0]) onStartDrag(e.touches[0].clientY); }}
-          aria-label="Sleep om te verplaatsen"
-          role="button"
-        >
-          <GripVertical size={18} />
-        </div>
         <button onClick={onToggle} style={{ ...S.checkbox, ...(it.gedaan ? S.checkboxOn : {}) }} aria-label="Afvinken">
           {it.gedaan && <Check size={13} />}
         </button>
@@ -1171,14 +1507,83 @@ function BoodItem({
           <div style={S.boodEditRow}>
             <input style={{ ...S.input, flex: 1 }} type="number" placeholder="aantal" value={it.hoev} onChange={(e) => onHoev(Number(e.target.value))} />
             <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={it.eenheid} onChange={(e) => onEenheid(e.target.value)} />
-            <select style={{ ...S.input, flex: 1.4 }} value={it.winkel} onChange={(e) => onWinkel(e.target.value)}>
-              <option value="">Niet toegewezen</option>
+          </div>
+          <div style={S.boodEditRow}>
+            <select style={{ ...S.input, flex: 1 }} value={it.winkel} onChange={(e) => onWinkel(e.target.value)}>
+              <option value="">Geen winkel</option>
               {WINKELS.map((w) => <option key={w} value={w}>{w}</option>)}
+            </select>
+            <select style={{ ...S.input, flex: 1.6 }} value={it.gebied} onChange={(e) => onGebied(e.target.value)}>
+              <option value="">Geen afdeling</option>
+              {WINKELGEBIEDEN.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
           <button onClick={onDel} style={S.boodDelBtn}><Trash2 size={13} /> Verwijder item</button>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// WINKELS-PAGINA — per winkel de volgorde van winkelgebieden (looproute)
+// ============================================================================
+function WinkelsPagina({
+  gebiedVolgorde, setGebiedVolgorde,
+}: {
+  gebiedVolgorde: GebiedVolgorde; setGebiedVolgorde: React.Dispatch<React.SetStateAction<GebiedVolgorde>>;
+}) {
+  const [winkel, setWinkel] = useState<string>(WINKELS[0]);
+
+  // De volgorde voor de gekozen winkel: opgeslagen volgorde, aangevuld met
+  // eventueel ontbrekende gebieden, zodat altijd alle gebieden zichtbaar zijn.
+  const volgordeVoor = (w: string): string[] => {
+    const opgeslagen = gebiedVolgorde[w] || [];
+    const rest = WINKELGEBIEDEN.filter((g) => !opgeslagen.includes(g));
+    return [...opgeslagen.filter((g) => (WINKELGEBIEDEN as readonly string[]).includes(g)), ...rest];
+  };
+
+  const huidige = volgordeVoor(winkel);
+
+  const verplaats = (index: number, richting: -1 | 1) => {
+    const doel = index + richting;
+    if (doel < 0 || doel >= huidige.length) return;
+    const nieuw = [...huidige];
+    [nieuw[index], nieuw[doel]] = [nieuw[doel], nieuw[index]];
+    setGebiedVolgorde((p) => ({ ...p, [winkel]: nieuw }));
+  };
+
+  const resetWinkel = () => setGebiedVolgorde((p) => ({ ...p, [winkel]: [...WINKELGEBIEDEN] }));
+
+  return (
+    <div>
+      <p style={S.winkelsIntro}>
+        Zet per winkel de afdelingen in de vololgorde waarin je er doorheen loopt. Je boodschappenlijst sorteert items daarna automatisch op deze looproute.
+      </p>
+
+      <div style={S.filterRow}>
+        <div style={S.chips}>
+          {WINKELS.map((w) => (
+            <button key={w} onClick={() => setWinkel(w)} style={{ ...S.chip, ...(winkel === w ? S.chipOn : {}) }}>{w}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={S.winkelsKopRij}>
+        <span style={S.winkelsKop}><Store size={14} /> Looproute {winkel}</span>
+        <button onClick={resetWinkel} style={S.resetBtn}><RefreshCw size={13} /> Standaard</button>
+      </div>
+
+      {huidige.map((g, k) => (
+        <div key={g} style={S.gebiedRij}>
+          <span style={S.gebiedNr}>{k + 1}</span>
+          <span style={S.gebiedNaam}>{g}</span>
+          <div style={S.gebiedKnoppen}>
+            <button onClick={() => verplaats(k, -1)} disabled={k === 0} style={{ ...S.ordBtn, ...(k === 0 ? S.ordBtnUit : {}) }} aria-label="Omhoog"><ChevronLeft size={14} style={{ transform: "rotate(90deg)" }} /></button>
+            <button onClick={() => verplaats(k, 1)} disabled={k === huidige.length - 1} style={{ ...S.ordBtn, ...(k === huidige.length - 1 ? S.ordBtnUit : {}) }} aria-label="Omlaag"><ChevronRight size={14} style={{ transform: "rotate(90deg)" }} /></button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1231,6 +1636,41 @@ function Sterren({ n, onSet, small }: { n: number; onSet?: (s: number) => void; 
     </div>
   );
 }
+// Fullscreen zoom-weergave met in/uitzoomen en slepen om te pannen.
+function AfbeeldingZoom({ src, onClose }: { src: string; onClose: () => void }) {
+  const [schaal, setSchaal] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const sleep = useRef<{ x: number; y: number } | null>(null);
+
+  const start = (x: number, y: number) => { sleep.current = { x: x - pos.x, y: y - pos.y }; };
+  const beweeg = (x: number, y: number) => {
+    if (!sleep.current || schaal === 1) return;
+    setPos({ x: x - sleep.current.x, y: y - sleep.current.y });
+  };
+  const stop = () => { sleep.current = null; };
+
+  return (
+    <div style={S.zoomBg} onClick={onClose}
+      onMouseMove={(e) => beweeg(e.clientX, e.clientY)} onMouseUp={stop}
+      onTouchMove={(e) => e.touches[0] && beweeg(e.touches[0].clientX, e.touches[0].clientY)} onTouchEnd={stop}>
+      <img
+        src={src} alt="" draggable={false}
+        style={{ ...S.zoomImg, transform: `translate(${pos.x}px, ${pos.y}px) scale(${schaal})`, cursor: schaal > 1 ? "grab" : "default" }}
+        onClick={(e) => e.stopPropagation()}
+        onMouseDown={(e) => { e.stopPropagation(); start(e.clientX, e.clientY); }}
+        onTouchStart={(e) => { e.stopPropagation(); e.touches[0] && start(e.touches[0].clientX, e.touches[0].clientY); }}
+      />
+      <div style={S.zoomKnoppen} onClick={(e) => e.stopPropagation()}>
+        <button onClick={() => setSchaal((s) => Math.max(1, Math.round((s - 0.5) * 10) / 10))} style={S.zoomKnop}><Minus size={18} /></button>
+        <span style={S.zoomLabel}>{Math.round(schaal * 100)}%</span>
+        <button onClick={() => setSchaal((s) => Math.min(5, Math.round((s + 0.5) * 10) / 10))} style={S.zoomKnop}><Plus size={18} /></button>
+        <button onClick={() => { setSchaal(1); setPos({ x: 0, y: 0 }); }} style={S.zoomKnop} aria-label="Reset"><RefreshCw size={16} /></button>
+      </div>
+      <button onClick={onClose} style={S.zoomSluit} aria-label="Sluiten"><X size={22} /></button>
+    </div>
+  );
+}
+
 function Tag({ children, tone }: { children: React.ReactNode; tone?: "maaltijd" }) {
   return <span style={{ ...S.tag, ...(tone === "maaltijd" ? S.tagMaaltijd : {}) }}>{children}</span>;
 }
@@ -1278,6 +1718,30 @@ const S: Record<string, React.CSSProperties> = {
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },
   tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 6 },
   tagMaaltijd: { color: "#fff", background: "var(--accent)" },
+
+  // Afbeeldingen
+  cardAfbWrap: { width: "100%", height: 150, borderRadius: 10, overflow: "hidden", marginBottom: 10, background: "var(--bg)" },
+  cardAfb: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  detailAfbWrap: { position: "relative", display: "block", width: "100%", maxHeight: 240, overflow: "hidden", borderRadius: 12, margin: "4px 0 12px", padding: 0, border: "none", background: "var(--bg)", cursor: "zoom-in" },
+  detailAfb: { width: "100%", maxHeight: 240, objectFit: "cover", display: "block" },
+  detailAfbZoom: { position: "absolute", right: 10, bottom: 10, width: 32, height: 32, borderRadius: 8, background: "rgba(22,25,39,0.6)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
+  afbVoorbeeldWrap: { border: "1px solid var(--line)", borderRadius: 10, overflow: "hidden", background: "var(--surface)" },
+  afbVoorbeeld: { width: "100%", maxHeight: 200, objectFit: "cover", display: "block" },
+  afbKnoppen: { display: "flex", gap: 8, padding: 8, borderTop: "1px solid var(--line)" },
+  afbKnop: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--bg)", border: "1px solid var(--line)", color: "var(--ink)", padding: "8px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  afbLeeg: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "20px", border: "1.5px dashed var(--line)", borderRadius: 10, background: "var(--surface)", color: "var(--accent)", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  afbKeuzeStrip: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 },
+  afbKeuzeItem: { position: "relative", flexShrink: 0, width: 92, height: 92, borderRadius: 10, overflow: "hidden", border: "1px solid var(--line)", padding: 0, cursor: "pointer", background: "var(--bg)" },
+  afbKeuzeImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  afbKeuzeBezig: { position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.7)", color: "var(--accent)" },
+  afbKeuzeCheck: { position: "absolute", top: 5, right: 5, width: 16, height: 16 },
+
+  zoomBg: { position: "fixed", inset: 0, background: "rgba(10,12,20,0.92)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", touchAction: "none" },
+  zoomImg: { maxWidth: "100%", maxHeight: "100%", objectFit: "contain", transition: "transform 0.05s linear", userSelect: "none" },
+  zoomKnoppen: { position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 8, background: "rgba(22,25,39,0.85)", padding: "8px 12px", borderRadius: 30 },
+  zoomKnop: { width: 38, height: 38, borderRadius: 19, border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
+  zoomLabel: { color: "#fff", fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: "center" },
+  zoomSluit: { position: "fixed", top: 16, right: 16, width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
   cardPlaatsBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px", background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderTop: "1px solid var(--line)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 
   empty: { textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
@@ -1301,6 +1765,12 @@ const S: Record<string, React.CSSProperties> = {
   ingLi: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 14 },
   ingAmt: { color: "var(--sub)", fontWeight: 600 },
   bereiding: { fontSize: 14, lineHeight: 1.65, color: "#3a3f52", margin: 0, whiteSpace: "pre-wrap" },
+  kookSchaalHint: { fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--sub)" },
+  kookIngList: { listStyle: "none", padding: 0, margin: 0 },
+  kookIngRij: { display: "flex", alignItems: "center", gap: 11, width: "100%", background: "none", border: "none", borderBottom: "1px solid var(--line)", padding: "12px 2px", cursor: "pointer", textAlign: "left" },
+  kookIngNaam: { flex: 1, fontSize: 15, fontWeight: 600, minWidth: 0, overflowWrap: "break-word", wordBreak: "break-word" },
+  kookIngAmt: { fontSize: 15, color: "var(--accent)", fontWeight: 700, flexShrink: 0 },
+  kookBereiding: { fontSize: 15, lineHeight: 1.75, color: "#3a3f52", margin: 0, whiteSpace: "pre-wrap" },
   deleteBtn: { display: "inline-flex", alignItems: "center", gap: 6, marginTop: 22, background: "none", border: "1px solid var(--line)", color: "var(--red)", padding: "9px 14px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
 
   weekPickRow: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "11px 12px", marginBottom: 7, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, cursor: "pointer", textAlign: "left" },
@@ -1341,6 +1811,7 @@ const S: Record<string, React.CSSProperties> = {
   weekSlotVol: { flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, padding: "10px 11px" },
   weekSlotBron: { border: "1.5px solid var(--accent)", background: "var(--accent-soft)" },
   weekSlotKies: { flex: 1, display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 },
+  weekSlotOpen: { flex: 1, minWidth: 0, display: "block", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 },
   weekRecept: { fontSize: 14, fontWeight: 700, lineHeight: 1.3, overflowWrap: "break-word", wordBreak: "break-word" },
   weekMeta: { fontSize: 11, color: "var(--sub)", marginTop: 2 },
   weekActies: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 },
@@ -1356,6 +1827,28 @@ const S: Record<string, React.CSSProperties> = {
   winkelKop: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "4px 2px 8px" },
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },
+  gebiedKop: { fontSize: 11, fontWeight: 700, color: "var(--sub)", margin: "2px 4px 4px", letterSpacing: "0.02em" },
+
+  // Winkels-pagina
+  winkelsIntro: { fontSize: 13, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 14px" },
+  winkelsKopRij: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "12px 2px 10px" },
+  winkelsKop: { display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--ink)" },
+  gebiedRij: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, padding: "11px 12px", marginBottom: 7 },
+  gebiedNr: { width: 22, height: 22, borderRadius: 11, background: "var(--accent-soft)", color: "var(--accent)", fontSize: 12, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  gebiedNaam: { flex: 1, fontSize: 14, fontWeight: 600, minWidth: 0 },
+  gebiedKnoppen: { display: "flex", gap: 4, flexShrink: 0 },
+  ordBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid var(--line)", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--sub)", padding: 0 },
+  ordBtnUit: { opacity: 0.3, cursor: "default" },
+
+  // Wizard
+  wizWinkelGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 4 },
+  wizWinkelBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "14px", borderRadius: 11, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 15, fontWeight: 700, cursor: "pointer" },
+  wizWinkelBtnOn: { background: "var(--accent)", color: "#fff", borderColor: "var(--accent)" },
+  wizAiHint: { fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--green)" },
+  wizGebiedGekozen: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "12px 14px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, fontSize: 15, fontWeight: 600 },
+  wizGebiedWijzig: { background: "none", border: "none", color: "var(--accent)", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline" },
+  wizGebiedKeuze: { display: "flex", flexWrap: "wrap", gap: 7, marginTop: 4 },
+  wizGebiedChip: { padding: "8px 12px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   winkelAantal: { background: "var(--line)", color: "var(--sub)", borderRadius: 10, padding: "1px 8px", fontSize: 11, fontWeight: 700 },
   boodRow: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, marginBottom: 7, overflow: "hidden" },
   boodRowDragging: { opacity: 0.4, borderStyle: "dashed", borderColor: "var(--accent)" },

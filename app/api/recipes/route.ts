@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     score: Number(body.score) || 0,
     personen: Number(body.personen) || 4,
     gegeten: Number(body.gegeten) || 0,
+    afbeelding: typeof body.afbeelding === "string" ? body.afbeelding : "",
     ingredienten: Array.isArray(body.ingredienten) ? body.ingredienten : [],
     bereiding: body.bereiding || "",
   };
