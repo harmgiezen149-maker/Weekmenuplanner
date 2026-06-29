@@ -223,6 +223,15 @@ export default function App() {
     { id: "winkels", label: "Winkels", icon: Store },
   ];
 
+  // Per pagina de maximale inhoudsbreedte op desktop. De header valt hierbuiten
+  // en vult altijd de volle breedte; Recepten regelt zijn eigen rasterbreedte.
+  const inhoudMaxW: Record<string, number | undefined> = {
+    recepten: undefined,   // vol; kaarten in een responsief raster
+    toevoegen: 560,        // formulier leesbaar gecentreerd
+    week: 800, boodschappen: 800, voorraad: 800, winkels: 800,
+  };
+  const maxW = inhoudMaxW[tab];
+
   return (
     <div style={S.app}>
       <header style={S.header}>
@@ -235,7 +244,7 @@ export default function App() {
         {laden ? (
           <div style={S.center}><Loader2 size={26} className="spin" style={{ color: "var(--accent)" }} /></div>
         ) : (
-          <>
+          <div style={{ width: "100%", maxWidth: maxW, margin: "0 auto" }}>
             {tab === "recepten" && (
               <ReceptenLijst
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
@@ -266,7 +275,7 @@ export default function App() {
             {tab === "winkels" && (
               <WinkelsPagina gebiedVolgorde={gebiedVolgorde} setGebiedVolgorde={setGebiedVolgorde} />
             )}
-          </>
+          </div>
         )}
       </main>
 
@@ -469,7 +478,7 @@ function ReceptenLijst({
 
       {anyFilter ? <button onClick={reset} style={S.resetBtn}><X size={13} /> Filters wissen</button> : null}
 
-      <div style={{ marginTop: 8 }}>
+      <div style={S.receptGrid}>
         {recepten.length === 0 && <p style={S.empty}>Nog geen recepten. Voeg er een toe via het tabblad Toevoegen.</p>}
         {recepten.length > 0 && gefilterd.length === 0 && <p style={S.empty}>Geen recepten gevonden. Pas je filters aan.</p>}
         {gefilterd.map((r) => (
@@ -1864,7 +1873,7 @@ function SegBtn({ active, onClick, icon: Icon, label }: { active: boolean; onCli
 // STYLES
 // ============================================================================
 const S: Record<string, React.CSSProperties> = {
-  app: { maxWidth: 480, margin: "0 auto", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", display: "flex", flexDirection: "column", position: "relative" },
+  app: { width: "100%", margin: "0 auto", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", display: "flex", flexDirection: "column", position: "relative" },
   header: { display: "flex", alignItems: "center", gap: 9, padding: "16px 18px 12px", position: "sticky", top: 0, background: "var(--bg)", zIndex: 5, borderBottom: "1px solid var(--line)" },
   appTitle: { fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" },
   headerSub: { marginLeft: "auto", fontSize: 12, color: "var(--sub)", fontWeight: 500 },
@@ -1886,7 +1895,8 @@ const S: Record<string, React.CSSProperties> = {
   scoreFilterBtn: { display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" },
   resetBtn: { display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "2px 0", marginBottom: 4 },
 
-  card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, marginBottom: 10, overflow: "hidden" },
+  card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, overflow: "hidden" },
+  receptGrid: { marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 10, alignItems: "start" },
   cardBody: { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "13px 15px 11px", cursor: "pointer" },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: "var(--ink)" },
@@ -1920,7 +1930,7 @@ const S: Record<string, React.CSSProperties> = {
   zoomSluit: { position: "fixed", top: 16, right: 16, width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
   cardPlaatsBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px", background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderTop: "1px solid var(--line)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 
-  empty: { textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
+  empty: { gridColumn: "1 / -1", textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
 
   modalBg: { position: "fixed", inset: 0, background: "rgba(22,25,39,0.45)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" },
   modal: { background: "var(--bg)", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 30px" },
