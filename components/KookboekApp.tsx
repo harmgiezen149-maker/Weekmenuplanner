@@ -557,13 +557,13 @@ function NaarLijstDialog({
 
 function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; onPlaats: () => void }) {
   return (
-    <div style={S.card}>
+    <div className="card" style={S.card}>
       <button onClick={onOpen} style={S.cardBody}>
         {r.afbeelding && (
           <div style={S.cardAfbWrap}><img src={r.afbeelding} alt={r.titel} style={S.cardAfb} loading="lazy" /></div>
         )}
         <div style={S.cardTop}>
-          <span style={S.cardTitle}>{r.titel}</span>
+          <span className="recept-titel" style={S.cardTitle} title={r.titel}>{r.titel}</span>
           <Sterren n={r.score} small />
         </div>
         <div style={S.cardMeta}>
@@ -1913,7 +1913,7 @@ const S: Record<string, React.CSSProperties> = {
   card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, overflow: "hidden" },
   receptGrid: { marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 10, alignItems: "start" },
   cardBody: { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "13px 15px 11px", cursor: "pointer" },
-  cardTop: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 },
+  cardTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: "var(--ink)" },
   cardMeta: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },

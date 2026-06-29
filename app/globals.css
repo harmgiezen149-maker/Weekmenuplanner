@@ -52,3 +52,20 @@ button {
     animation: none;
   }
 }
+
+/* Receptkaart-titel: standaard exact 2 regels hoog zodat alle kaarten in het
+   raster even hoog beginnen. Bij hover klapt de volledige titel uit (het vak
+   wordt dan tijdelijk groter). */
+.recept-titel {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.3;
+  min-height: 2.6em; /* 2 regels × 1.3 */
+}
+
+.card:hover .recept-titel {
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
