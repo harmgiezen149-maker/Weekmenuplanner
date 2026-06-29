@@ -5,12 +5,13 @@ import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
-  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn,
+  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
   WINKELGEBIEDEN, GEEN_GEBIED,
   type Recept, type WeekState, type Boodschappen, type BoodschapItem, type GebiedVolgorde,
+  type Voorraad, type VoorraadArtikel,
 } from "@/lib/types";
 
 // ============================================================================
@@ -46,6 +47,12 @@ const api = {
   },
   async saveGebiedVolgorde(g: GebiedVolgorde): Promise<GebiedVolgorde> {
     const res = await fetch("/api/gebiedvolgorde", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(g) }); return res.json();
+  },
+  async getVoorraad(): Promise<Voorraad> {
+    const r = await fetch("/api/voorraad", { cache: "no-store" }); return r.json();
+  },
+  async saveVoorraad(v: Voorraad): Promise<Voorraad> {
+    const res = await fetch("/api/voorraad", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(v) }); return res.json();
   },
   async bepaalGebieden(namen: string[]): Promise<Record<string, string>> {
     try {
@@ -106,13 +113,14 @@ export default function App() {
   const [week, setWeek] = useState<WeekState>({ startDag: 0, slots: {} });
   const [boodschappen, setBoodschappen] = useState<Boodschappen>({ items: [] });
   const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
+  const [voorraad, setVoorraad] = useState<Voorraad>({ items: [] });
   const [tab, setTab] = useState("recepten");
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const [r, w, b, g] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde()]);
-      setRecepten(r); setWeek(w); setBoodschappen(b); setGebiedVolgorde(g); setLaden(false);
+      const [r, w, b, g, v] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad()]);
+      setRecepten(r); setWeek(w); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
     })();
   }, []);
 
@@ -138,6 +146,14 @@ export default function App() {
     const t = setTimeout(() => api.saveGebiedVolgorde(gebiedVolgorde), 400);
     return () => clearTimeout(t);
   }, [gebiedVolgorde, laden]);
+
+  const eersteVoorraad = useRef(true);
+  useEffect(() => {
+    if (laden) return;
+    if (eersteVoorraad.current) { eersteVoorraad.current = false; return; }
+    const t = setTimeout(() => api.saveVoorraad(voorraad), 400);
+    return () => clearTimeout(t);
+  }, [voorraad, laden]);
 
   const dagenInVolgorde = useMemo(
     () => [...Array(7)].map((_, i) => DAGEN[(week.startDag + i) % 7]),
@@ -182,11 +198,28 @@ export default function App() {
     });
   };
 
+  // Voegt een generiek voorraadartikel toe aan de boodschappenlijst, met winkel
+  // en afdeling. Bestaat een item met dezelfde naam al, dan slaan we het over.
+  const voegVoorraadToeAanLijst = (art: VoorraadArtikel) => {
+    setBoodschappen((p) => {
+      const bestaat = p.items.some((it) => it.naam.toLowerCase() === art.naam.toLowerCase());
+      if (bestaat) return p;
+      return {
+        items: [...p.items, {
+          id: uid(), naam: art.naam, hoev: 1, eenheid: "",
+          winkel: art.winkel || GEEN_WINKEL, gebied: art.gebied || GEEN_GEBIED,
+          gedaan: false, bron: "hand",
+        }],
+      };
+    });
+  };
+
   const tabs = [
     { id: "recepten", label: "Recepten", icon: BookOpen },
     { id: "toevoegen", label: "Toevoegen", icon: Plus },
     { id: "week", label: "Weekmenu", icon: Calendar },
     { id: "boodschappen", label: "Lijst", icon: ShoppingCart },
+    { id: "voorraad", label: "Voorraad", icon: Package },
     { id: "winkels", label: "Winkels", icon: Store },
   ];
 
@@ -222,6 +255,12 @@ export default function App() {
                 recepten={recepten} week={week} dagen={dagenInVolgorde}
                 boodschappen={boodschappen} setBoodschappen={setBoodschappen}
                 gebiedVolgorde={gebiedVolgorde}
+              />
+            )}
+            {tab === "voorraad" && (
+              <VoorraadPagina
+                voorraad={voorraad} setVoorraad={setVoorraad}
+                onNaarLijst={voegVoorraadToeAanLijst}
               />
             )}
             {tab === "winkels" && (
@@ -1551,6 +1590,118 @@ function BoodItem({
 }
 
 // ============================================================================
+// VOORRAAD-PAGINA — terugkerende generieke artikelen, gesorteerd per afdeling.
+// Vink een artikel aan om het aan de boodschappenlijst toe te voegen.
+// ============================================================================
+function VoorraadPagina({
+  voorraad, setVoorraad, onNaarLijst,
+}: {
+  voorraad: Voorraad;
+  setVoorraad: React.Dispatch<React.SetStateAction<Voorraad>>;
+  onNaarLijst: (art: VoorraadArtikel) => void;
+}) {
+  const [nieuwNaam, setNieuwNaam] = useState("");
+  const [nieuwWinkel, setNieuwWinkel] = useState("");
+  const [nieuwGebied, setNieuwGebied] = useState("");
+  const [toegevoegd, setToegevoegd] = useState<Record<string, boolean>>({});
+
+  const voegToe = () => {
+    const naam = nieuwNaam.trim();
+    if (!naam) return;
+    setVoorraad((p) => ({
+      items: [...p.items, { id: uid(), naam, winkel: nieuwWinkel, gebied: nieuwGebied }],
+    }));
+    setNieuwNaam(""); setNieuwWinkel(""); setNieuwGebied("");
+  };
+
+  const verwijder = (id: string) =>
+    setVoorraad((p) => ({ items: p.items.filter((a) => a.id !== id) }));
+
+  const wijzig = (id: string, patch: Partial<VoorraadArtikel>) =>
+    setVoorraad((p) => ({ items: p.items.map((a) => (a.id === id ? { ...a, ...patch } : a)) }));
+
+  const vink = (art: VoorraadArtikel) => {
+    if (toegevoegd[art.id]) return; // al toegevoegd deze sessie
+    onNaarLijst(art);
+    setToegevoegd((t) => ({ ...t, [art.id]: true }));
+  };
+
+  // Groepeer per afdeling, in de vaste volgorde van WINKELGEBIEDEN; onbekende
+  // afdeling ("") komt onderaan.
+  const groepen = useMemo(() => {
+    const orde = [...WINKELGEBIEDEN, ""];
+    return orde
+      .map((g) => ({ gebied: g, items: voorraad.items.filter((a) => (a.gebied || "") === g).sort((a, b) => a.naam.localeCompare(b.naam)) }))
+      .filter((grp) => grp.items.length > 0);
+  }, [voorraad.items]);
+
+  return (
+    <div>
+      <p style={S.winkelsIntro}>
+        Terugkerende artikelen zoals wasmiddel of aluminiumfolie. Vink een artikel aan om het aan je boodschappenlijst toe te voegen — winkel en afdeling gaan automatisch mee.
+      </p>
+
+      {/* Nieuw artikel toevoegen */}
+      <div style={S.voorraadNieuw}>
+        <input
+          style={{ ...S.input, marginBottom: 7 }} placeholder="Nieuw artikel (bijv. wasmiddel)"
+          value={nieuwNaam} onChange={(e) => setNieuwNaam(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && voegToe()}
+        />
+        <div style={S.voorraadNieuwRij}>
+          <select style={{ ...S.input, ...S.ingSelect }} value={nieuwWinkel} onChange={(e) => setNieuwWinkel(e.target.value)}>
+            <option value="">Winkel…</option>
+            {WINKELS.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+          <select style={{ ...S.input, ...S.ingSelect }} value={nieuwGebied} onChange={(e) => setNieuwGebied(e.target.value)}>
+            <option value="">Afdeling…</option>
+            {WINKELGEBIEDEN.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+          <button onClick={voegToe} disabled={!nieuwNaam.trim()} style={{ ...S.voorraadAddBtn, ...(!nieuwNaam.trim() ? { opacity: 0.5 } : {}) }}>
+            <Plus size={16} />
+          </button>
+        </div>
+      </div>
+
+      {voorraad.items.length === 0 ? (
+        <div style={S.leeg}><Package size={30} style={{ color: "var(--sub)" }} /><p>Nog geen vaste artikelen. Voeg er hierboven een toe.</p></div>
+      ) : (
+        groepen.map((grp) => (
+          <div key={grp.gebied || "overig"} style={{ marginBottom: 16 }}>
+            <div style={S.gebiedKop}>{grp.gebied || "Geen afdeling"}</div>
+            {grp.items.map((art) => (
+              <div key={art.id} style={S.voorraadRij}>
+                <button
+                  onClick={() => vink(art)}
+                  style={{ ...S.checkbox, ...(toegevoegd[art.id] ? S.checkboxOn : {}), flexShrink: 0 }}
+                  aria-label="Aan lijst toevoegen"
+                >
+                  {toegevoegd[art.id] && <Check size={13} />}
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ ...S.voorraadNaam, ...(toegevoegd[art.id] ? { color: "var(--green)" } : {}) }}>{art.naam}</div>
+                  <div style={S.voorraadMeta}>
+                    <select style={S.voorraadInlineSel} value={art.winkel} onChange={(e) => wijzig(art.id, { winkel: e.target.value })}>
+                      <option value="">Winkel…</option>
+                      {WINKELS.map((w) => <option key={w} value={w}>{w}</option>)}
+                    </select>
+                    <select style={S.voorraadInlineSel} value={art.gebied} onChange={(e) => wijzig(art.id, { gebied: e.target.value })}>
+                      <option value="">Afdeling…</option>
+                      {WINKELGEBIEDEN.map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <button onClick={() => verwijder(art.id)} style={S.iconBtnSm} aria-label="Verwijder"><Trash2 size={15} /></button>
+              </div>
+            ))}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
 // WINKELS-PAGINA — per winkel de volgorde van winkelgebieden (looproute)
 // ============================================================================
 function WinkelsPagina({
@@ -1721,9 +1872,9 @@ const S: Record<string, React.CSSProperties> = {
   center: { display: "flex", justifyContent: "center", paddingTop: 60 },
 
   nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "var(--surface)", borderTop: "1px solid var(--line)", padding: "8px 0 12px", zIndex: 10 },
-  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", color: "var(--sub)", fontSize: 11, fontWeight: 600, padding: 4, cursor: "pointer" },
+  navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", color: "var(--sub)", fontSize: 10, fontWeight: 600, padding: "4px 2px", cursor: "pointer" },
   navBtnActive: { color: "var(--accent)" },
-  navLabel: { fontSize: 11 },
+  navLabel: { fontSize: 10 },
 
   searchWrap: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 12 },
   searchInput: { border: "none", outline: "none", flex: 1, fontSize: 15, background: "none", color: "var(--ink)" },
@@ -1856,6 +2007,14 @@ const S: Record<string, React.CSSProperties> = {
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },
   gebiedKop: { fontSize: 11, fontWeight: 700, color: "var(--sub)", margin: "2px 4px 4px", letterSpacing: "0.02em" },
+  leeg: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "40px 20px", color: "var(--sub)", textAlign: "center", fontSize: 14 },
+  voorraadNieuw: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, marginBottom: 18 },
+  voorraadNieuwRij: { display: "flex", gap: 6, alignItems: "center" },
+  voorraadAddBtn: { flexShrink: 0, width: 42, height: 38, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer" },
+  voorraadRij: { display: "flex", alignItems: "center", gap: 11, padding: "10px 4px", borderBottom: "1px solid var(--line)" },
+  voorraadNaam: { fontSize: 15, fontWeight: 600, overflowWrap: "break-word", wordBreak: "break-word" },
+  voorraadMeta: { display: "flex", gap: 6, marginTop: 5 },
+  voorraadInlineSel: { flex: 1, minWidth: 0, fontSize: 12, padding: "5px 6px", color: "var(--sub)", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 7 },
 
   // Winkels-pagina
   winkelsIntro: { fontSize: 13, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 14px" },

@@ -1,5 +1,5 @@
 import { redis } from "./redis";
-import type { Recept, WeekState, Boodschappen, GebiedVolgorde } from "./types";
+import type { Recept, WeekState, Boodschappen, GebiedVolgorde, Voorraad } from "./types";
 
 // ----------------------------------------------------------------------------
 // Redis key-indeling:
@@ -16,6 +16,7 @@ const RECIPE_INDEX = "recipes:index";
 const WEEK_KEY = "week:current";
 const BOODSCHAPPEN_KEY = "boodschappen:current";
 const GEBIEDVOLGORDE_KEY = "gebiedvolgorde:current";
+const VOORRAAD_KEY = "voorraad:current";
 
 export async function getAllRecepten(): Promise<Recept[]> {
   const ids = await redis.smembers(RECIPE_INDEX);
@@ -67,6 +68,15 @@ export async function getGebiedVolgorde(): Promise<GebiedVolgorde> {
 export async function saveGebiedVolgorde(g: GebiedVolgorde): Promise<GebiedVolgorde> {
   await redis.set(GEBIEDVOLGORDE_KEY, g);
   return g;
+}
+
+export async function getVoorraad(): Promise<Voorraad> {
+  return (await redis.get<Voorraad>(VOORRAAD_KEY)) ?? { items: [] };
+}
+
+export async function saveVoorraad(v: Voorraad): Promise<Voorraad> {
+  await redis.set(VOORRAAD_KEY, v);
+  return v;
 }
 
 export function newId(): string {

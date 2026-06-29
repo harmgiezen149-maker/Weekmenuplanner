@@ -93,3 +93,17 @@ export interface Boodschappen {
 // Per winkel de volgorde van winkelgebieden (looproute). Een array van gebiednamen.
 // Ontbreekt een winkel, dan geldt de standaardvolgorde WINKELGEBIEDEN.
 export type GebiedVolgorde = Record<string, string[]>;
+
+// Voorraad: terugkerende generieke artikelen (wasmiddel, aluminiumfolie, ...).
+// Worden per afdeling gesorteerd getoond; winkel telt alleen mee zodra je het
+// artikel aan de boodschappenlijst toevoegt.
+export interface VoorraadArtikel {
+  id: string;
+  naam: string;
+  winkel: string; // een van WINKELS, of "" (niet toegewezen)
+  gebied: string; // een van WINKELGEBIEDEN, of "" (niet bepaald)
+}
+
+export interface Voorraad {
+  items: VoorraadArtikel[];
+}
