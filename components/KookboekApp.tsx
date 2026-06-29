@@ -198,15 +198,19 @@ export default function App() {
     });
   };
 
-  // Voegt een generiek voorraadartikel toe aan de boodschappenlijst, met winkel
-  // en afdeling. Bestaat een item met dezelfde naam al, dan slaan we het over.
-  const voegVoorraadToeAanLijst = (art: VoorraadArtikel) => {
+  // Voegt een generiek voorraadartikel toe aan de boodschappenlijst, met winkel,
+  // afdeling en het gekozen aantal. Bestaat een item met dezelfde naam al, dan
+  // tellen we het aantal erbij op.
+  const voegVoorraadToeAanLijst = (art: VoorraadArtikel, aantal: number) => {
+    const n = Math.max(1, Math.round(aantal) || 1);
     setBoodschappen((p) => {
-      const bestaat = p.items.some((it) => it.naam.toLowerCase() === art.naam.toLowerCase());
-      if (bestaat) return p;
+      const bestaand = p.items.find((it) => it.naam.toLowerCase() === art.naam.toLowerCase());
+      if (bestaand) {
+        return { items: p.items.map((it) => (it === bestaand ? { ...it, hoev: (Number(it.hoev) || 0) + n } : it)) };
+      }
       return {
         items: [...p.items, {
-          id: uid(), naam: art.naam, hoev: 1, eenheid: "",
+          id: uid(), naam: art.naam, hoev: n, eenheid: "",
           winkel: art.winkel || GEEN_WINKEL, gebied: art.gebied || GEEN_GEBIED,
           gedaan: false, bron: "hand",
         }],
@@ -1607,12 +1611,16 @@ function VoorraadPagina({
 }: {
   voorraad: Voorraad;
   setVoorraad: React.Dispatch<React.SetStateAction<Voorraad>>;
-  onNaarLijst: (art: VoorraadArtikel) => void;
+  onNaarLijst: (art: VoorraadArtikel, aantal: number) => void;
 }) {
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwWinkel, setNieuwWinkel] = useState("");
   const [nieuwGebied, setNieuwGebied] = useState("");
   const [toegevoegd, setToegevoegd] = useState<Record<string, boolean>>({});
+  // Gekozen aantal per artikel (standaard 1).
+  const [aantallen, setAantallen] = useState<Record<string, number>>({});
+  const aantalVan = (id: string) => aantallen[id] ?? 1;
+  const setAantal = (id: string, n: number) => setAantallen((a) => ({ ...a, [id]: Math.max(1, n) }));
 
   const voegToe = () => {
     const naam = nieuwNaam.trim();
@@ -1631,7 +1639,7 @@ function VoorraadPagina({
 
   const vink = (art: VoorraadArtikel) => {
     if (toegevoegd[art.id]) return; // al toegevoegd deze sessie
-    onNaarLijst(art);
+    onNaarLijst(art, aantalVan(art.id));
     setToegevoegd((t) => ({ ...t, [art.id]: true }));
   };
 
@@ -1700,6 +1708,13 @@ function VoorraadPagina({
                     </select>
                   </div>
                 </div>
+                {!toegevoegd[art.id] && (
+                  <div style={S.voorraadStepper}>
+                    <button onClick={() => setAantal(art.id, aantalVan(art.id) - 1)} style={S.voorraadStepBtn} aria-label="Minder"><Minus size={14} /></button>
+                    <span style={S.voorraadAantal}>{aantalVan(art.id)}</span>
+                    <button onClick={() => setAantal(art.id, aantalVan(art.id) + 1)} style={S.voorraadStepBtn} aria-label="Meer"><Plus size={14} /></button>
+                  </div>
+                )}
                 <button onClick={() => verwijder(art.id)} style={S.iconBtnSm} aria-label="Verwijder"><Trash2 size={15} /></button>
               </div>
             ))}
@@ -2025,6 +2040,9 @@ const S: Record<string, React.CSSProperties> = {
   voorraadNaam: { fontSize: 15, fontWeight: 600, overflowWrap: "break-word", wordBreak: "break-word" },
   voorraadMeta: { display: "flex", gap: 6, marginTop: 5 },
   voorraadInlineSel: { flex: 1, minWidth: 0, fontSize: 12, padding: "5px 6px", color: "var(--sub)", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 7 },
+  voorraadStepper: { display: "flex", alignItems: "center", gap: 2, flexShrink: 0, background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 8, padding: 2 },
+  voorraadStepBtn: { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 6, color: "var(--ink)", cursor: "pointer", padding: 0 },
+  voorraadAantal: { minWidth: 22, textAlign: "center", fontSize: 14, fontWeight: 700 },
 
   // Winkels-pagina
   winkelsIntro: { fontSize: 13, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 14px" },
