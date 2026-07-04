@@ -1247,8 +1247,13 @@ function Weekmenu({
                 ) : (
                   <>
                     <button onClick={() => setKook({ recept: r, personen: slot.personen })} style={S.weekSlotOpen}>
-                      <div style={S.weekRecept}>{r.titel}</div>
-                      <div style={S.weekMeta}>{r.keuken} · {r.tijd}m · tik om te koken</div>
+                      {r.afbeelding
+                        ? <img src={r.afbeelding} alt="" style={S.weekThumb} />
+                        : <span style={S.weekThumbLeeg}><ChefHat size={18} /></span>}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={S.weekRecept}>{r.titel}</div>
+                        <div style={S.weekMeta}>{r.keuken} · {r.tijd}m · tik om te koken</div>
+                      </div>
                     </button>
                     <div style={S.weekActies}>
                       <div style={S.persWrap}>
@@ -2520,7 +2525,9 @@ const S: Record<string, React.CSSProperties> = {
   weekSlotVol: { flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, padding: "10px 11px" },
   weekSlotBron: { border: "1.5px solid var(--accent)", background: "var(--accent-soft)" },
   weekSlotKies: { flex: 1, display: "flex", alignItems: "center", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 },
-  weekSlotOpen: { flex: 1, minWidth: 0, display: "block", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 },
+  weekSlotOpen: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 10, background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 },
+  weekThumb: { width: 46, height: 46, borderRadius: 10, objectFit: "cover", flexShrink: 0, border: "1px solid var(--line)" },
+  weekThumbLeeg: { width: 46, height: 46, borderRadius: 10, flexShrink: 0, border: "1px solid var(--line)", background: "var(--bg)", color: "var(--sub)", display: "flex", alignItems: "center", justifyContent: "center" },
   weekRecept: { fontSize: 14, fontWeight: 700, lineHeight: 1.3, overflowWrap: "break-word", wordBreak: "break-word" },
   weekMeta: { fontSize: 11, color: "var(--sub)", marginTop: 2 },
   weekActies: { display: "flex", alignItems: "center", gap: 6, flexShrink: 0 },
