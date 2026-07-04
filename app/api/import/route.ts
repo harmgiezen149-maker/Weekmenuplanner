@@ -83,9 +83,27 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.type === "foto") {
+      // Eén of meerdere foto's (recept kan over meerdere tijdschriftpagina's staan).
+      const fotos: { mediaType: string; data: string }[] =
+        Array.isArray(body.fotos) && body.fotos.length
+          ? body.fotos
+          : [{ mediaType: body.mediaType, data: body.data }];
+      const geldigeTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+      type BeeldType = (typeof geldigeTypes)[number];
+      const naarBeeldType = (t: string): BeeldType =>
+        (geldigeTypes as readonly string[]).includes(t) ? (t as BeeldType) : "image/jpeg";
       content = [
-        { type: "image", source: { type: "base64", media_type: body.mediaType, data: body.data } },
-        { type: "text", text: "Lees dit recept van de foto en geef het als JSON volgens het schema." },
+        ...fotos.map((f): Anthropic.ImageBlockParam => ({
+          type: "image",
+          source: { type: "base64", media_type: naarBeeldType(f.mediaType), data: f.data },
+        })),
+        {
+          type: "text",
+          text:
+            fotos.length > 1
+              ? "Lees het recept van deze foto's. Het recept staat verspreid over meerdere pagina's; combineer alles tot één volledig recept en geef het als JSON volgens het schema."
+              : "Lees dit recept van de foto en geef het als JSON volgens het schema.",
+        } as Anthropic.TextBlockParam,
       ];
     } else if (body.type === "link") {
       const res = await client.messages.create({

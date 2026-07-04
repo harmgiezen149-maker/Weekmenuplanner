@@ -88,6 +88,21 @@ const rondLijstAantal = (hoev: number, eenheid: string): number =>
     ? Math.ceil(hoev)
     : Math.round(hoev * 10) / 10;
 
+// Herkent standaard kruiden/smaakmakers die vrijwel iedereen in huis heeft
+// (zout, peper en varianten). Gebruikt bij de controlevraag na het importeren.
+const isStandaardKruid = (naam: string): boolean => {
+  const n = (naam || "").trim().toLowerCase()
+    .replace(/\(.*?\)/g, "")            // "(naar smaak)" weghalen
+    .replace(/\s+naar smaak$/, "")
+    .replace(/^snufje\s+/, "")
+    .replace(/^vers\s?gemalen\s+/, "")
+    .trim();
+  return [
+    "zout", "peper", "zout en peper", "peper en zout",
+    "zwarte peper", "witte peper", "zeezout", "grof zout", "fijn zout",
+  ].includes(n);
+};
+
 // ---------------------------------------------------------------------------
 // Afbeeldings-helpers. We slaan afbeeldingen op als gecomprimeerde JPEG data-URL,
 // zodat ze binnen de Upstash-limiet (~1MB per waarde) passen.
@@ -104,13 +119,14 @@ function fileNaarDataUrl(file: File): Promise<string> {
 }
 
 // Schaalt + comprimeert een afbeelding (data-URL) naar een JPEG data-URL.
-function comprimeerAfbeelding(bron: string, kwaliteit = 0.82): Promise<string> {
+// maxDim: langste zijde; hoger voor foto's die de AI moet kunnen lezen.
+function comprimeerAfbeelding(bron: string, kwaliteit = 0.82, maxDim = MAX_DIM): Promise<string> {
   return new Promise((res, rej) => {
     const img = new Image();
     img.onload = () => {
       let { width, height } = img;
-      if (width > height && width > MAX_DIM) { height = Math.round(height * MAX_DIM / width); width = MAX_DIM; }
-      else if (height > MAX_DIM) { width = Math.round(width * MAX_DIM / height); height = MAX_DIM; }
+      if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+      else if (height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
       const canvas = document.createElement("canvas");
       canvas.width = width; canvas.height = height;
       const ctx = canvas.getContext("2d");
@@ -841,17 +857,42 @@ function FotoImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<Partial<Recept> | null>(null);
   const [err, setErr] = useState("");
+  const [fotos, setFotos] = useState<string[]>([]); // data-URLs, al gecomprimeerd
+  const [toevoegBezig, setToevoegBezig] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const verwerk = async (file: File) => {
+  // Voeg één of meer foto's toe. We comprimeren direct (max 1400px) zodat het
+  // totaal binnen de uploadlimiet blijft maar kleine tekst leesbaar blijft.
+  const voegFotos = async (files: FileList) => {
+    setErr(""); setToevoegBezig(true);
+    try {
+      const nieuwe: string[] = [];
+      for (const file of Array.from(files)) {
+        const raw = await fileNaarDataUrl(file);
+        nieuwe.push(await comprimeerAfbeelding(raw, 0.8, 1400));
+      }
+      setFotos((p) => [...p, ...nieuwe]);
+    } catch {
+      setErr("Kon een foto niet verwerken.");
+    } finally {
+      setToevoegBezig(false);
+      if (fileRef.current) fileRef.current.value = ""; // zelfde bestand opnieuw kunnen kiezen
+    }
+  };
+
+  const verwijderFoto = (idx: number) => setFotos((p) => p.filter((_, i) => i !== idx));
+
+  const verwerk = async () => {
+    if (!fotos.length) return;
     setErr(""); setBusy(true); setParsed(null);
     try {
-      const raw = await fileNaarDataUrl(file);
-      const b64 = raw.split(",")[1];
-      const res = await api.importRecept({ type: "foto", mediaType: file.type, data: b64 });
+      const res = await api.importRecept({
+        type: "foto",
+        fotos: fotos.map((f) => ({ mediaType: "image/jpeg", data: f.split(",")[1] })),
+      });
       const recept = normaliseer(res.recept || res);
-      // Bewaar de gebruikte foto (gecomprimeerd) als receptafbeelding.
-      recept.afbeelding = await comprimeerAfbeelding(raw).catch(() => "");
+      // De eerste foto wordt de receptafbeelding (kleiner opgeslagen).
+      recept.afbeelding = await comprimeerAfbeelding(fotos[0]).catch(() => "");
       setParsed(recept);
     } catch (e: any) { setErr(e.message || "Kon het recept niet uitlezen."); }
     finally { setBusy(false); }
@@ -862,11 +903,40 @@ function FotoImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   return (
     <div style={S.importBox}>
       <Camera size={36} style={{ color: "var(--accent)" }} />
-      <p style={S.importText}>Maak of kies een foto van een recept uit een magazine of kookboek. De foto wordt bewaard als afbeelding bij het recept.</p>
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }} onChange={(e) => e.target.files?.[0] && verwerk(e.target.files[0])} />
-      <button onClick={() => fileRef.current?.click()} style={S.primaryBtn} disabled={busy}>
-        {busy ? <><Loader2 size={16} className="spin" /> Bezig met uitlezen...</> : <><Camera size={16} /> Foto kiezen</>}
+      <p style={S.importText}>
+        Maak of kies foto's van een recept uit een magazine of kookboek. Staat het recept op meerdere pagina's? Voeg dan alle pagina's toe voordat je het laat uitlezen.
+      </p>
+      <input
+        ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+        onChange={(e) => e.target.files?.length && voegFotos(e.target.files)}
+      />
+
+      {fotos.length > 0 && (
+        <div style={S.fotoStrip}>
+          {fotos.map((f, idx) => (
+            <div key={idx} style={S.fotoStripItem}>
+              <img src={f} alt={`Pagina ${idx + 1}`} style={S.fotoStripImg} />
+              <span style={S.fotoStripNr}>{idx + 1}</span>
+              <button onClick={() => verwijderFoto(idx)} style={S.fotoStripDel} aria-label="Verwijder foto"><X size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <button onClick={() => fileRef.current?.click()} style={fotos.length ? S.secondaryBtn : S.primaryBtn} disabled={busy || toevoegBezig}>
+        {toevoegBezig
+          ? <><Loader2 size={16} className="spin" /> Foto verwerken...</>
+          : <><Camera size={16} /> {fotos.length ? "Nog een foto toevoegen" : "Foto's kiezen"}</>}
       </button>
+
+      {fotos.length > 0 && (
+        <button onClick={verwerk} style={S.primaryBtn} disabled={busy || toevoegBezig}>
+          {busy
+            ? <><Loader2 size={16} className="spin" /> Bezig met uitlezen...</>
+            : <><Check size={16} /> Recept uitlezen ({fotos.length} {fotos.length === 1 ? "foto" : "foto's"})</>}
+        </button>
+      )}
+
       {err && <p style={S.errText}>{err}</p>}
     </div>
   );
@@ -999,9 +1069,33 @@ function BevestigImport({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Kruiden-controle: staan er standaard smaakmakers (zout, peper) in het
+  // geïmporteerde recept, vraag dan of ze mee moeten. Weglaten voorkomt dat ze
+  // straks op de boodschappenlijst belanden.
+  const kruiden = (recept.ingredienten || []).filter((i) => isStandaardKruid(i.naam));
+  const [kruidenBeantwoord, setKruidenBeantwoord] = useState(false);
+
+  const laatKruidenWeg = () => {
+    setRecept((p) => ({ ...p, ingredienten: (p.ingredienten || []).filter((i) => !isStandaardKruid(i.naam)) }));
+    setFormKey((k) => k + 1);
+    setKruidenBeantwoord(true);
+  };
+
   return (
     <div>
       <div style={S.infoBar}><Check size={15} /> Recept uitgelezen. Controleer en pas aan.<button onClick={onCancel} style={S.linkBtn}>Opnieuw</button></div>
+
+      {!kruidenBeantwoord && kruiden.length > 0 && (
+        <div style={S.kruidenVraag}>
+          <p style={S.kruidenVraagTekst}>
+            Dit recept bevat standaard kruiden: <strong>{kruiden.map((k) => k.naam).join(", ")}</strong>. Meenemen in het recept (en dus straks op de boodschappenlijst)?
+          </p>
+          <div style={S.kruidenVraagKnoppen}>
+            <button onClick={laatKruidenWeg} style={S.kruidenWegBtn}>Weglaten</button>
+            <button onClick={() => setKruidenBeantwoord(true)} style={S.kruidenMeeBtn}><Check size={14} /> Meenemen</button>
+          </div>
+        </div>
+      )}
 
       {afbKeuze && afbKeuze.length > 0 && (
         <div style={{ marginBottom: 16 }}>
@@ -2290,6 +2384,16 @@ const S: Record<string, React.CSSProperties> = {
   zoekOptieBron: { fontSize: 11, fontWeight: 700, color: "var(--accent)", marginTop: 5, textTransform: "lowercase" },
   zoekOf: { display: "flex", alignItems: "center", gap: 10, width: "100%", fontSize: 12, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase", letterSpacing: "0.05em" },
   zoekOfLijn: { flex: 1, height: 1, background: "var(--line)" },
+  fotoStrip: { display: "flex", gap: 8, overflowX: "auto", width: "100%", paddingBottom: 4 },
+  fotoStripItem: { position: "relative", flexShrink: 0, width: 84, height: 110, borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)", background: "var(--bg)" },
+  fotoStripImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  fotoStripNr: { position: "absolute", left: 5, top: 5, minWidth: 20, height: 20, borderRadius: 10, background: "rgba(16,17,24,0.65)", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" },
+  fotoStripDel: { position: "absolute", right: 4, top: 4, width: 22, height: 22, borderRadius: 11, border: "none", background: "rgba(16,17,24,0.65)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 },
+  kruidenVraag: { background: "var(--accent-soft)", border: "1px solid var(--accent)", borderRadius: 14, padding: "13px 14px", marginBottom: 16 },
+  kruidenVraagTekst: { fontSize: 13.5, lineHeight: 1.55, margin: "0 0 10px", color: "var(--ink)" },
+  kruidenVraagKnoppen: { display: "flex", gap: 8 },
+  kruidenWegBtn: { flex: 1, padding: "9px", borderRadius: 999, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  kruidenMeeBtn: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "9px", borderRadius: 999, border: "none", background: "var(--accent)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   errText: { color: "var(--red)", fontSize: 13, margin: 0 },
   infoBar: { display: "flex", alignItems: "center", gap: 7, background: "var(--accent-soft)", color: "var(--accent)", padding: "10px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 14, flexWrap: "wrap" },
   linkBtn: { marginLeft: "auto", background: "none", border: "none", color: "var(--accent)", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline" },
