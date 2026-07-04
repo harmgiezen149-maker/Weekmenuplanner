@@ -91,6 +91,13 @@ const rondLijstAantal = (hoev: number, eenheid: string): number =>
     ? Math.ceil(hoev)
     : Math.round(hoev * 10) / 10;
 
+// Weekplanning-slots: sleutel is "dag|maaltijd" zodat een dag naast het
+// avondeten optioneel ook een ontbijt, lunch of toetje kan hebben. Oude data
+// (sleutel = alleen de dag) wordt bij het laden gemigreerd naar avondeten.
+const HOOFD_MAALTIJD = "Avondeten";
+const EXTRA_MAALTIJDEN = ["Ontbijt", "Lunch", "Toetje"] as const;
+const slotKey = (dag: string, maaltijd: string) => `${dag}|${maaltijd}`;
+
 // Herkent standaard kruiden/smaakmakers die vrijwel iedereen in huis heeft
 // (zout, peper en varianten). Gebruikt bij de controlevraag na het importeren.
 const isStandaardKruid = (naam: string): boolean => {
@@ -157,7 +164,10 @@ export default function App() {
   useEffect(() => {
     (async () => {
       const [r, w, b, g, v] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad()]);
-      setRecepten(r); setWeek(w); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
+      // Migratie: oude slot-sleutels (alleen de dagnaam) worden avondeten.
+      const slots: Record<string, { recipeId: string; personen: number }> = {};
+      Object.entries(w.slots || {}).forEach(([k, v2]) => { slots[k.includes("|") ? k : slotKey(k, HOOFD_MAALTIJD)] = v2 as any; });
+      setRecepten(r); setWeek({ ...w, slots }); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
     })();
   }, []);
 
@@ -347,6 +357,13 @@ function PlaatsInWeekDialog({
   // plaatsings-actie wordt vastgehouden tot de wizard klaar is.
   const [wizard, setWizard] = useState<{ doel: (r: Recept) => void } | null>(null);
 
+  // Het maaltijd-slot waarin dit recept hoort: een toetje-recept gaat naar het
+  // toetje-slot van de gekozen dag, een lunch naar het lunch-slot, enzovoort.
+  const doelMaaltijd = (EXTRA_MAALTIJDEN as readonly string[]).includes(recept.maaltijd)
+    ? recept.maaltijd
+    : HOOFD_MAALTIJD;
+  const keyVoor = (dag: string) => slotKey(dag, doelMaaltijd);
+
   // Voert een plaatsing uit, maar eerst door de wizard als winkel/gebied ontbreekt.
   const metControle = (doe: (r: Recept) => void) => {
     if (mistGegevens(recept)) setWizard({ doel: doe });
@@ -355,16 +372,16 @@ function PlaatsInWeekDialog({
 
   const plaatsOpLegeDag = (dag: string) => {
     metControle((r) => {
-      setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: r.id, personen: r.personen } } }));
+      setWeek((p) => ({ ...p, slots: { ...p.slots, [keyVoor(dag)]: { recipeId: r.id, personen: r.personen } } }));
       onClose();
     });
   };
-  const kiesDag = (dag: string) => { if (week.slots[dag]) setConflict(dag); else plaatsOpLegeDag(dag); };
+  const kiesDag = (dag: string) => { if (week.slots[keyVoor(dag)]) setConflict(dag); else plaatsOpLegeDag(dag); };
 
   const vervang = () => {
     if (!conflict) return;
     metControle((r) => {
-      setWeek((p) => ({ ...p, slots: { ...p.slots, [conflict]: { recipeId: r.id, personen: r.personen } } }));
+      setWeek((p) => ({ ...p, slots: { ...p.slots, [keyVoor(conflict)]: { recipeId: r.id, personen: r.personen } } }));
       onClose();
     });
   };
@@ -372,17 +389,17 @@ function PlaatsInWeekDialog({
     if (!conflict) return;
     metControle((r) => {
       setWeek((p) => {
-        const bestaand = p.slots[conflict];
+        const bestaand = p.slots[keyVoor(conflict)];
         const slots = { ...p.slots };
-        slots[naarDag] = bestaand;
-        slots[conflict] = { recipeId: r.id, personen: r.personen };
+        slots[keyVoor(naarDag)] = bestaand;
+        slots[keyVoor(conflict)] = { recipeId: r.id, personen: r.personen };
         return { ...p, slots };
       });
       onClose();
     });
   };
 
-  const legeDagen = dagen.filter((d) => !week.slots[d]);
+  const legeDagen = dagen.filter((d) => !week.slots[keyVoor(d)]);
 
   if (wizard) {
     return (
@@ -402,14 +419,14 @@ function PlaatsInWeekDialog({
           <>
             <div style={S.modalHead}>
               <div>
-                <span style={S.label}>Plaats in weekmenu</span>
+                <span style={S.label}>Plaats in weekmenu · als {doelMaaltijd.toLowerCase()}</span>
                 <h2 style={S.modalTitle}>{recept.titel}</h2>
               </div>
               <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
             </div>
             <p style={S.dialogHint}>Kies een dag. Staat er al een gerecht, dan kun je vervangen of het bestaande verplaatsen.</p>
             {dagen.map((dag) => {
-              const slot = week.slots[dag];
+              const slot = week.slots[keyVoor(dag)];
               const r = slot && recepten.find((x) => x.id === slot.recipeId);
               return (
                 <button key={dag} onClick={() => kiesDag(dag)} style={S.weekPickRow}>
@@ -424,7 +441,7 @@ function PlaatsInWeekDialog({
             <div style={S.modalHead}>
               <div>
                 <span style={S.label}>{conflict} is al bezet</span>
-                <h2 style={S.modalTitle}>{recepten.find((x) => x.id === week.slots[conflict].recipeId)?.titel}</h2>
+                <h2 style={S.modalTitle}>{recepten.find((x) => x.id === week.slots[keyVoor(conflict)]?.recipeId)?.titel}</h2>
               </div>
               <button onClick={() => setConflict(null)} style={S.iconBtn} aria-label="Terug"><X size={20} /></button>
             </div>
@@ -1148,31 +1165,34 @@ function Weekmenu({
   const [verplaatsVan, setVerplaatsVan] = useState<string | null>(null);
   const [kook, setKook] = useState<{ recept: Recept; personen: number } | null>(null);
   // Wizard die ontbrekende winkel/gebied opvraagt voordat een gerecht geplaatst wordt.
-  const [wizard, setWizard] = useState<{ recept: Recept; dag: string } | null>(null);
+  const [wizard, setWizard] = useState<{ recept: Recept; slot: string } | null>(null);
   // Evaluatie bij leegmaken: per uniek gerecht score vragen en gegeten ophogen.
   const [evaluatie, setEvaluatie] = useState<{ recept: Recept; keren: number }[] | null>(null);
+  // Voor welke dag het "maaltijd toevoegen"-menu open staat.
+  const [plusDag, setPlusDag] = useState<string | null>(null);
 
-  const plaatsOpDag = (dag: string, recept: Recept) => {
-    setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: recept.id, personen: recept.personen || 4 } } }));
+  const plaatsOpSlot = (key: string, recept: Recept) => {
+    setWeek((p) => ({ ...p, slots: { ...p.slots, [key]: { recipeId: recept.id, personen: recept.personen || 4 } } }));
   };
 
   const setStartDag = (d: number) => setWeek((p) => ({ ...p, startDag: ((d % 7) + 7) % 7 }));
-  const setDag = (dag: string, recipeId: string) => {
+  const setSlot = (key: string, recipeId: string) => {
     const r = recepten.find((x) => x.id === recipeId);
     if (!r) return;
     setKiesDag(null);
     // Controleer of alle ingrediënten een winkel én gebied hebben.
     if (mistGegevens(r)) {
-      setWizard({ recept: r, dag });
+      setWizard({ recept: r, slot: key });
     } else {
-      plaatsOpDag(dag, r);
+      plaatsOpSlot(key, r);
     }
   };
-  const wisDag = (dag: string) => setWeek((p) => { const slots = { ...p.slots }; delete slots[dag]; return { ...p, slots }; });
-  const setPers = (dag: string, d: number) => setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { ...p.slots[dag], personen: Math.max(1, p.slots[dag].personen + d) } } }));
+  const wisSlot = (key: string) => setWeek((p) => { const slots = { ...p.slots }; delete slots[key]; return { ...p, slots }; });
+  const setPers = (key: string, d: number) => setWeek((p) => ({ ...p, slots: { ...p.slots, [key]: { ...p.slots[key], personen: Math.max(1, p.slots[key].personen + d) } } }));
 
-  // Leegmaken start de evaluatie: per uniek gerecht (met het aantal dagen dat
-  // het gepland stond) score vragen en gegeten ophogen. Daarna pas echt legen.
+  // Leegmaken start de evaluatie: per uniek gerecht (met het aantal keren dat
+  // het gepland stond, alle maaltijden meegeteld) score vragen en gegeten
+  // ophogen. Daarna pas echt legen.
   const startLeegmaken = () => {
     const telling = new Map<string, number>();
     Object.values(week.slots).forEach((slot) => {
@@ -1190,20 +1210,23 @@ function Weekmenu({
 
   const leegmaken = () => { setWeek((p) => ({ ...p, slots: {} })); setEvaluatie(null); };
 
+  // Verplaatsen wisselt de avondeten-slots van twee dagen om.
   const verplaatsNaar = (doelDag: string) => {
     if (!verplaatsVan || verplaatsVan === doelDag) { setVerplaatsVan(null); return; }
     setWeek((p) => {
       const slots = { ...p.slots };
-      const bron = slots[verplaatsVan];
-      const doel = slots[doelDag];
-      slots[doelDag] = bron;
-      if (doel) slots[verplaatsVan] = doel; else delete slots[verplaatsVan];
+      const bronKey = slotKey(verplaatsVan, HOOFD_MAALTIJD);
+      const doelKey = slotKey(doelDag, HOOFD_MAALTIJD);
+      const bron = slots[bronKey];
+      const doel = slots[doelKey];
+      slots[doelKey] = bron;
+      if (doel) slots[bronKey] = doel; else delete slots[bronKey];
       return { ...p, slots };
     });
     setVerplaatsVan(null);
   };
 
-  const aantalGepland = dagen.filter((d) => week.slots[d]).length;
+  const aantalGepland = Object.keys(week.slots).length;
 
   return (
     <div>
@@ -1223,54 +1246,106 @@ function Weekmenu({
 
       {verplaatsVan && (
         <div style={S.infoBar}>
-          <ArrowRightLeft size={15} /> Kies de dag waar "{recepten.find((x) => x.id === week.slots[verplaatsVan]?.recipeId)?.titel}" naartoe moet.
+          <ArrowRightLeft size={15} /> Kies de dag waar "{recepten.find((x) => x.id === week.slots[slotKey(verplaatsVan, HOOFD_MAALTIJD)]?.recipeId)?.titel}" naartoe moet.
           <button onClick={() => setVerplaatsVan(null)} style={S.linkBtn}>Annuleer</button>
         </div>
       )}
 
       {dagen.map((dag) => {
-        const slot = week.slots[dag];
+        const hoofdKey = slotKey(dag, HOOFD_MAALTIJD);
+        const slot = week.slots[hoofdKey];
         const r = slot && recepten.find((x) => x.id === slot.recipeId);
         const isBron = verplaatsVan === dag;
+        const extras = EXTRA_MAALTIJDEN
+          .map((m) => ({ maaltijd: m, key: slotKey(dag, m), slot: week.slots[slotKey(dag, m)] }))
+          .filter((e) => e.slot);
+        const nogToeTeVoegen = EXTRA_MAALTIJDEN.filter((m) => !week.slots[slotKey(dag, m)]);
         return (
-          <div key={dag} style={S.weekRow}>
-            <span style={S.weekDag}>{dag}</span>
-            {r ? (
-              <div style={{ ...S.weekSlotVol, ...(isBron ? S.weekSlotBron : {}) }}>
-                {verplaatsVan && !isBron ? (
-                  <button onClick={() => verplaatsNaar(dag)} style={S.weekSlotKies}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={S.weekRecept}>{r.titel}</div>
-                      <div style={S.weekMeta}>Tik om hier te plaatsen (wisselt om)</div>
-                    </div>
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={() => setKook({ recept: r, personen: slot.personen })} style={S.weekSlotOpen}>
-                      {r.afbeelding
-                        ? <img src={r.afbeelding} alt="" style={S.weekThumb} />
-                        : <span style={S.weekThumbLeeg}><ChefHat size={18} /></span>}
+          <div key={dag} style={S.weekBlok}>
+            <div style={S.weekRow}>
+              <span style={S.weekDag}>{dag}</span>
+              {r ? (
+                <div style={{ ...S.weekSlotVol, ...(isBron ? S.weekSlotBron : {}) }}>
+                  {verplaatsVan && !isBron ? (
+                    <button onClick={() => verplaatsNaar(dag)} style={S.weekSlotKies}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={S.weekRecept}>{r.titel}</div>
-                        <div style={S.weekMeta}>{r.keuken} · {r.tijd}m · tik om te koken</div>
+                        <div style={S.weekMeta}>Tik om hier te plaatsen (wisselt om)</div>
                       </div>
                     </button>
-                    <div style={S.weekActies}>
-                      <div style={S.persWrap}>
-                        <button onClick={() => setPers(dag, -1)} style={S.persBtn} aria-label="Minder"><Minus size={13} /></button>
-                        <span style={S.persNum}>{slot.personen}p</span>
-                        <button onClick={() => setPers(dag, 1)} style={S.persBtn} aria-label="Meer"><Plus size={13} /></button>
+                  ) : (
+                    <>
+                      <button onClick={() => setKook({ recept: r, personen: slot.personen })} style={S.weekSlotOpen}>
+                        {r.afbeelding
+                          ? <img src={r.afbeelding} alt="" style={S.weekThumb} />
+                          : <span style={S.weekThumbLeeg}><ChefHat size={18} /></span>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={S.weekRecept}>{r.titel}</div>
+                          <div style={S.weekMeta}>{r.keuken} · {r.tijd}m · tik om te koken</div>
+                        </div>
+                      </button>
+                      <div style={S.weekActies}>
+                        <div style={S.persWrap}>
+                          <button onClick={() => setPers(hoofdKey, -1)} style={S.persBtn} aria-label="Minder"><Minus size={13} /></button>
+                          <span style={S.persNum}>{slot.personen}p</span>
+                          <button onClick={() => setPers(hoofdKey, 1)} style={S.persBtn} aria-label="Meer"><Plus size={13} /></button>
+                        </div>
+                        <button onClick={() => setVerplaatsVan(isBron ? null : dag)} style={S.iconBtnSm} aria-label="Verplaats"><ArrowRightLeft size={15} /></button>
+                        <button onClick={() => wisSlot(hoofdKey)} style={S.iconBtnSm} aria-label="Wis"><X size={15} /></button>
                       </div>
-                      <button onClick={() => setVerplaatsVan(isBron ? null : dag)} style={S.iconBtnSm} aria-label="Verplaats"><ArrowRightLeft size={15} /></button>
-                      <button onClick={() => wisDag(dag)} style={S.iconBtnSm} aria-label="Wis"><X size={15} /></button>
+                    </>
+                  )}
+                </div>
+              ) : verplaatsVan ? (
+                <button onClick={() => verplaatsNaar(dag)} style={S.weekSlotDoel}><ArrowDown size={15} /> Hierheen verplaatsen</button>
+              ) : (
+                <button onClick={() => setKiesDag(hoofdKey)} style={S.weekSlotLeeg}><Plus size={15} /> Kies gerecht</button>
+              )}
+            </div>
+
+            {/* Extra maaltijden (ontbijt / lunch / toetje) van deze dag */}
+            {extras.map(({ maaltijd, key, slot: es }) => {
+              const er = recepten.find((x) => x.id === es!.recipeId);
+              if (!er) return null;
+              return (
+                <div key={key} style={S.weekExtraRow}>
+                  <span style={S.weekMaaltijdTag}>{maaltijd}</span>
+                  <button onClick={() => setKook({ recept: er, personen: es!.personen })} style={S.weekSlotOpen}>
+                    {er.afbeelding
+                      ? <img src={er.afbeelding} alt="" style={S.weekThumbKlein} />
+                      : <span style={{ ...S.weekThumbLeeg, ...S.weekThumbKleinMaat }}><ChefHat size={14} /></span>}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={S.weekExtraTitel}>{er.titel}</div>
                     </div>
-                  </>
-                )}
-              </div>
-            ) : verplaatsVan ? (
-              <button onClick={() => verplaatsNaar(dag)} style={S.weekSlotDoel}><ArrowDown size={15} /> Hierheen verplaatsen</button>
-            ) : (
-              <button onClick={() => setKiesDag(dag)} style={S.weekSlotLeeg}><Plus size={15} /> Kies gerecht</button>
+                  </button>
+                  <div style={S.weekActies}>
+                    <div style={S.persWrap}>
+                      <button onClick={() => setPers(key, -1)} style={S.persBtn} aria-label="Minder"><Minus size={13} /></button>
+                      <span style={S.persNum}>{es!.personen}p</span>
+                      <button onClick={() => setPers(key, 1)} style={S.persBtn} aria-label="Meer"><Plus size={13} /></button>
+                    </div>
+                    <button onClick={() => wisSlot(key)} style={S.iconBtnSm} aria-label="Wis"><X size={15} /></button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Maaltijd toevoegen aan deze dag */}
+            {!verplaatsVan && nogToeTeVoegen.length > 0 && (
+              plusDag === dag ? (
+                <div style={S.weekPlusChips}>
+                  {nogToeTeVoegen.map((m) => (
+                    <button key={m} onClick={() => { setPlusDag(null); setKiesDag(slotKey(dag, m)); }} style={S.weekPlusChip}>
+                      <Plus size={12} /> {m}
+                    </button>
+                  ))}
+                  <button onClick={() => setPlusDag(null)} style={S.weekPlusSluit} aria-label="Sluiten"><X size={13} /></button>
+                </div>
+              ) : (
+                <button onClick={() => setPlusDag(dag)} style={S.weekPlusOpen}>
+                  <Plus size={12} /> ontbijt, lunch of toetje
+                </button>
+              )
             )}
           </div>
         );
@@ -1278,8 +1353,8 @@ function Weekmenu({
 
       {kiesDag && (
         <KiesGerechtModal
-          dag={kiesDag} recepten={recepten}
-          onKies={(id) => setDag(kiesDag, id)}
+          dag={kiesDag.replace("|", " · ")} recepten={recepten}
+          onKies={(id) => setSlot(kiesDag, id)}
           onClose={() => setKiesDag(null)}
         />
       )}
@@ -1301,7 +1376,7 @@ function Weekmenu({
         <IngredientenWizard
           recept={wizard.recept}
           onUpdateRecept={onUpdateRecept}
-          onKlaar={(bijgewerkt) => { plaatsOpDag(wizard.dag, bijgewerkt); setWizard(null); }}
+          onKlaar={(bijgewerkt) => { plaatsOpSlot(wizard.slot, bijgewerkt); setWizard(null); }}
           onAnnuleer={() => setWizard(null)}
         />
       )}
@@ -1673,8 +1748,8 @@ function BoodschappenPagina({
 
   const genereerUitWeek = (): BoodschapItem[] => {
     const acc: Record<string, { naam: string; eenheid: string; hoev: number; winkel: string; gebied: string }> = {};
-    dagen.forEach((dag) => {
-      const slot = week.slots[dag];
+    // Alle geplande maaltijden meenemen: avondeten én eventuele ontbijt/lunch/toetjes.
+    Object.values(week.slots).forEach((slot) => {
       if (!slot) return;
       const r = recepten.find((x) => x.id === slot.recipeId);
       if (!r) return;
@@ -2518,8 +2593,18 @@ const S: Record<string, React.CSSProperties> = {
   dayStepper: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, padding: "4px 6px" },
   dayStepperLabel: { fontSize: 14, fontWeight: 700, minWidth: 78, textAlign: "center" },
   leegBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--red)", padding: "8px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
-  weekRow: { display: "flex", alignItems: "stretch", gap: 10, marginBottom: 9 },
+  weekRow: { display: "flex", alignItems: "stretch", gap: 10, marginBottom: 0 },
   weekDag: { width: 64, fontSize: 13, fontWeight: 700, color: "var(--sub)", flexShrink: 0, paddingTop: 12 },
+  weekBlok: { marginBottom: 12 },
+  weekExtraRow: { display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginLeft: 74, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "7px 9px" },
+  weekMaaltijdTag: { fontSize: 10, fontWeight: 800, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 999, flexShrink: 0, textTransform: "uppercase", letterSpacing: "0.03em" },
+  weekThumbKlein: { width: 32, height: 32, borderRadius: 8, objectFit: "cover", flexShrink: 0, border: "1px solid var(--line)" },
+  weekThumbKleinMaat: { width: 32, height: 32, borderRadius: 8 },
+  weekExtraTitel: { fontSize: 13, fontWeight: 700, lineHeight: 1.3, overflowWrap: "break-word", wordBreak: "break-word" },
+  weekPlusOpen: { display: "inline-flex", alignItems: "center", gap: 4, marginTop: 5, marginLeft: 74, background: "none", border: "none", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "2px 4px" },
+  weekPlusChips: { display: "flex", alignItems: "center", gap: 6, marginTop: 6, marginLeft: 74, flexWrap: "wrap" },
+  weekPlusChip: { display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 999, border: "1px solid var(--accent)", background: "var(--accent-soft)", color: "var(--accent)", fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  weekPlusSluit: { width: 26, height: 26, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--sub)", cursor: "pointer", padding: 0 },
   weekSlotLeeg: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", border: "1.5px dashed var(--line)", borderRadius: 11, background: "none", color: "var(--sub)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   weekSlotDoel: { flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "12px", border: "1.5px dashed var(--accent)", borderRadius: 11, background: "var(--accent-soft)", color: "var(--accent)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   weekSlotVol: { flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 11, padding: "10px 11px" },
