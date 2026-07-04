@@ -720,13 +720,13 @@ function BewerkRecept({
 // TOEVOEGEN
 // ============================================================================
 function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
-  const [modus, setModus] = useState("hand");
+  const [modus, setModus] = useState("link");
   return (
     <div>
       <div style={S.segWrap}>
-        <SegBtn active={modus === "hand"} onClick={() => setModus("hand")} icon={PencilLine} label="Handmatig" />
-        <SegBtn active={modus === "foto"} onClick={() => setModus("foto")} icon={Camera} label="Foto" />
         <SegBtn active={modus === "link"} onClick={() => setModus("link")} icon={Link2} label="Link" />
+        <SegBtn active={modus === "foto"} onClick={() => setModus("foto")} icon={Camera} label="Foto" />
+        <SegBtn active={modus === "hand"} onClick={() => setModus("hand")} icon={PencilLine} label="Handmatig" />
       </div>
       {modus === "hand" && <HandmatigForm onAdd={onAdd} />}
       {modus === "foto" && <FotoImport onAdd={onAdd} />}
@@ -1146,10 +1146,11 @@ function Weekmenu({
 }) {
   const [kiesDag, setKiesDag] = useState<string | null>(null);
   const [verplaatsVan, setVerplaatsVan] = useState<string | null>(null);
-  const [bevestigLeeg, setBevestigLeeg] = useState(false);
   const [kook, setKook] = useState<{ recept: Recept; personen: number } | null>(null);
   // Wizard die ontbrekende winkel/gebied opvraagt voordat een gerecht geplaatst wordt.
   const [wizard, setWizard] = useState<{ recept: Recept; dag: string } | null>(null);
+  // Evaluatie bij leegmaken: per uniek gerecht score vragen en gegeten ophogen.
+  const [evaluatie, setEvaluatie] = useState<{ recept: Recept; keren: number }[] | null>(null);
 
   const plaatsOpDag = (dag: string, recept: Recept) => {
     setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { recipeId: recept.id, personen: recept.personen || 4 } } }));
@@ -1169,7 +1170,25 @@ function Weekmenu({
   };
   const wisDag = (dag: string) => setWeek((p) => { const slots = { ...p.slots }; delete slots[dag]; return { ...p, slots }; });
   const setPers = (dag: string, d: number) => setWeek((p) => ({ ...p, slots: { ...p.slots, [dag]: { ...p.slots[dag], personen: Math.max(1, p.slots[dag].personen + d) } } }));
-  const leegmaken = () => { setWeek((p) => ({ ...p, slots: {} })); setBevestigLeeg(false); };
+
+  // Leegmaken start de evaluatie: per uniek gerecht (met het aantal dagen dat
+  // het gepland stond) score vragen en gegeten ophogen. Daarna pas echt legen.
+  const startLeegmaken = () => {
+    const telling = new Map<string, number>();
+    Object.values(week.slots).forEach((slot) => {
+      if (slot?.recipeId) telling.set(slot.recipeId, (telling.get(slot.recipeId) || 0) + 1);
+    });
+    const lijst = [...telling.entries()]
+      .map(([id, keren]) => ({ recept: recepten.find((r) => r.id === id), keren }))
+      .filter((x): x is { recept: Recept; keren: number } => !!x.recept);
+    if (lijst.length === 0) {
+      setWeek((p) => ({ ...p, slots: {} }));
+      return;
+    }
+    setEvaluatie(lijst);
+  };
+
+  const leegmaken = () => { setWeek((p) => ({ ...p, slots: {} })); setEvaluatie(null); };
 
   const verplaatsNaar = (doelDag: string) => {
     if (!verplaatsVan || verplaatsVan === doelDag) { setVerplaatsVan(null); return; }
@@ -1198,7 +1217,7 @@ function Weekmenu({
           </div>
         </div>
         {aantalGepland > 0 && (
-          <button onClick={() => setBevestigLeeg(true)} style={S.leegBtn}><Trash2 size={14} /> Leegmaken</button>
+          <button onClick={startLeegmaken} style={S.leegBtn}><Trash2 size={14} /> Leegmaken</button>
         )}
       </div>
 
@@ -1260,12 +1279,12 @@ function Weekmenu({
         />
       )}
 
-      {bevestigLeeg && (
-        <Bevestig
-          titel="Weekmenu leegmaken?"
-          tekst="Alle geplande gerechten worden verwijderd. Dit kan niet ongedaan worden gemaakt."
-          bevestigLabel="Ja, leegmaken"
-          onBevestig={leegmaken} onAnnuleer={() => setBevestigLeeg(false)}
+      {evaluatie && (
+        <EvaluatieWizard
+          gerechten={evaluatie}
+          onUpdateRecept={onUpdateRecept}
+          onKlaar={leegmaken}
+          onAnnuleer={() => setEvaluatie(null)}
         />
       )}
 
@@ -1429,6 +1448,92 @@ function IngredientenWizard({
         >
           {idx + 1 < (teDoen?.length ?? 0) ? <>Volgende <ChevronRight size={16} /></> : <><Check size={16} /> Klaar en plaatsen</>}
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// EVALUATIEWIZARD — bij het leegmaken van het weekmenu: per gerecht een score
+// vragen (oude score zichtbaar) en het aantal keer gegeten ophogen.
+// ============================================================================
+function EvaluatieWizard({
+  gerechten, onUpdateRecept, onKlaar, onAnnuleer,
+}: {
+  gerechten: { recept: Recept; keren: number }[];
+  onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
+  onKlaar: () => void;
+  onAnnuleer: () => void;
+}) {
+  const [idx, setIdx] = useState(0);
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [opslaan, setOpslaan] = useState(false);
+
+  const huidig = gerechten[idx];
+  const gekozenScore = huidig ? (scores[huidig.recept.id] ?? huidig.recept.score ?? 0) : 0;
+
+  const volgende = async () => {
+    if (idx + 1 < gerechten.length) {
+      setIdx(idx + 1);
+      return;
+    }
+    // Laatste gerecht beoordeeld: alle updates opslaan (score + gegeten), dan legen.
+    setOpslaan(true);
+    try {
+      for (const g of gerechten) {
+        const nieuweScore = scores[g.recept.id] ?? g.recept.score ?? 0;
+        await onUpdateRecept(g.recept.id, {
+          score: nieuweScore,
+          gegeten: (g.recept.gegeten ?? 0) + g.keren,
+        });
+      }
+      onKlaar();
+    } finally {
+      setOpslaan(false);
+    }
+  };
+
+  if (!huidig) { onKlaar(); return null; }
+  const r = huidig.recept;
+
+  return (
+    <div style={S.modalBg}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Gerecht {idx + 1} van {gerechten.length} · beoordelen</span>
+            <h2 style={S.modalTitle}>{r.titel}</h2>
+          </div>
+          <button onClick={onAnnuleer} style={S.iconBtn} aria-label="Annuleren"><X size={20} /></button>
+        </div>
+
+        {r.afbeelding && (
+          <div style={S.detailAfbWrap}><img src={r.afbeelding} alt={r.titel} style={S.detailAfb} /></div>
+        )}
+
+        <div style={S.evalScoreBlok}>
+          <div style={S.evalHuidig}>
+            Huidige score: {r.score > 0 ? `${r.score} van 5` : "nog geen"}
+          </div>
+          <span style={S.label}>Jouw score na deze week</span>
+          <div style={{ marginTop: 6 }}>
+            <Sterren n={gekozenScore} onSet={(s) => setScores((p) => ({ ...p, [r.id]: s }))} />
+          </div>
+        </div>
+
+        <div style={S.evalGegeten}>
+          <Utensils size={15} style={{ color: "var(--green)", flexShrink: 0 }} />
+          <span>Keer gegeten gaat van <strong>{r.gegeten ?? 0}</strong> naar <strong>{(r.gegeten ?? 0) + huidig.keren}</strong>{huidig.keren > 1 ? ` (${huidig.keren} dagen gepland)` : ""}</span>
+        </div>
+
+        <button onClick={volgende} style={S.primaryBtn} disabled={opslaan}>
+          {opslaan
+            ? <><Loader2 size={16} className="spin" /> Opslaan...</>
+            : idx + 1 < gerechten.length
+              ? <>Volgende gerecht <ChevronRight size={16} /></>
+              : <><Check size={16} /> Afronden en weekmenu legen</>}
+        </button>
+        <button onClick={onAnnuleer} style={S.opschoonStop} disabled={opslaan}>Annuleren (weekmenu blijft staan)</button>
       </div>
     </div>
   );
@@ -2335,6 +2440,9 @@ const S: Record<string, React.CSSProperties> = {
   sorteerBtn: { whiteSpace: "nowrap", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   sorteerBtnOn: { background: "var(--ink)", color: "#fff", borderColor: "var(--ink)" },
   gegetenRij: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, margin: "12px 0", padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)" },
+  evalScoreBlok: { padding: "14px", background: "var(--surface)", borderRadius: 14, border: "1px solid var(--line)", margin: "4px 0 10px" },
+  evalHuidig: { fontSize: 13, color: "var(--sub)", marginBottom: 10 },
+  evalGegeten: { display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, color: "#3a3f52", lineHeight: 1.5, padding: "11px 13px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)", marginBottom: 8 },
   gegetenNum: { fontSize: 18, fontWeight: 800, display: "block", marginTop: 2 },
   gegetenKnoppen: { display: "flex", alignItems: "center", gap: 8, flexShrink: 0 },
   gegetenPlus: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--green)", color: "#fff", border: "none", padding: "10px 14px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer" },
