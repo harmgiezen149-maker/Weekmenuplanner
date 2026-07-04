@@ -570,7 +570,12 @@ function ReceptenLijst({
   const [naarLijst, setNaarLijst] = useState<Recept | null>(null);
 
   const gefilterd = recepten.filter((r) => {
-    if (zoek && !r.titel.toLowerCase().includes(zoek.toLowerCase())) return false;
+    if (zoek) {
+      const z = zoek.toLowerCase();
+      const inTitel = r.titel.toLowerCase().includes(z);
+      const inIngredient = r.ingredienten.some((i) => (i.naam || "").toLowerCase().includes(z));
+      if (!inTitel && !inIngredient) return false;
+    }
     if (fKeuken && r.keuken !== fKeuken) return false;
     if (fHoofd && r.hoofd !== fHoofd) return false;
     if (fMaaltijd && r.maaltijd !== fMaaltijd) return false;
@@ -591,7 +596,7 @@ function ReceptenLijst({
     <div>
       <div style={S.searchWrap}>
         <Search size={18} style={{ color: "var(--sub)" }} />
-        <input style={S.searchInput} placeholder="Zoek recept..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
+        <input style={S.searchInput} placeholder="Zoek op naam of ingrediënt..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
       </div>
 
       <div style={S.filterRow}><Chips opts={MAALTIJDEN} val={fMaaltijd} set={setFMaaltijd} /></div>
@@ -1769,9 +1774,11 @@ function KiesGerechtModal({
   dag: string; recepten: Recept[]; onKies: (id: string) => void; onClose: () => void;
 }) {
   const [zoek, setZoek] = useState("");
-  const gefilterd = recepten.filter((r) =>
-    !zoek || r.titel.toLowerCase().includes(zoek.toLowerCase())
-  );
+  const gefilterd = recepten.filter((r) => {
+    if (!zoek) return true;
+    const z = zoek.toLowerCase();
+    return r.titel.toLowerCase().includes(z) || r.ingredienten.some((i) => (i.naam || "").toLowerCase().includes(z));
+  });
   return (
     <div style={S.modalBg} onClick={onClose}>
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
@@ -1785,7 +1792,7 @@ function KiesGerechtModal({
           <>
             <div style={{ ...S.searchWrap, marginTop: 4 }}>
               <Search size={18} style={{ color: "var(--sub)" }} />
-              <input style={S.searchInput} placeholder="Zoek op naam..." value={zoek} onChange={(e) => setZoek(e.target.value)} autoFocus />
+              <input style={S.searchInput} placeholder="Zoek op naam of ingrediënt..." value={zoek} onChange={(e) => setZoek(e.target.value)} autoFocus />
             </div>
             {gefilterd.length === 0 && <p style={S.empty}>Geen recept gevonden voor "{zoek}".</p>}
             {gefilterd.map((r) => (
