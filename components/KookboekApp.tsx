@@ -5,7 +5,7 @@ import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
-  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles,
+  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -352,13 +352,20 @@ export default function App() {
   };
   const maxW = inhoudMaxW[tab];
 
+  const [infoOpen, setInfoOpen] = useState(false);
+
   return (
     <div style={S.app}>
       <header style={S.header}>
         <ChefHat size={22} style={{ color: "var(--accent)" }} />
         <h1 style={S.appTitle}>Kookboek</h1>
-        <span style={S.headerSub}>{recepten.length} recepten</span>
+        <div style={S.headerRechts}>
+          <button onClick={() => setInfoOpen(true)} style={S.infoKnop} aria-label="Over deze app"><Info size={15} /></button>
+          <span style={S.headerSub}>{recepten.length} recepten</span>
+        </div>
       </header>
+
+      {infoOpen && <InfoModal onClose={() => setInfoOpen(false)} />}
 
       <main style={S.main}>
         {laden ? (
@@ -2502,6 +2509,107 @@ function AfbeeldingZoom({ src, onClose }: { src: string; onClose: () => void }) 
   );
 }
 
+// ============================================================================
+// INFO — uitgebreide beschrijving van de app, bereikbaar via de header
+// ============================================================================
+function InfoModal({ onClose }: { onClose: () => void }) {
+  const Sectie = ({ titel, children }: { titel: string; children: React.ReactNode }) => (
+    <div style={{ marginBottom: 18 }}>
+      <h3 style={S.infoSectieKop}>{titel}</h3>
+      <div style={S.infoTekst}>{children}</div>
+    </div>
+  );
+
+  return (
+    <div style={S.modalBg} onClick={onClose}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Over deze app</span>
+            <h2 style={S.modalTitle}>Kookboek</h2>
+          </div>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+        </div>
+
+        <p style={S.infoIntro}>
+          Kookboek is jullie eigen receptendatabase, weekplanner en slimme boodschappenlijst in één.
+          Alles staat centraal opgeslagen in de cloud: iedereen die de app gebruikt kijkt naar dezelfde
+          recepten, hetzelfde weekmenu en dezelfde lijst — op telefoon, tablet en computer.
+        </p>
+
+        <Sectie titel="Recepten">
+          Alle recepten op één plek, met foto, keuken, hoofdingrediënt, maaltijdtype (ontbijt, lunch,
+          avondeten of toetje), moeilijkheid, bereidingstijd, jouw score en hoe vaak het gerecht al
+          gegeten is. Filter op elk kenmerk of op minimale score, sorteer op naam, score of vaakst
+          gegeten, en zoek op titel. Tik een kaart aan voor het volledige recept; daar pas je de score
+          aan, hoog je de gegeten-teller op, bewerk je het recept (potlood) of zet je het direct in het
+          weekmenu of op de lijst. Tik op een foto om schermvullend in te zoomen.
+        </Sectie>
+
+        <Sectie titel="Toevoegen">
+          Drie manieren om een recept toe te voegen. <strong>Link</strong>: zoek een gerecht op naam
+          (de app zoekt receptsites op internet en toont keuzeopties) of plak zelf een link — het
+          recept wordt automatisch uitgelezen, inclusief een foto van de site. <strong>Foto</strong>:
+          fotografeer een recept uit een tijdschrift of kookboek; staat het op meerdere pagina's, voeg
+          dan alle pagina's toe voordat je laat uitlezen. <strong>Handmatig</strong>: alles zelf
+          invoeren, inclusief winkel en afdeling per ingrediënt. Na elke import volgt een
+          controlescherm; bevat het recept standaard kruiden zoals zout en peper, dan vraagt de app of
+          je die wilt meenemen of weglaten.
+        </Sectie>
+
+        <Sectie titel="Weekmenu">
+          Plan per dag het avondeten, en voeg optioneel een ontbijt, lunch of toetje toe via het
+          plusje onder de dag. De week begint op de dag die jij kiest (pijltjes bovenaan). Per
+          maaltijd stel je het aantal personen in; ingrediënten schalen overal automatisch mee. Tik op
+          een gepland gerecht voor de <strong>kookweergave</strong>: geschaalde, afvinkbare
+          ingrediënten en de bereiding in een groter lettertype. Bij het plaatsen controleert de app
+          of alle ingrediënten een winkel en afdeling hebben; ontbreekt iets, dan vult een korte
+          wizard dat samen met je aan (de afdeling wordt door AI voorgesteld). Druk je op
+          <strong> Leegmaken</strong>, dan volgt eerst een korte evaluatie: per gerecht geef je een
+          score en wordt de gegeten-teller opgehoogd — daarna is de week klaar voor een nieuwe planning.
+        </Sectie>
+
+        <Sectie titel="Lijst">
+          Genereer de boodschappenlijst uit het weekmenu met <strong>Weekmenu verversen</strong>:
+          alle geplande maaltijden worden meegenomen, hoeveelheden opgeteld en stuks-artikelen naar
+          boven afgerond (2,5 courgette wordt 3). Handmatig toegevoegde items blijven bij het
+          verversen gewoon staan. De lijst is gegroepeerd per winkel en daarbinnen per afdeling, in de
+          looproute die je bij Winkels hebt ingesteld. <strong>Lijst opschonen</strong> laat AI
+          dubbele artikelen samenvoegen en receptmaten (theelepels, grammen) omzetten naar volle
+          verpakkingen — twijfelgevallen worden altijd eerst aan jou voorgelegd. De lijst
+          synchroniseert vrijwel live: vinkt de een iets af, dan ziet de ander dat binnen enkele
+          seconden.
+        </Sectie>
+
+        <Sectie titel="Voorraad">
+          Terugkerende artikelen die niet uit een recept komen — wasmiddel, aluminiumfolie, koffie —
+          sla je hier op met winkel en afdeling. De lijst is gesorteerd per afdeling. Stel het aantal
+          in en vink een artikel aan om het in één keer aan de boodschappenlijst toe te voegen; winkel
+          en afdeling gaan automatisch mee.
+        </Sectie>
+
+        <Sectie titel="Winkels">
+          Stel per winkel de volgorde van de afdelingen in, zodat de boodschappenlijst jouw looproute
+          door de winkel volgt. Verplaats afdelingen omhoog of omlaag, of herstel de standaardvolgorde.
+        </Sectie>
+
+        <Sectie titel="Als app op je telefoon">
+          Installeer Kookboek als app: op Android via Chrome → menu → "App installeren", op iPhone via
+          Safari → deelknop → "Zet op beginscherm". Je krijgt een eigen icoon en volledig scherm;
+          updates gaan vanzelf mee.
+        </Sectie>
+
+        <Sectie titel="Goed om te weten">
+          De slimme functies (recepten uitlezen en zoeken, afdelingen bepalen, lijst opschonen)
+          draaien op AI en hebben een werkende API-sleutel met tegoed nodig. De app heeft internet
+          nodig; alle gegevens staan veilig in de cloud en blijven bewaard, ook als je de app
+          verwijdert en opnieuw installeert.
+        </Sectie>
+      </div>
+    </div>
+  );
+}
+
 function Tag({ children, tone }: { children: React.ReactNode; tone?: "maaltijd" }) {
   return <span style={{ ...S.tag, ...(tone === "maaltijd" ? S.tagMaaltijd : {}) }}>{children}</span>;
 }
@@ -2522,7 +2630,12 @@ const S: Record<string, React.CSSProperties> = {
   app: { width: "100%", margin: "0 auto", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", display: "flex", flexDirection: "column", position: "relative" },
   header: { display: "flex", alignItems: "center", gap: 10, padding: "20px 22px 14px", position: "sticky", top: 0, background: "rgba(247,247,245,0.88)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", zIndex: 5, borderBottom: "1px solid var(--line)" },
   appTitle: { fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: "-0.03em" },
-  headerSub: { marginLeft: "auto", fontSize: 12, color: "var(--sub)", fontWeight: 600, background: "var(--surface)", border: "1px solid var(--line)", padding: "5px 12px", borderRadius: 999 },
+  headerRechts: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 },
+  headerSub: { fontSize: 12, color: "var(--sub)", fontWeight: 600, background: "var(--surface)", border: "1px solid var(--line)", padding: "5px 12px", borderRadius: 999 },
+  infoKnop: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 999, color: "var(--sub)", cursor: "pointer", padding: 0 },
+  infoIntro: { fontSize: 14, lineHeight: 1.65, color: "#3a3f52", margin: "4px 0 18px" },
+  infoSectieKop: { fontSize: 13, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--accent)", margin: "0 0 6px" },
+  infoTekst: { fontSize: 13.5, lineHeight: 1.65, color: "#3a3f52" },
   main: { flex: 1, padding: "16px 18px 104px", overflowY: "auto" },
   center: { display: "flex", justifyContent: "center", paddingTop: 60 },
 
