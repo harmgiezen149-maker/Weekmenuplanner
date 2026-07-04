@@ -878,17 +878,33 @@ function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   const [parsed, setParsed] = useState<Partial<Recept> | null>(null);
   const [afbKeuze, setAfbKeuze] = useState<string[] | null>(null);
   const [err, setErr] = useState("");
+  // zoeken op gerechtnaam
+  const [zoekTerm, setZoekTerm] = useState("");
+  const [zoekBezig, setZoekBezig] = useState(false);
+  const [opties, setOpties] = useState<{ titel: string; url: string; bron: string; omschrijving: string }[] | null>(null);
+  const [ophalenUrl, setOphalenUrl] = useState<string | null>(null); // welke optie wordt nu opgehaald
 
-  const verwerk = async () => {
-    if (!url.trim()) return;
-    setErr(""); setBusy(true); setParsed(null); setAfbKeuze(null);
+  const verwerk = async (doelUrl: string) => {
+    if (!doelUrl.trim()) return;
+    setErr(""); setBusy(true); setParsed(null); setAfbKeuze(null); setOphalenUrl(doelUrl);
     try {
-      const res = await api.importRecept({ type: "link", url });
+      const res = await api.importRecept({ type: "link", url: doelUrl });
       const recept = normaliseer(res.recept || res);
       setParsed(recept);
       if (Array.isArray(res.afbeeldingen) && res.afbeeldingen.length) setAfbKeuze(res.afbeeldingen);
     } catch (e: any) { setErr(e.message || "Kon de pagina niet uitlezen."); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setOphalenUrl(null); }
+  };
+
+  const zoek = async () => {
+    if (!zoekTerm.trim()) return;
+    setErr(""); setZoekBezig(true); setOpties(null);
+    try {
+      const res = await api.importRecept({ type: "zoek", query: zoekTerm });
+      if (Array.isArray(res.opties) && res.opties.length) setOpties(res.opties);
+      else setErr("Geen recepten gevonden. Probeer een andere zoekterm.");
+    } catch (e: any) { setErr(e.message || "Zoeken mislukt."); }
+    finally { setZoekBezig(false); }
   };
 
   if (parsed) {
@@ -903,11 +919,46 @@ function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
 
   return (
     <div style={S.importBox}>
-      <Link2 size={36} style={{ color: "var(--accent)" }} />
-      <p style={S.importText}>Plak een link naar een receptpagina.</p>
+      <Search size={36} style={{ color: "var(--accent)" }} />
+      <p style={S.importText}>Zoek een recept op naam, of plak zelf een link naar een receptpagina.</p>
+
+      {/* Zoeken op gerechtnaam */}
+      <div style={S.zoekLinkRij}>
+        <input
+          style={{ ...S.input, flex: 1 }} placeholder="bijv. shakshuka of lasagne"
+          value={zoekTerm} onChange={(e) => setZoekTerm(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && zoek()}
+        />
+        <button onClick={zoek} disabled={zoekBezig || !zoekTerm.trim()} style={S.zoekLinkBtn}>
+          {zoekBezig ? <Loader2 size={16} className="spin" /> : <Search size={16} />}
+        </button>
+      </div>
+      {zoekBezig && <p style={S.zoekBezigTekst}>Recepten zoeken op internet…</p>}
+
+      {/* Zoekresultaten als keuzekaartjes */}
+      {opties && (
+        <div style={S.zoekOpties}>
+          {opties.map((o) => (
+            <button key={o.url} onClick={() => verwerk(o.url)} disabled={busy} style={S.zoekOptie}>
+              <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                <div style={S.zoekOptieTitel}>{o.titel}</div>
+                {o.omschrijving && <div style={S.zoekOptieOms}>{o.omschrijving}</div>}
+                <div style={S.zoekOptieBron}>{o.bron || (() => { try { return new URL(o.url).hostname; } catch { return ""; } })()}</div>
+              </div>
+              {ophalenUrl === o.url
+                ? <Loader2 size={18} className="spin" style={{ color: "var(--accent)", flexShrink: 0 }} />
+                : <ChevronRight size={18} style={{ color: "var(--sub)", flexShrink: 0 }} />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div style={S.zoekOf}><span style={S.zoekOfLijn} />of<span style={S.zoekOfLijn} /></div>
+
+      {/* Zelf een link plakken */}
       <input style={{ ...S.input, width: "100%" }} placeholder="https://..." value={url} onChange={(e) => setUrl(e.target.value)} />
-      <button onClick={verwerk} style={S.primaryBtn} disabled={busy}>
-        {busy ? <><Loader2 size={16} className="spin" /> Bezig...</> : <><Link2 size={16} /> Recept ophalen</>}
+      <button onClick={() => verwerk(url)} style={S.primaryBtn} disabled={busy || !url.trim()}>
+        {busy && ophalenUrl === url ? <><Loader2 size={16} className="spin" /> Bezig...</> : <><Link2 size={16} /> Recept ophalen</>}
       </button>
       {err && <p style={S.errText}>{err}</p>}
     </div>
@@ -2216,6 +2267,16 @@ const S: Record<string, React.CSSProperties> = {
 
   importBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 14, textAlign: "center", padding: "30px 20px", background: "var(--surface)", borderRadius: 16, border: "1.5px dashed var(--line)" },
   importText: { fontSize: 14, color: "var(--sub)", margin: 0, lineHeight: 1.5, maxWidth: 280 },
+  zoekLinkRij: { display: "flex", gap: 7, width: "100%", alignItems: "center" },
+  zoekLinkBtn: { flexShrink: 0, width: 46, height: 42, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--accent)", color: "#fff", border: "none", borderRadius: 999, cursor: "pointer", boxShadow: "0 6px 18px rgba(79,70,229,0.25)" },
+  zoekBezigTekst: { fontSize: 13, color: "var(--sub)", margin: 0 },
+  zoekOpties: { display: "flex", flexDirection: "column", gap: 8, width: "100%" },
+  zoekOptie: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 14px", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 14, cursor: "pointer" },
+  zoekOptieTitel: { fontSize: 14, fontWeight: 700, color: "var(--ink)", overflowWrap: "break-word", wordBreak: "break-word" },
+  zoekOptieOms: { fontSize: 12.5, color: "var(--sub)", marginTop: 2, lineHeight: 1.45 },
+  zoekOptieBron: { fontSize: 11, fontWeight: 700, color: "var(--accent)", marginTop: 5, textTransform: "lowercase" },
+  zoekOf: { display: "flex", alignItems: "center", gap: 10, width: "100%", fontSize: 12, fontWeight: 700, color: "var(--sub)", textTransform: "uppercase", letterSpacing: "0.05em" },
+  zoekOfLijn: { flex: 1, height: 1, background: "var(--line)" },
   errText: { color: "var(--red)", fontSize: 13, margin: 0 },
   infoBar: { display: "flex", alignItems: "center", gap: 7, background: "var(--accent-soft)", color: "var(--accent)", padding: "10px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 14, flexWrap: "wrap" },
   linkBtn: { marginLeft: "auto", background: "none", border: "none", color: "var(--accent)", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline" },

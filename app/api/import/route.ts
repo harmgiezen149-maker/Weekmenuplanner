@@ -51,6 +51,37 @@ export async function POST(req: NextRequest) {
   try {
     let content: Anthropic.MessageParam["content"];
 
+    // Zoeken: vind receptpagina's op internet voor een gerechtnaam en geef
+    // een lijst keuzeopties terug: [{ titel, url, bron, omschrijving }].
+    if (body.type === "zoek") {
+      const res = await client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1500,
+        system:
+          "Je zoekt recepten op internet voor een gerechtnaam. Zoek naar Nederlandstalige receptpagina's " +
+          "(bijv. ah.nl, jumbo.com, leukerecepten.nl, 24kitchen.nl, smulweb.nl) en anders goede Engelstalige. " +
+          "Geef 4 tot 6 opties terug als UITSLUITEND geldige JSON, geen uitleg, geen markdown: " +
+          '{"opties":[{"titel":"...","url":"https://...","bron":"naam van de site","omschrijving":"één korte zin"}]}. ' +
+          "Gebruik alleen url's die je daadwerkelijk in de zoekresultaten hebt gezien, verzin er geen.",
+        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 } as any],
+        messages: [{ role: "user", content: `Zoek recepten voor: ${body.query}` }],
+      });
+      const text = res.content
+        .filter((c): c is Anthropic.TextBlock => c.type === "text")
+        .map((c) => c.text).join("\n")
+        .replace(/```json|```/g, "").trim();
+      const start = text.indexOf("{");
+      const end = text.lastIndexOf("}");
+      const parsed = JSON.parse(text.slice(start, end + 1));
+      const opties = Array.isArray(parsed.opties)
+        ? parsed.opties
+            .filter((o: any) => typeof o.url === "string" && o.url.startsWith("http") && typeof o.titel === "string")
+            .slice(0, 6)
+            .map((o: any) => ({ titel: o.titel, url: o.url, bron: o.bron || "", omschrijving: o.omschrijving || "" }))
+        : [];
+      return NextResponse.json({ opties });
+    }
+
     if (body.type === "foto") {
       content = [
         { type: "image", source: { type: "base64", media_type: body.mediaType, data: body.data } },
