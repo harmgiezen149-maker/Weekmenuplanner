@@ -79,6 +79,15 @@ const api = {
 
 const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 
+// Hoeveelheden op de boodschappenlijst: artikelen zonder eenheid of in stuks
+// kun je alleen heel kopen, dus die ronden we naar boven af. Meetbare eenheden
+// (gram, ml, ...) houden één decimaal.
+const STUKS_EENHEDEN = ["", "st", "st.", "stuk", "stuks", "x"];
+const rondLijstAantal = (hoev: number, eenheid: string): number =>
+  STUKS_EENHEDEN.includes((eenheid || "").trim().toLowerCase())
+    ? Math.ceil(hoev)
+    : Math.round(hoev * 10) / 10;
+
 // ---------------------------------------------------------------------------
 // Afbeeldings-helpers. We slaan afbeeldingen op als gecomprimeerde JPEG data-URL,
 // zodat ze binnen de Upstash-limiet (~1MB per waarde) passen.
@@ -200,7 +209,7 @@ export default function App() {
           if (!bestaand.winkel && i.winkel) bestaand.winkel = i.winkel;
           if (!bestaand.gebied && i.gebied) bestaand.gebied = i.gebied;
         } else {
-          items.push({ id: uid(), naam: i.naam, hoev: Math.round(extra * 10) / 10, eenheid: i.eenheid, winkel: i.winkel || GEEN_WINKEL, gebied: i.gebied || GEEN_GEBIED, gedaan: false, bron: "hand" });
+          items.push({ id: uid(), naam: i.naam, hoev: rondLijstAantal(extra, i.eenheid), eenheid: i.eenheid, winkel: i.winkel || GEEN_WINKEL, gebied: i.gebied || GEEN_GEBIED, gedaan: false, bron: "hand" });
         }
       });
       return { items };
@@ -1409,7 +1418,7 @@ function BoodschappenPagina({
       });
     });
     return Object.values(acc).map((v) => ({
-      id: uid(), naam: v.naam, hoev: Math.round(v.hoev * 10) / 10, eenheid: v.eenheid,
+      id: uid(), naam: v.naam, hoev: rondLijstAantal(v.hoev, v.eenheid), eenheid: v.eenheid,
       winkel: v.winkel, gebied: v.gebied, gedaan: false, bron: "week" as const,
     }));
   };
@@ -1457,7 +1466,7 @@ function BoodschappenPagina({
       const eerste = betrokken.find((it) => it.winkel) || betrokken[0];
       const eersteGebied = betrokken.find((it) => it.gebied) || betrokken[0];
       const nieuw: BoodschapItem = {
-        id: uid(), naam: gekozenNaam, hoev: Math.round(totaal * 10) / 10, eenheid,
+        id: uid(), naam: gekozenNaam, hoev: rondLijstAantal(totaal, eenheid), eenheid,
         winkel: eerste.winkel || GEEN_WINKEL, gebied: eersteGebied.gebied || GEEN_GEBIED,
         gedaan: betrokken.every((it) => it.gedaan), bron: "week",
       };
@@ -2096,15 +2105,15 @@ function SegBtn({ active, onClick, icon: Icon, label }: { active: boolean; onCli
 // ============================================================================
 const S: Record<string, React.CSSProperties> = {
   app: { width: "100%", margin: "0 auto", minHeight: "100vh", background: "var(--bg)", color: "var(--ink)", display: "flex", flexDirection: "column", position: "relative" },
-  header: { display: "flex", alignItems: "center", gap: 9, padding: "16px 18px 12px", position: "sticky", top: 0, background: "var(--bg)", zIndex: 5, borderBottom: "1px solid var(--line)" },
-  appTitle: { fontSize: 22, fontWeight: 800, margin: 0, letterSpacing: "-0.02em" },
-  headerSub: { marginLeft: "auto", fontSize: 12, color: "var(--sub)", fontWeight: 500 },
-  main: { flex: 1, padding: "14px 16px 90px", overflowY: "auto" },
+  header: { display: "flex", alignItems: "center", gap: 10, padding: "20px 22px 14px", position: "sticky", top: 0, background: "rgba(247,247,245,0.88)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", zIndex: 5, borderBottom: "1px solid var(--line)" },
+  appTitle: { fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: "-0.03em" },
+  headerSub: { marginLeft: "auto", fontSize: 12, color: "var(--sub)", fontWeight: 600, background: "var(--surface)", border: "1px solid var(--line)", padding: "5px 12px", borderRadius: 999 },
+  main: { flex: 1, padding: "16px 18px 104px", overflowY: "auto" },
   center: { display: "flex", justifyContent: "center", paddingTop: 60 },
 
-  nav: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, display: "flex", background: "var(--surface)", borderTop: "1px solid var(--line)", padding: "8px 0 12px", zIndex: 10 },
+  nav: { position: "fixed", bottom: 10, left: "50%", transform: "translateX(-50%)", width: "calc(100% - 20px)", maxWidth: 480, display: "flex", background: "rgba(255,255,255,0.94)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", border: "1px solid var(--line)", borderRadius: 22, padding: "8px 4px 9px", zIndex: 10, boxShadow: "var(--schaduw-zacht)" },
   navBtn: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", color: "var(--sub)", fontSize: 10, fontWeight: 600, padding: "4px 2px", cursor: "pointer" },
-  navBtnActive: { color: "var(--accent)" },
+  navBtnActive: { color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 14 },
   navLabel: { fontSize: 10 },
 
   searchWrap: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 12 },
@@ -2117,14 +2126,14 @@ const S: Record<string, React.CSSProperties> = {
   scoreFilterBtn: { display: "flex", alignItems: "center", gap: 4, padding: "6px 12px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" },
   resetBtn: { display: "inline-flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "var(--accent)", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "2px 0", marginBottom: 4 },
 
-  card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, overflow: "hidden" },
+  card: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 18, overflow: "hidden" },
   receptGrid: { marginTop: 8, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: 10, alignItems: "start" },
   cardBody: { display: "block", width: "100%", textAlign: "left", background: "none", border: "none", padding: "13px 15px 11px", cursor: "pointer" },
   cardTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: "var(--ink)" },
   cardMeta: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },
-  tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "3px 8px", borderRadius: 6 },
+  tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "4px 10px", borderRadius: 999 },
   tagMaaltijd: { color: "#fff", background: "var(--accent)" },
 
   // Afbeeldingen
@@ -2155,7 +2164,7 @@ const S: Record<string, React.CSSProperties> = {
   empty: { gridColumn: "1 / -1", textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
 
   modalBg: { position: "fixed", inset: 0, background: "rgba(22,25,39,0.45)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-  modal: { background: "var(--bg)", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "18px 18px 30px" },
+  modal: { background: "var(--bg)", width: "100%", maxWidth: 480, maxHeight: "88vh", overflowY: "auto", borderRadius: "24px 24px 0 0", padding: "20px 20px 32px", boxShadow: "0 -12px 40px rgba(16,17,24,0.18)" },
   modalHead: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 10 },
   modalTitle: { fontSize: 21, fontWeight: 800, margin: 0, lineHeight: 1.2 },
   dialogHint: { fontSize: 13, color: "var(--sub)", margin: "0 0 14px", lineHeight: 1.5 },
@@ -2192,16 +2201,16 @@ const S: Record<string, React.CSSProperties> = {
 
   grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   label: { display: "block", fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.03em" },
-  input: { width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none" },
+  input: { width: "100%", padding: "10px 13px", border: "1px solid var(--line)", borderRadius: 12, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none" },
   textarea: { width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none", resize: "vertical" },
   ingRow: { display: "flex", gap: 6, marginBottom: 7, alignItems: "center" },
   ingBlok: { marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--line)" },
   ingRow2: { display: "flex", gap: 6, alignItems: "center" },
   ingSelect: { flex: 1, fontSize: 13, padding: "8px 8px", color: "var(--sub)", minWidth: 0 },
   addRowBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--accent-soft)", color: "var(--accent)", border: "none", padding: "8px 12px", borderRadius: 9, fontSize: 13, fontWeight: 700, cursor: "pointer", marginTop: 2 },
-  primaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent)", color: "#fff", border: "none", padding: "13px", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
+  primaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent)", color: "#fff", border: "none", padding: "13px 18px", borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8, boxShadow: "0 6px 18px rgba(79,70,229,0.25)" },
   modalKnopRij: { display: "flex", gap: 8, marginTop: 16 },
-  secondaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--accent-soft)", color: "var(--accent)", border: "none", padding: "13px", borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
+  secondaryBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--surface)", color: "var(--ink)", border: "1px solid var(--line)", padding: "13px 18px", borderRadius: 999, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
   naarLijstPers: { display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "12px", background: "var(--bg)", borderRadius: 12, marginBottom: 18 },
   naarLijstPersNum: { fontSize: 16, fontWeight: 700, minWidth: 70, textAlign: "center" },
 

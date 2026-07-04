@@ -1,14 +1,16 @@
 :root {
-  --bg: #f4f5f9;
+  --bg: #f7f7f5;
   --surface: #ffffff;
-  --ink: #161927;
-  --sub: #777e96;
-  --line: #e6e8f0;
-  --accent: #5b5bf0;
-  --accent-soft: #ececfe;
+  --ink: #101118;
+  --sub: #6f7385;
+  --line: #e8e8e4;
+  --accent: #4f46e5;
+  --accent-soft: #eeedfd;
   --gold: #f0a93a;
-  --green: #1fae72;
-  --red: #e0563e;
+  --green: #189e68;
+  --red: #dd4f38;
+  --schaduw-zacht: 0 1px 2px rgba(16, 17, 24, 0.04), 0 4px 16px rgba(16, 17, 24, 0.04);
+  --schaduw-lift: 0 12px 32px rgba(16, 17, 24, 0.12);
 }
 
 * {
@@ -72,13 +74,13 @@ button {
 
 /* --- Receptkaarten: subtiele diepte en beweging --- */
 .card {
-  box-shadow: 0 1px 2px rgba(22, 25, 39, 0.04);
+  box-shadow: var(--schaduw-zacht);
   transition: transform 0.16s ease, box-shadow 0.16s ease;
   animation: kaart-in 0.32s ease both;
 }
 .card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 10px 24px rgba(22, 25, 39, 0.1);
+  box-shadow: var(--schaduw-lift);
 }
 .card:active {
   transform: translateY(-1px);
@@ -112,4 +114,14 @@ button {
     transform: none;
     transition: none;
   }
+}
+
+/* --- Studio-typografie: strakke, zelfverzekerde koppen --- */
+h1, h2, h3 {
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+button {
+  letter-spacing: -0.01em;
 }
