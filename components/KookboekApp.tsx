@@ -178,13 +178,82 @@ export default function App() {
     api.saveWeek(week);
   }, [week, laden]);
 
+  // --- Boodschappenlijst: opslaan + near-realtime synchronisatie -------------
+  // Meerdere personen kunnen tegelijk in de lijst werken. We pollen de server
+  // elke paar seconden en voegen wijzigingen per item samen via een drieweg-
+  // vergelijking (basis = laatst bekende serverstand). Zo blijven vinkjes van
+  // beide kanten behouden, ook als jullie tegelijk afvinken.
   const eersteBood = useRef(true);
+  const boodBasis = useRef<Boodschappen | null>(null); // laatst bekende serverstand
+  const boodLokaal = useRef<Boodschappen>({ items: [] }); // actuele lokale stand (voor de poll)
+
+  useEffect(() => { boodLokaal.current = boodschappen; }, [boodschappen]);
+  useEffect(() => {
+    if (!laden && boodBasis.current === null) boodBasis.current = boodschappen;
+  }, [laden, boodschappen]);
+
   useEffect(() => {
     if (laden) return;
     if (eersteBood.current) { eersteBood.current = false; return; }
-    const t = setTimeout(() => api.saveBoodschappen(boodschappen), 400);
+    const t = setTimeout(async () => {
+      const opgeslagen = await api.saveBoodschappen(boodschappen).catch(() => null);
+      if (opgeslagen) boodBasis.current = opgeslagen;
+    }, 350);
     return () => clearTimeout(t);
   }, [boodschappen, laden]);
+
+  // Drieweg-merge per item: serverwijzigingen overnemen tenzij hetzelfde veld
+  // lokaal óók is gewijzigd (dan wint lokaal; dat wordt zo weer opgeslagen).
+  const mergeBoodschappen = (basis: Boodschappen, lokaal: Boodschappen, server: Boodschappen): Boodschappen => {
+    const bij = (l: Boodschappen) => new Map(l.items.map((it) => [it.id, it]));
+    const B = bij(basis), L = bij(lokaal), S = bij(server);
+    const items: BoodschapItem[] = [];
+    // 1) lokale items behouden/mergen
+    for (const li of lokaal.items) {
+      const bi = B.get(li.id);
+      const si = S.get(li.id);
+      if (!bi) { items.push(li); continue; }           // lokaal nieuw → houden
+      if (!si) {
+        // op de server verwijderd; alleen volgen als lokaal ongewijzigd
+        if (JSON.stringify(li) === JSON.stringify(bi)) continue;
+        items.push(li);
+        continue;
+      }
+      // veld-voor-veld: server wint als basis→server veranderde en lokaal niet
+      const gemerged: BoodschapItem = { ...li };
+      (Object.keys(li) as (keyof BoodschapItem)[]).forEach((veld) => {
+        const serverAnders = JSON.stringify(si[veld]) !== JSON.stringify(bi[veld]);
+        const lokaalAnders = JSON.stringify(li[veld]) !== JSON.stringify(bi[veld]);
+        if (serverAnders && !lokaalAnders) (gemerged as any)[veld] = si[veld];
+      });
+      items.push(gemerged);
+    }
+    // 2) items die de ander toevoegde (op server, niet in basis of lokaal)
+    for (const si of server.items) {
+      if (!B.has(si.id) && !L.has(si.id)) items.push(si);
+    }
+    return { items };
+  };
+
+  // Poll: elke 3,5s de serverstand ophalen (alleen als het tabblad zichtbaar is).
+  useEffect(() => {
+    if (laden) return;
+    const interval = setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      const server = await api.getBoodschappen().catch(() => null);
+      if (!server) return;
+      const basis = boodBasis.current || { items: [] };
+      const lokaal = boodLokaal.current;
+      if (JSON.stringify(server) === JSON.stringify(basis)) return; // niets veranderd bij de ander
+      const gemerged = mergeBoodschappen(basis, lokaal, server);
+      boodBasis.current = server;
+      if (JSON.stringify(gemerged) !== JSON.stringify(lokaal)) {
+        setBoodschappen(gemerged);
+      }
+    }, 3500);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [laden]);
 
   const eersteGebied = useRef(true);
   useEffect(() => {
