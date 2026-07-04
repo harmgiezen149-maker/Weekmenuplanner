@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 // Ontvangt { items: [{ id, naam, hoev, eenheid }] }.
 // Geeft terug:
@@ -11,10 +11,14 @@ export const maxDuration = 45;
 // "zeker=true" mag automatisch toegepast worden; "zeker=false" vraagt bevestiging.
 export async function POST(req: NextRequest) {
   const key = process.env.ANTHROPIC_API_KEY;
-  const { items } = await req.json();
+  const body = await req.json();
+  let items = body.items;
   if (!Array.isArray(items) || items.length === 0) {
     return NextResponse.json({ samenvoegingen: [], verpakkingen: [] });
   }
+  // Begrens de invoer: bij extreem lange lijsten blijft de uitvoer anders niet
+  // binnen de limiet. 80 artikelen is ruim voldoende voor een weekboodschap.
+  items = items.slice(0, 80);
   if (!key) {
     return NextResponse.json({ samenvoegingen: [], verpakkingen: [], geenKey: true });
   }
@@ -41,19 +45,39 @@ export async function POST(req: NextRequest) {
     .join("\n");
 
   try {
-    const res = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 2048,
-      system: systeem,
-      messages: [{ role: "user", content: "Artikelen:\n" + lijst }],
-    });
+    // Ruime uitvoerlimiet: bij lange lijsten worden de suggesties anders
+    // halverwege afgekapt en faalt het JSON-parsen.
+    const vraag = { role: "user" as const, content: "Artikelen:\n" + lijst };
+    const maak = () =>
+      client.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8000,
+        system: systeem + " Houd de JSON compact: geen onnodige spaties of regeleindes.",
+        messages: [vraag],
+      });
+
+    // Eén automatische herkansing bij een tijdelijke API-fout (bijv. overbelast).
+    let res;
+    try {
+      res = await maak();
+    } catch {
+      await new Promise((r) => setTimeout(r, 1200));
+      res = await maak();
+    }
+
     const text = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text).join("\n")
       .replace(/```json|```/g, "").trim();
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    const parsed = JSON.parse(text.slice(start, end + 1));
+    if (start === -1 || end <= start) throw new Error("AI gaf geen bruikbare JSON terug");
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      throw new Error("AI-antwoord was onvolledig (lijst mogelijk te lang)");
+    }
 
     const geldigeIds = new Set(items.map((it: any) => it.id));
     // Valideer samenvoegingen: alleen bestaande ids, minstens 2 per groep.

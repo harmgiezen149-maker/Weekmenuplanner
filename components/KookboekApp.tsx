@@ -67,7 +67,10 @@ const api = {
     geenKey?: boolean;
   }> {
     const res = await fetch("/api/lijst-opschonen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
-    if (!res.ok) throw new Error("Opschonen mislukt");
+    if (!res.ok) {
+      const e = await res.json().catch(() => ({} as any));
+      throw new Error(e.error || "Opschonen mislukt");
+    }
     return res.json();
   },
   async importRecept(payload: any): Promise<any> {
@@ -1674,8 +1677,8 @@ function BoodschappenPagina({
       } else {
         setOpschoonMelding("Niets om op te schonen — de lijst ziet er netjes uit.");
       }
-    } catch {
-      setOpschoonMelding("Opschonen mislukt. Probeer het later opnieuw.");
+    } catch (e: any) {
+      setOpschoonMelding("Opschonen mislukt: " + (e?.message || "onbekende fout") + ". Probeer het opnieuw.");
     } finally {
       setOpschonenBezig(false);
     }
