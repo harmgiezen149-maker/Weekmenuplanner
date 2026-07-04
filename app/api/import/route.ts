@@ -128,27 +128,72 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Haalt kandidaat-afbeeldingen uit een receptpagina: eerst de og:image (meestal
-// de hoofdfoto van het gerecht), daarna grote <img>-bronnen. Max 8, geabsolueerd.
+// Haalt kandidaat-afbeeldingen uit een receptpagina. Bronnen op volgorde van
+// betrouwbaarheid: og:image/twitter-meta, JSON-LD (schema.org Recipe), en
+// <img>-tags inclusief lazy-loading-varianten. Max 8, geabsolueerd.
 async function haalAfbeeldingen(pageUrl: string): Promise<string[]> {
-  const r = await fetch(pageUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+  const r = await fetch(pageUrl, {
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+      "Accept": "text/html,application/xhtml+xml",
+      "Accept-Language": "nl,en;q=0.8",
+    },
+    redirect: "follow",
+  });
   const html = await r.text();
   const urls: string[] = [];
+  const duw = (u?: string | null) => { if (u && typeof u === "string") urls.push(u.trim()); };
 
-  const og = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i);
-  if (og?.[1]) urls.push(og[1]);
+  // 1) Meta-tags: og:image (beide attribuut-volgordes), secure_url, twitter:image.
+  //    Dit is vrijwel altijd de hoofdfoto van het gerecht.
+  const metaRes = [
+    /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/gi,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/gi,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/gi,
+  ];
+  for (const re of metaRes) {
+    let mm: RegExpExecArray | null;
+    while ((mm = re.exec(html))) duw(mm[1]);
+  }
 
-  const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
-  let m: RegExpExecArray | null;
-  while ((m = imgRe.exec(html)) && urls.length < 30) {
-    const src = m[1];
-    if (/\.(jpe?g|png|webp)(\?|$)/i.test(src)) urls.push(src);
+  // 2) JSON-LD (schema.org Recipe): "image" als string, array of object — dit is
+  //    op receptsites de betrouwbaarste bron voor de gerechtfoto.
+  const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let ld: RegExpExecArray | null;
+  while ((ld = ldRe.exec(html))) {
+    try {
+      const data = JSON.parse(ld[1]);
+      const nodes = Array.isArray(data) ? data : data["@graph"] ? data["@graph"] : [data];
+      for (const node of nodes) {
+        const img = node?.image;
+        if (!img) continue;
+        if (typeof img === "string") duw(img);
+        else if (Array.isArray(img)) img.forEach((i: any) => duw(typeof i === "string" ? i : i?.url));
+        else if (typeof img === "object") duw(img.url);
+      }
+    } catch { /* ongeldig JSON-LD overslaan */ }
+  }
+
+  // 3) <img>-tags: src, data-src en srcset (lazy loading), alleen echte fotoformaten.
+  const imgRes = [
+    /<img[^>]+(?:src|data-src|data-lazy-src)=["']([^"']+)["']/gi,
+    /<img[^>]+srcset=["']([^"'\s,]+)/gi,
+  ];
+  for (const re of imgRes) {
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) && urls.length < 60) {
+      const src = m[1];
+      if (/\.(jpe?g|png|webp)(\?|$)/i.test(src)) duw(src);
+    }
   }
 
   const absoluut = urls
     .map((u) => { try { return new URL(u, pageUrl).href; } catch { return null; } })
-    .filter((u): u is string => !!u && u.startsWith("http"));
+    .filter((u): u is string => !!u && u.startsWith("http"))
+    // filter duidelijke niet-gerechtplaatjes weg
+    .filter((u) => !/logo|icon|sprite|avatar|placeholder|favicon|\.svg/i.test(u));
 
-  // ontdubbel, behoud volgorde, max 8
+  // ontdubbel, behoud volgorde (meta/JSON-LD eerst = hoofdfoto vooraan), max 8
   return [...new Set(absoluut)].slice(0, 8);
 }

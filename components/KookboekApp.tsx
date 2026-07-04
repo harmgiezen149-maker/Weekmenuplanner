@@ -986,6 +986,19 @@ function BevestigImport({
     } finally { setBezigAfb(null); }
   };
 
+  // Zet automatisch de eerste (beste) site-afbeelding op het recept zodra het
+  // bevestigingsscherm opent, zodat er standaard een afbeelding meekomt. De
+  // gebruiker kan via de strip alsnog een andere kiezen of hem verwijderen.
+  const autoGedaan = useRef(false);
+  useEffect(() => {
+    if (autoGedaan.current) return;
+    if (!parsed.afbeelding && afbKeuze && afbKeuze.length > 0) {
+      autoGedaan.current = true;
+      kiesAfb(afbKeuze[0]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div>
       <div style={S.infoBar}><Check size={15} /> Recept uitgelezen. Controleer en pas aan.<button onClick={onCancel} style={S.linkBtn}>Opnieuw</button></div>
