@@ -5,7 +5,7 @@ import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
-  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package,
+  Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -60,6 +60,15 @@ const api = {
       const data = await res.json();
       return data.gebieden || {};
     } catch { return {}; }
+  },
+  async lijstOpschonen(items: { id: string; naam: string; hoev: number; eenheid: string }[]): Promise<{
+    samenvoegingen: { ids: string[]; zeker: boolean; naamKeuzes: string[]; voorstelNaam: string; eenheid: string }[];
+    verpakkingen: { id: string; zeker: boolean; huidig: string; voorstel: string }[];
+    geenKey?: boolean;
+  }> {
+    const res = await fetch("/api/lijst-opschonen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }) });
+    if (!res.ok) throw new Error("Opschonen mislukt");
+    return res.json();
   },
   async importRecept(payload: any): Promise<any> {
     const res = await fetch("/api/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -1375,6 +1384,12 @@ function BoodschappenPagina({
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
   const [bevestigWisAlles, setBevestigWisAlles] = useState(false);
   const [filterWinkel, setFilterWinkel] = useState<string | null>(null); // null = alle winkels
+  const [opschonenBezig, setOpschonenBezig] = useState(false);
+  const [opschoonData, setOpschoonData] = useState<null | {
+    samenvoegingen: { ids: string[]; zeker: boolean; naamKeuzes: string[]; voorstelNaam: string; eenheid: string }[];
+    verpakkingen: { id: string; zeker: boolean; huidig: string; voorstel: string }[];
+  }>(null);
+  const [opschoonMelding, setOpschoonMelding] = useState("");
 
   const genereerUitWeek = (): BoodschapItem[] => {
     const acc: Record<string, { naam: string; eenheid: string; hoev: number; winkel: string; gebied: string }> = {};
@@ -1426,6 +1441,79 @@ function BoodschappenPagina({
   const addItem = () =>
     setBoodschappen((p) => ({ items: [...p.items, { id: uid(), naam: "", hoev: 1, eenheid: "", winkel: GEEN_WINKEL, gebied: GEEN_GEBIED, gedaan: false, bron: "hand" }] }));
 
+  // Voert één samenvoeging uit: de betrokken items worden vervangen door één item.
+  // Aantallen worden opgeteld als de eenheden gelijk zijn; anders wordt de
+  // hoeveelheid gelaten op de som van gelijk-benoemde eenheden (beste inschatting).
+  const pasSamenvoegingToe = (ids: string[], gekozenNaam: string, eenheid: string) => {
+    setBoodschappen((p) => {
+      const betrokken = p.items.filter((it) => ids.includes(it.id));
+      if (betrokken.length < 2) return p;
+      // hoeveelheid: tel op binnen gelijke eenheid; kies de eenheid die het meest voorkomt
+      const somGelijk = betrokken
+        .filter((it) => (it.eenheid || "").toLowerCase() === (eenheid || "").toLowerCase())
+        .reduce((s, it) => s + (Number(it.hoev) || 0), 0);
+      const totaal = somGelijk > 0 ? somGelijk : betrokken.reduce((s, it) => s + (Number(it.hoev) || 0), 0);
+      // winkel/gebied/gedaan: neem van het eerste betrokken item dat ze gezet heeft
+      const eerste = betrokken.find((it) => it.winkel) || betrokken[0];
+      const eersteGebied = betrokken.find((it) => it.gebied) || betrokken[0];
+      const nieuw: BoodschapItem = {
+        id: uid(), naam: gekozenNaam, hoev: Math.round(totaal * 10) / 10, eenheid,
+        winkel: eerste.winkel || GEEN_WINKEL, gebied: eersteGebied.gebied || GEEN_GEBIED,
+        gedaan: betrokken.every((it) => it.gedaan), bron: "week",
+      };
+      // vervang: verwijder betrokken, zet het nieuwe item op de plek van het eerste
+      const eersteIdx = p.items.findIndex((it) => ids.includes(it.id));
+      const rest = p.items.filter((it) => !ids.includes(it.id));
+      rest.splice(eersteIdx, 0, nieuw);
+      return { items: rest };
+    });
+  };
+
+  // Past een verpakkingsvoorstel toe: het item krijgt de voorgestelde naam,
+  // hoeveelheid 1 en geen aparte eenheid (de eenheid zit in de tekst).
+  const pasVerpakkingToe = (id: string, voorstel: string) => {
+    setBoodschappen((p) => ({
+      items: p.items.map((it) => (it.id === id ? { ...it, naam: voorstel, hoev: 1, eenheid: "" } : it)),
+    }));
+  };
+
+  // Start het opschonen: vraag de AI om suggesties, pas de zekere direct toe en
+  // toon de twijfelgevallen in een controle-popup.
+  const startOpschonen = async () => {
+    setOpschonenBezig(true);
+    setOpschoonMelding("");
+    try {
+      const invoer = boodschappen.items.map((it) => ({ id: it.id, naam: it.naam, hoev: it.hoev, eenheid: it.eenheid }));
+      const res = await api.lijstOpschonen(invoer);
+      if ((res as any).geenKey) {
+        setOpschoonMelding("Opschonen met AI vereist een ANTHROPIC_API_KEY. Voeg die toe om deze functie te gebruiken.");
+        setOpschonenBezig(false);
+        return;
+      }
+      // zekere samenvoegingen direct toepassen
+      const zekereSam = res.samenvoegingen.filter((s) => s.zeker);
+      const onzekereSam = res.samenvoegingen.filter((s) => !s.zeker);
+      zekereSam.forEach((s) => pasSamenvoegingToe(s.ids, s.voorstelNaam || s.naamKeuzes[0] || "", s.eenheid));
+      // zekere verpakkingen direct toepassen
+      const zekereVerp = res.verpakkingen.filter((v) => v.zeker);
+      const onzekereVerp = res.verpakkingen.filter((v) => !v.zeker);
+      zekereVerp.forEach((v) => pasVerpakkingToe(v.id, v.voorstel));
+
+      const aantalAuto = zekereSam.length + zekereVerp.length;
+      if (onzekereSam.length || onzekereVerp.length) {
+        setOpschoonData({ samenvoegingen: onzekereSam, verpakkingen: onzekereVerp });
+      } else if (aantalAuto > 0) {
+        setOpschoonMelding(`${aantalAuto} ${aantalAuto === 1 ? "aanpassing" : "aanpassingen"} automatisch toegepast.`);
+      } else {
+        setOpschoonMelding("Niets om op te schonen — de lijst ziet er netjes uit.");
+      }
+    } catch {
+      setOpschoonMelding("Opschonen mislukt. Probeer het later opnieuw.");
+    } finally {
+      setOpschonenBezig(false);
+    }
+  };
+
   // Gebied-volgorde voor een winkel: opgeslagen volgorde, anders de standaard.
   const gebiedIndex = (w: string, gebied: string): number => {
     const volg = (gebiedVolgorde[w] && gebiedVolgorde[w].length) ? gebiedVolgorde[w] : (WINKELGEBIEDEN as readonly string[]);
@@ -1474,10 +1562,17 @@ function BoodschappenPagina({
         </button>
       </div>
       {items.length > 0 && (
-        <button onClick={() => setBevestigWisAlles(true)} style={S.wisAllesBtn}>
-          <Trash2 size={14} /> Hele lijst leegmaken
-        </button>
+        <div style={S.boodOnderBalk}>
+          <button onClick={startOpschonen} disabled={opschonenBezig} style={S.opschoonBtn}>
+            {opschonenBezig ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}
+            {opschonenBezig ? "Bezig met opschonen…" : "Lijst opschonen"}
+          </button>
+          <button onClick={() => setBevestigWisAlles(true)} style={S.wisAllesBtn}>
+            <Trash2 size={14} /> Hele lijst leegmaken
+          </button>
+        </div>
       )}
+      {opschoonMelding && <div style={S.opschoonMelding}>{opschoonMelding}</div>}
 
       {items.length === 0 ? (
         <p style={S.empty}>
@@ -1550,6 +1645,118 @@ function BoodschappenPagina({
           onBevestig={wisAlles} onAnnuleer={() => setBevestigWisAlles(false)}
         />
       )}
+
+      {opschoonData && (
+        <OpschoonWizard
+          data={opschoonData}
+          items={boodschappen.items}
+          onSamenvoeg={pasSamenvoegingToe}
+          onVerpakking={pasVerpakkingToe}
+          onKlaar={(n) => { setOpschoonData(null); if (n > 0) setOpschoonMelding(`${n} ${n === 1 ? "aanpassing" : "aanpassingen"} toegepast.`); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// OPSCHOON-WIZARD — loopt de twijfelgevallen langs: per samenvoeging kiezen of
+// (en onder welke naam) samengevoegd wordt; per verpakking het voorstel accepteren.
+// ============================================================================
+function OpschoonWizard({
+  data, items, onSamenvoeg, onVerpakking, onKlaar,
+}: {
+  data: {
+    samenvoegingen: { ids: string[]; zeker: boolean; naamKeuzes: string[]; voorstelNaam: string; eenheid: string }[];
+    verpakkingen: { id: string; zeker: boolean; huidig: string; voorstel: string }[];
+  };
+  items: BoodschapItem[];
+  onSamenvoeg: (ids: string[], naam: string, eenheid: string) => void;
+  onVerpakking: (id: string, voorstel: string) => void;
+  onKlaar: (aantalToegepast: number) => void;
+}) {
+  // Alle stappen na elkaar: eerst samenvoegingen, dan verpakkingen.
+  const stappen = useMemo(() => [
+    ...data.samenvoegingen.map((s) => ({ type: "samen" as const, s })),
+    ...data.verpakkingen.map((v) => ({ type: "verp" as const, v })),
+  ], [data]);
+
+  const [idx, setIdx] = useState(0);
+  const [toegepast, setToegepast] = useState(0);
+  // gekozen naam per samenvoeg-stap (default: voorstel of eerste keuze)
+  const huidig = stappen[idx];
+  const [naamKeuze, setNaamKeuze] = useState("");
+
+  // reset naamkeuze bij nieuwe stap
+  useEffect(() => {
+    if (huidig?.type === "samen") {
+      setNaamKeuze(huidig.s.voorstelNaam || huidig.s.naamKeuzes[0] || "");
+    }
+  }, [idx, huidig]);
+
+  const naar = (verhoogToegepast: boolean) => {
+    if (verhoogToegepast) setToegepast((n) => n + 1);
+    if (idx + 1 < stappen.length) setIdx(idx + 1);
+    else onKlaar(toegepast + (verhoogToegepast ? 1 : 0));
+  };
+
+  if (!huidig) { onKlaar(toegepast); return null; }
+
+  return (
+    <div style={S.modalBg}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={S.modalHead}>
+          <div>
+            <span style={S.label}>Controle {idx + 1} van {stappen.length}</span>
+            <h2 style={S.modalTitle}>{huidig.type === "samen" ? "Samenvoegen?" : "Volle verpakking?"}</h2>
+          </div>
+        </div>
+
+        {huidig.type === "samen" ? (
+          <>
+            <p style={S.opschoonUitleg}>Deze artikelen lijken hetzelfde product. Wil je ze samenvoegen tot één regel?</p>
+            <ul style={S.opschoonLijst}>
+              {huidig.s.ids.map((id) => {
+                const it = items.find((x) => x.id === id);
+                if (!it) return null;
+                return <li key={id} style={S.opschoonLi}><span>{it.naam}</span><span style={S.ingAmt}>{it.hoev} {it.eenheid}</span></li>;
+              })}
+            </ul>
+            <span style={S.label}>Naam op de lijst</span>
+            <div style={S.opschoonKeuzes}>
+              {[...new Set([huidig.s.voorstelNaam, ...huidig.s.naamKeuzes].filter(Boolean))].map((naam) => (
+                <button key={naam} onClick={() => setNaamKeuze(naam)}
+                  style={{ ...S.opschoonNaamBtn, ...(naamKeuze === naam ? S.opschoonNaamBtnOn : {}) }}>
+                  {naam}
+                </button>
+              ))}
+            </div>
+            <div style={S.opschoonAkties}>
+              <button onClick={() => naar(false)} style={S.secondaryBtn}>Niet samenvoegen</button>
+              <button onClick={() => { onSamenvoeg(huidig.s.ids, naamKeuze, huidig.s.eenheid); naar(true); }} style={S.primaryBtn}>
+                <Check size={16} /> Samenvoegen
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p style={S.opschoonUitleg}>Dit artikel staat in een receptmaat. In de winkel koop je meestal een volle verpakking.</p>
+            <div style={S.opschoonVerpRij}>
+              <span style={S.opschoonVerpHuidig}>{huidig.v.huidig}</span>
+              <ArrowRightLeft size={16} style={{ color: "var(--sub)", flexShrink: 0 }} />
+              <span style={S.opschoonVerpVoorstel}>{huidig.v.voorstel}</span>
+            </div>
+            <div style={S.opschoonAkties}>
+              <button onClick={() => naar(false)} style={S.secondaryBtn}>Laat staan</button>
+              <button onClick={() => { onVerpakking(huidig.v.id, huidig.v.voorstel); naar(true); }} style={S.primaryBtn}>
+                <Check size={16} /> Gebruik verpakking
+              </button>
+            </div>
+          </>
+        )}
+
+        <button onClick={() => onKlaar(toegepast)} style={S.opschoonStop}>Stoppen</button>
+      </div>
     </div>
   );
 }
@@ -2028,6 +2235,20 @@ const S: Record<string, React.CSSProperties> = {
   boodTopBtn: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--ink)", padding: "9px 10px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
   boodTopBtnOn: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "var(--accent)" },
   wisAllesBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--red)", fontSize: 13, fontWeight: 600, cursor: "pointer", padding: "2px 4px", marginBottom: 12, marginTop: -2 },
+  boodOnderBalk: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12, marginTop: -2, flexWrap: "wrap" },
+  opschoonBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--accent-soft)", border: "1px solid var(--accent)", color: "var(--accent)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: "7px 12px", borderRadius: 9 },
+  opschoonMelding: { fontSize: 13, color: "var(--sub)", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 9, padding: "9px 12px", marginBottom: 12 },
+  opschoonUitleg: { fontSize: 14, color: "#3a3f52", lineHeight: 1.55, margin: "2px 0 12px" },
+  opschoonLijst: { listStyle: "none", padding: 0, margin: "0 0 14px" },
+  opschoonLi: { display: "flex", justifyContent: "space-between", padding: "9px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 9, marginBottom: 6, fontSize: 14, fontWeight: 600 },
+  opschoonKeuzes: { display: "flex", flexWrap: "wrap", gap: 7, margin: "6px 0 16px" },
+  opschoonNaamBtn: { padding: "8px 13px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  opschoonNaamBtnOn: { background: "var(--accent)", color: "#fff", borderColor: "var(--accent)" },
+  opschoonAkties: { display: "flex", gap: 8, marginTop: 4 },
+  opschoonVerpRij: { display: "flex", alignItems: "center", gap: 12, padding: "14px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, margin: "4px 0 16px" },
+  opschoonVerpHuidig: { flex: 1, fontSize: 14, color: "var(--sub)", textDecoration: "line-through" },
+  opschoonVerpVoorstel: { flex: 1, fontSize: 15, fontWeight: 700, color: "var(--ink)", textAlign: "right" },
+  opschoonStop: { display: "block", margin: "16px auto 0", background: "none", border: "none", color: "var(--sub)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
   winkelKop: { display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "4px 2px 8px" },
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },

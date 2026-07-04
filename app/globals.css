@@ -69,3 +69,47 @@ button {
   -webkit-line-clamp: unset;
   overflow: visible;
 }
+
+/* --- Receptkaarten: subtiele diepte en beweging --- */
+.card {
+  box-shadow: 0 1px 2px rgba(22, 25, 39, 0.04);
+  transition: transform 0.16s ease, box-shadow 0.16s ease;
+  animation: kaart-in 0.32s ease both;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(22, 25, 39, 0.1);
+}
+.card:active {
+  transform: translateY(-1px);
+}
+.card img {
+  transition: transform 0.35s ease;
+}
+.card:hover img {
+  transform: scale(1.04);
+}
+
+@keyframes kaart-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* De "In weekmenu"-knop op de kaart: kleur-fade en lichte druk-animatie */
+.card button {
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+.card button:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .card:hover,
+  .card img,
+  .card:hover img {
+    animation: none;
+    transform: none;
+    transition: none;
+  }
+}
