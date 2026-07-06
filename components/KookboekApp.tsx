@@ -563,7 +563,9 @@ function ReceptenLijst({
   const [fMaaltijd, setFMaaltijd] = useState("");
   const [fMoeil, setFMoeil] = useState("");
   const [fScore, setFScore] = useState(0);
-  const MAX_TIJD = 120; // schuif helemaal rechts = geen tijdslimiet
+  const MIN_TIJD = 0;   // linker schuif helemaal links = geen minimum
+  const MAX_TIJD = 120; // rechter schuif helemaal rechts = geen maximum
+  const [fTijdMin, setFTijdMin] = useState(MIN_TIJD);
   const [fTijd, setFTijd] = useState(MAX_TIJD);
   const [sortering, setSortering] = useState<"naam" | "gegeten" | "score">("naam");
   const [open, setOpen] = useState<Recept | null>(null);
@@ -583,6 +585,7 @@ function ReceptenLijst({
     if (fMaaltijd && r.maaltijd !== fMaaltijd) return false;
     if (fMoeil && r.moeilijkheid !== fMoeil) return false;
     if (fScore && r.score < fScore) return false;
+    if (fTijdMin > MIN_TIJD && (Number(r.tijd) || 0) < fTijdMin) return false;
     if (fTijd < MAX_TIJD && (Number(r.tijd) || 0) > fTijd) return false;
     return true;
   }).sort((a, b) => {
@@ -591,8 +594,8 @@ function ReceptenLijst({
     return a.titel.localeCompare(b.titel);
   });
 
-  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setFTijd(MAX_TIJD); setZoek(""); };
-  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || fTijd < MAX_TIJD || zoek;
+  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setFTijdMin(MIN_TIJD); setFTijd(MAX_TIJD); setZoek(""); };
+  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || fTijdMin > MIN_TIJD || fTijd < MAX_TIJD || zoek;
   const huidig = open ? recepten.find((r) => r.id === open.id) || open : null;
 
   return (
@@ -613,12 +616,30 @@ function ReceptenLijst({
 
       <div style={S.tijdRij}>
         <span style={S.tijdLabel}><Clock size={13} /> Bereidingstijd</span>
-        <input
-          type="range" min={10} max={120} step={5} value={fTijd}
-          onChange={(e) => setFTijd(Number(e.target.value))}
-          style={S.tijdSlider}
-        />
-        <span style={S.tijdWaarde}>{fTijd >= 120 ? "alle" : `≤ ${fTijd} min`}</span>
+        <div className="dubbelSlider" style={S.tijdDubbel}>
+          <div style={S.tijdSpoor} />
+          <div style={{
+            ...S.tijdVulling,
+            left: `${(fTijdMin / MAX_TIJD) * 100}%`,
+            width: `${((fTijd - fTijdMin) / MAX_TIJD) * 100}%`,
+          }} />
+          <input
+            type="range" min={MIN_TIJD} max={MAX_TIJD} step={5} value={fTijdMin}
+            onChange={(e) => setFTijdMin(Math.min(Number(e.target.value), fTijd - 5))}
+            aria-label="Minimale bereidingstijd"
+          />
+          <input
+            type="range" min={MIN_TIJD} max={MAX_TIJD} step={5} value={fTijd}
+            onChange={(e) => setFTijd(Math.max(Number(e.target.value), fTijdMin + 5))}
+            aria-label="Maximale bereidingstijd"
+          />
+        </div>
+        <span style={S.tijdWaarde}>
+          {fTijdMin <= MIN_TIJD && fTijd >= MAX_TIJD ? "alle"
+            : fTijdMin <= MIN_TIJD ? `≤ ${fTijd} min`
+            : fTijd >= MAX_TIJD ? `≥ ${fTijdMin} min`
+            : `${fTijdMin}–${fTijd} min`}
+        </span>
       </div>
 
       <div style={S.sorteerRij}>
@@ -2720,7 +2741,9 @@ const S: Record<string, React.CSSProperties> = {
   sorteerRij: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 4, overflowX: "auto" },
   tijdRij: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
   tijdLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0 },
-  tijdSlider: { flex: 1, minWidth: 0, accentColor: "var(--accent)" },
+  tijdDubbel: { position: "relative", flex: 1, minWidth: 0, height: 26 },
+  tijdSpoor: { position: "absolute", top: 11, left: 0, right: 0, height: 4, borderRadius: 2, background: "var(--line)" },
+  tijdVulling: { position: "absolute", top: 11, height: 4, borderRadius: 2, background: "var(--accent)" },
   tijdWaarde: { fontSize: 12, fontWeight: 700, color: "var(--ink)", flexShrink: 0, minWidth: 62, textAlign: "right" },
   sorteerLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, marginRight: 2 },
   sorteerBtn: { whiteSpace: "nowrap", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
