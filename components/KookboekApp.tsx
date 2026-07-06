@@ -563,6 +563,8 @@ function ReceptenLijst({
   const [fMaaltijd, setFMaaltijd] = useState("");
   const [fMoeil, setFMoeil] = useState("");
   const [fScore, setFScore] = useState(0);
+  const MAX_TIJD = 120; // schuif helemaal rechts = geen tijdslimiet
+  const [fTijd, setFTijd] = useState(MAX_TIJD);
   const [sortering, setSortering] = useState<"naam" | "gegeten" | "score">("naam");
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
@@ -581,6 +583,7 @@ function ReceptenLijst({
     if (fMaaltijd && r.maaltijd !== fMaaltijd) return false;
     if (fMoeil && r.moeilijkheid !== fMoeil) return false;
     if (fScore && r.score < fScore) return false;
+    if (fTijd < MAX_TIJD && (Number(r.tijd) || 0) > fTijd) return false;
     return true;
   }).sort((a, b) => {
     if (sortering === "gegeten") return (b.gegeten ?? 0) - (a.gegeten ?? 0) || a.titel.localeCompare(b.titel);
@@ -588,8 +591,8 @@ function ReceptenLijst({
     return a.titel.localeCompare(b.titel);
   });
 
-  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setZoek(""); };
-  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || zoek;
+  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setFTijd(MAX_TIJD); setZoek(""); };
+  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || fTijd < MAX_TIJD || zoek;
   const huidig = open ? recepten.find((r) => r.id === open.id) || open : null;
 
   return (
@@ -606,6 +609,16 @@ function ReceptenLijst({
         <Chips opts={MOEILIJKHEDEN} val={fMoeil} set={setFMoeil} />
         <div style={{ flex: 1 }} />
         <ScoreFilter val={fScore} set={setFScore} />
+      </div>
+
+      <div style={S.tijdRij}>
+        <span style={S.tijdLabel}><Clock size={13} /> Bereidingstijd</span>
+        <input
+          type="range" min={10} max={120} step={5} value={fTijd}
+          onChange={(e) => setFTijd(Number(e.target.value))}
+          style={S.tijdSlider}
+        />
+        <span style={S.tijdWaarde}>{fTijd >= 120 ? "alle" : `≤ ${fTijd} min`}</span>
       </div>
 
       <div style={S.sorteerRij}>
@@ -2705,6 +2718,10 @@ const S: Record<string, React.CSSProperties> = {
   dialogHint: { fontSize: 13, color: "var(--sub)", margin: "0 0 14px", lineHeight: 1.5 },
   scoreEdit: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0", padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)" },
   sorteerRij: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 4, overflowX: "auto" },
+  tijdRij: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
+  tijdLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0 },
+  tijdSlider: { flex: 1, minWidth: 0, accentColor: "var(--accent)" },
+  tijdWaarde: { fontSize: 12, fontWeight: 700, color: "var(--ink)", flexShrink: 0, minWidth: 62, textAlign: "right" },
   sorteerLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, marginRight: 2 },
   sorteerBtn: { whiteSpace: "nowrap", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   sorteerBtnOn: { background: "var(--ink)", color: "#fff", borderColor: "var(--ink)" },
