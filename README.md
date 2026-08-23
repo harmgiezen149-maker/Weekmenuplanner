@@ -15,6 +15,8 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
 - **Boodschappenlijst** die automatisch alle ingrediënten optelt en per recept
   schaalt naar het gekozen aantal personen. Afvinkbaar tijdens het boodschappen doen.
 - **Importeren** van recepten op drie manieren: handmatig, via foto, of via een link.
+- **Tracker** (`/tracker`) — een puntengebaseerde voedingstracker met een dagbudget
+  dat wordt afgeleid van je lichaamsgegevens. Zie het hoofdstuk hieronder.
 
 ---
 
@@ -124,6 +126,100 @@ de bijgewerkte versie live.
 
 ---
 
+---
+
+## De tracker (`/tracker`)
+
+Een puntengebaseerde voedingstracker naast het kookboek, bereikbaar via de knop
+**Tracker** in de onderbalk. Eén gebruiker, geen accounts.
+
+### Hoe de punten werken
+
+Elk product krijgt punten uit zijn voedingswaarden. Calorieën, verzadigd vet en
+suiker maken iets duurder; eiwit en vezels maken het goedkoper:
+
+```
+punten = 0,024 × kcal
+       + 0,20  × verzadigd vet (g)
+       + 0,10  × effectieve suiker (g)
+       - 0,075 × eiwit (g)
+       - 0,05  × vezels (g)
+```
+
+Het resultaat wordt afgekapt op nul. Daardoor komen groente en magere
+eiwitbronnen vanzelf op nul uit — er is geen aparte lijst van gratis producten
+nodig, en de rekensom blijft uitlegbaar.
+
+**Effectieve suiker.** Etiketten en productdatabases geven alleen *totale*
+suikers, dus inclusief lactose en fruitsuiker. Zonder correctie wordt magere
+kwark onterecht duur. Kies je bij een product de juiste soort (zuivel, fruit,
+groente, peulvruchten, noten), dan wordt de van nature aanwezige suiker
+afgetrokken. Vul je zelf de toegevoegde suiker in, dan wint die waarde.
+
+**Puntenschaal.** `points_scale` in de instellingen is de enige knop om het
+niveau te verschuiven. Op 1,0 komt een dag rond de 40 tot 50 punten uit; op 0,75
+rond de 30. De schaal werkt met terugwerkende kracht, want in de database staat
+de onafgeronde, schaalvrije waarde (`points_raw`). Afronden gebeurt pas bij het
+tonen, zodat afrondingsfouten zich niet opstapelen over een dag met tien regels.
+
+### Hoe het dagbudget wordt bepaald
+
+1. Basaal metabolisme volgens Mifflin-St Jeor, uit geslacht, gewicht, lengte en
+   leeftijd.
+2. Onderhoudsbehoefte = basaal metabolisme × activiteitsfactor.
+3. Beoogde afname = een half procent van je lichaamsgewicht per week, met een
+   plafond van 0,75 kg. Doordat dit aan je *huidige* gewicht hangt, schaalt het
+   tempo automatisch mee omlaag naarmate je lichter wordt.
+4. Dagbudget in punten = 0,024 × doelcalorieën × puntenschaal.
+
+Twee grenzen worden in code afgedwongen en zijn met tests vastgelegd: het tekort
+is nooit groter dan een half procent lichaamsgewicht per week, en het doel zakt
+nooit onder je basaal metabolisme — ook niet bij een streefgewicht ver onder je
+huidige. Zit je op of onder je streefgewicht, dan valt het tekort weg en staat het
+budget op onderhoud.
+
+### Schermen
+
+| Route | Wat je er doet |
+|---|---|
+| `/tracker` | Dagoverzicht: puntenring, eiwitbalk, macro's en je regels per maaltijd |
+| `/tracker/toevoegen` | Handmatig een product loggen, met punten die live meerekenen |
+| `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
+
+### Opslag
+
+Alle keys van de tracker staan onder de prefix `wl:`, volledig gescheiden van de
+kookboek-keys:
+
+- `wl:profile` — profiel en het berekende dagbudget.
+- `wl:day:<YYYY-MM-DD>` — één dag: alle regels plus de opgetelde totalen.
+- `wl:day:index` — sorted set met de dagen waarop iets gelogd is. Lege dagen staan
+  er niet in, zodat ze straks buiten de weekgemiddelden vallen.
+
+### Tests
+
+De puntenformule en de budgetberekening zijn puur rekenwerk zonder database, en
+staan onder test:
+
+```bash
+npm test
+```
+
+Dat draait de ingebouwde testrunner van Node — geen extra pakketten nodig. De
+testset legt onder meer vast dat kipfilet 1 punt is, broccoli 0 en een koekje 6,
+dat het budget nooit onder het basaal metabolisme zakt, en dat het dagtotaal op
+de onafgeronde waarden wordt gerekend.
+
+### Wat er nog niet in zit
+
+Deze eerste versie is bewust zelfstandig bruikbaar, maar nog niet compleet.
+Gepland, in deze volgorde: favorieten en recent gelogde items, zoeken in Open
+Food Facts en barcode scannen; daarna weeglog met trendlijn, weekbuffer en
+weekoverzicht; daarna punten per portie voor recepten uit het kookboek; en tot
+slot bewegingspunten, foto-schatting en het delen van links vanuit de browser.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -131,6 +227,8 @@ In Upstash Redis:
 - `recipe:<id>` — één recept als JSON.
 - `recipes:index` — een set met alle recept-id's.
 - `week:current` — de weekplanning (startdag + gekozen gerechten per dag).
+- `wl:*` — alles van de tracker (zie het hoofdstuk hierboven). Bewust een eigen
+  prefix, zodat kookboek en tracker elkaars data nooit kunnen raken.
 
 Eén database = één huishouden. Wil je later meerdere gezinnen of gebruikers, dan zet
 je een `userId:`-prefix voor de keys in `lib/data.ts`. De rest van de app blijft gelijk.
@@ -147,12 +245,30 @@ app/
     recipes/[id]/route.ts   PUT / DELETE per recept
     week/route.ts           GET / PUT weekplanning
     import/route.ts         Foto- en link-import via Anthropic API
+    tracker/profiel/route.ts     GET / PUT profiel + berekend budget
+    tracker/dag/[datum]/route.ts GET dag, POST / PATCH / DELETE een regel
+  tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
-  KookboekApp.tsx       De volledige UI (client-component)
+  KookboekApp.tsx       De volledige UI van het kookboek (client-component)
+  tracker/
+    TrackerApp.tsx      Shell van de tracker: navigatie, laden, opslaan
+    Dagoverzicht.tsx    Puntenring, eiwitbalk, regels per maaltijd
+    Toevoegen.tsx       Handmatige invoer met live punten
+    Instellingen.tsx    Profiel met live budgetberekening
+    Ring.tsx            De puntenring (SVG)
+    stijl.ts            Inline stijlen, bovenop de CSS-variabelen
+    api.ts              Fetch-helpers voor de tracker-endpoints
 lib/
   redis.ts              Upstash-client
   types.ts              Types en vaste keuzelijsten
   data.ts               Alle databasebewerkingen op één plek
+  tracker/
+    types.ts            Datamodel van de tracker
+    points.ts           De puntenformule
+    budget.ts           Basaal metabolisme, tempo en dagbudget
+    datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
+    data.ts             Redis-bewerkingen onder de prefix wl:
+    *.test.ts           Unit tests (npm test)
 scripts/
   seed.mjs              Voorbeeldrecepten inladen
 ```

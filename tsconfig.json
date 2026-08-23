@@ -10,6 +10,9 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    // Nodig omdat de unit tests met `node --test` draaien: die resolver eist
+    // een expliciete extensie. Veilig in combinatie met noEmit.
+    "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,

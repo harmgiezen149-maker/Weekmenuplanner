@@ -1,11 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
+  Activity,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -159,6 +161,7 @@ export default function App() {
   const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
   const [voorraad, setVoorraad] = useState<Voorraad>({ items: [] });
   const [tab, setTab] = useState("recepten");
+  const router = useRouter();
   const [laden, setLaden] = useState(true);
 
   useEffect(() => {
@@ -341,6 +344,8 @@ export default function App() {
     { id: "boodschappen", label: "Lijst", icon: ShoppingCart },
     { id: "voorraad", label: "Voorraad", icon: Package },
     { id: "winkels", label: "Winkels", icon: Store },
+    // De tracker is een aparte route met een eigen scherm, geen tab-state.
+    { id: "tracker", label: "Tracker", icon: Activity, pad: "/tracker" },
   ];
 
   // Per pagina de maximale inhoudsbreedte op desktop. De header valt hierbuiten
@@ -408,7 +413,11 @@ export default function App() {
 
       <nav style={S.nav}>
         {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ ...S.navBtn, ...(tab === t.id ? S.navBtnActive : {}) }}>
+          <button
+            key={t.id}
+            onClick={() => ("pad" in t && t.pad ? router.push(t.pad) : setTab(t.id))}
+            style={{ ...S.navBtn, ...(tab === t.id ? S.navBtnActive : {}) }}
+          >
             <t.icon size={20} />
             <span style={S.navLabel}>{t.label}</span>
           </button>
