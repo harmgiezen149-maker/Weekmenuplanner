@@ -115,6 +115,54 @@ export interface Day {
   buffer_used: number;
 }
 
+// ---------------------------------------------------------------------------
+// Producten: het tussenformaat tussen een bron (Open Food Facts, de eigen
+// basislijst, een favoriet) en een regel in het logboek.
+// ---------------------------------------------------------------------------
+
+/**
+ * Een product met zijn voedingswaarden per 100 g of ml. Alle zoekbronnen
+ * leveren dit formaat op, zodat er maar één weg naar een Entry loopt.
+ */
+export interface Product {
+  id: string;
+  name: string;
+  brand?: string;
+  /** Waar het vandaan komt: de externe productdatabase, de eigen basislijst,
+   *  of een eerder bewaarde regel (favoriet of recent). */
+  bron: "off" | "basis" | "bewaard";
+  /** g voor vaste producten, ml voor dranken. */
+  eenheid: "g" | "ml";
+  /** Voedingswaarden per 100 g of ml. */
+  per100: Nutrients;
+  /** Standaardportie, als de bron die kent. */
+  portie?: { grams: number; label: string };
+  /** Streepjescode, als het product er een heeft. */
+  barcode?: string;
+}
+
+/**
+ * Een bewaard sjabloon: een favoriet of een recent gelogd item. Hetzelfde als
+ * een Entry, maar zonder tijdstip en zonder maaltijd — die kies je opnieuw.
+ */
+export interface FoodTemplate {
+  id: string;
+  name: string;
+  brand?: string;
+  source: EntrySource;
+  amount: number;
+  unit: string;
+  grams: number;
+  nutrients: Nutrients;
+  points_raw: number;
+  ref?: string;
+  /** Wanneer het sjabloon voor het laatst gebruikt is. */
+  last_used: number;
+}
+
+/** Zoveel recent gelogde items worden bewaard. */
+export const RECENT_MAX = 50;
+
 export type Geslacht = "man" | "vrouw";
 
 export const ACTIVITEITSFACTOREN = [

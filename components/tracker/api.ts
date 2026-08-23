@@ -1,4 +1,4 @@
-import type { Day, Profile } from "@/lib/tracker/types";
+import type { Day, FoodTemplate, Product, Profile } from "@/lib/tracker/types";
 import type { BudgetResultaat } from "@/lib/tracker/budget";
 
 export interface ProfielAntwoord {
@@ -34,4 +34,25 @@ export const trackerApi = {
   wisRegel: (datum: string, id: string) =>
     fetch(`/api/tracker/dag/${datum}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
       .then(lees<Day>),
+
+  /** Favorieten en recent in één keer: het invoerscherm toont ze samen. */
+  getSnel: () =>
+    fetch("/api/tracker/favorieten", { cache: "no-store" })
+      .then(lees<{ favorieten: FoodTemplate[]; recent: FoodTemplate[] }>),
+
+  bewaarFavoriet: (t: unknown) =>
+    fetch("/api/tracker/favorieten", { method: "POST", headers: json, body: JSON.stringify(t) })
+      .then(lees<{ favorieten: FoodTemplate[] }>).then((d) => d.favorieten),
+
+  wisFavoriet: (id: string) =>
+    fetch(`/api/tracker/favorieten?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      .then(lees<{ favorieten: FoodTemplate[] }>).then((d) => d.favorieten),
+
+  barcode: (code: string) =>
+    fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" })
+      .then(lees<{ gevonden: boolean; product?: Product; uitCache?: boolean; offline?: boolean }>),
+
+  zoek: (q: string) =>
+    fetch(`/api/tracker/zoeken?q=${encodeURIComponent(q)}`, { cache: "no-store" })
+      .then(lees<{ resultaten: Product[]; extern: "ok" | "mislukt" | "leeg" }>),
 };

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getDay, addEntry, updateEntry, deleteEntry, geldigeDatum, nieuwId,
+  noteerRecent, entryNaarTemplate,
 } from "@/lib/tracker/data";
 import { naarGram, rawPoints } from "@/lib/tracker/points";
 import { CATEGORIEEN, MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
-import type { Category, Entry, Maaltijd, Nutrients } from "@/lib/tracker/types";
+
+const BRONNEN: EntrySource[] = ["barcode", "search", "manual", "photo", "link", "recipe", "favorite"];
+import type { Category, Entry, EntrySource, Maaltijd, Nutrients } from "@/lib/tracker/types";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +32,13 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!naam) return fout("Naam is verplicht");
 
   const entry = bouwEntry(body, naam);
-  return NextResponse.json(await addEntry(datum, entry), { status: 201 });
+  const dag = await addEntry(datum, entry);
+
+  // De regel staat in het logboek; de recente lijst is alleen een hulpmiddel
+  // om hem terug te vinden. Faalt dat, dan is de regel niet minder opgeslagen.
+  await noteerRecent(entryNaarTemplate(entry)).catch(() => {});
+
+  return NextResponse.json(dag, { status: 201 });
 }
 
 // Bestaande regel bijwerken. Voedingswaarden worden opnieuw doorgerekend.
@@ -69,7 +78,7 @@ function bouwEntry(body: any, naam: string): Entry {
     id: nieuwId(),
     ts: Number.isFinite(Number(body?.ts)) ? Number(body.ts) : Date.now(),
     meal: MAALTIJDEN_TRACKER.includes(body?.meal) ? (body.meal as Maaltijd) : "snack",
-    source: "manual",
+    source: BRONNEN.includes(body?.source) ? (body.source as EntrySource) : "manual",
     name: naam,
     ...(body?.brand ? { brand: String(body.brand).slice(0, 80) } : {}),
     amount,

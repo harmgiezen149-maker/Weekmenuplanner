@@ -80,6 +80,37 @@ export const T: Record<string, React.CSSProperties> = {
   waarschuwing: { background: "#fff6ea", border: "1px solid var(--gold)", borderRadius: 12, padding: "11px 14px", fontSize: 12.5, lineHeight: 1.55, color: "#8a5a12", marginBottom: 12 },
   fout: { background: "#fdeeeb", border: "1px solid var(--red)", borderRadius: 12, padding: "11px 14px", fontSize: 13, color: "#a8351f", marginBottom: 12 },
 
+  // Toevoegen: keuze tussen snel, zoeken, scannen en handmatig
+  modusRij: { display: "flex", gap: 6, marginBottom: 16, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 14, padding: 4 },
+  modusKnop: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, background: "none", border: "none", borderRadius: 11, padding: "9px 4px", color: "var(--sub)", fontSize: 11, fontWeight: 700, cursor: "pointer" },
+  modusKnopAan: { background: "var(--accent-soft)", color: "var(--accent)" },
+
+  terugKnop: { display: "inline-flex", alignItems: "center", gap: 5, background: "none", border: "none", color: "var(--accent)", fontSize: 13, fontWeight: 700, cursor: "pointer", padding: "2px 0", marginBottom: 12 },
+
+  productNaam: { fontSize: 17, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1.25 },
+  productSub: { fontSize: 12.5, color: "var(--sub)", marginTop: 4, fontWeight: 500 },
+
+  favorietKnop: { display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", padding: "11px", background: "var(--surface)", color: "var(--sub)", border: "1px solid var(--line)", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", marginTop: 4 },
+  favorietKnopAan: { background: "#fff8ec", color: "#a3701a", borderColor: "var(--gold)" },
+
+  // Zoeken en lijsten met producten
+  zoekWrap: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "11px 13px", marginBottom: 12 },
+  zoekInput: { border: "none", outline: "none", flex: 1, fontSize: 15, background: "none", color: "var(--ink)", minWidth: 0 },
+  lijstKop: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--sub)", margin: "18px 0 8px" },
+  resultaat: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 15px", borderBottom: "1px solid var(--line)", background: "none", border: "none", borderTop: "none", borderLeft: "none", borderRight: "none", textAlign: "left", cursor: "pointer" },
+  resultaatTekst: { display: "block", flex: 1, minWidth: 0 },
+  resultaatNaam: { display: "block", fontSize: 14.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  resultaatSub: { display: "block", fontSize: 12, color: "var(--sub)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  bronMerk: { display: "inline-block", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 4, padding: "1px 5px", marginRight: 6, verticalAlign: "1px" },
+  potloodKnop: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--sub)", cursor: "pointer", padding: 0, flexShrink: 0 },
+
+  // Scanner
+  scanKader: { position: "relative", width: "100%", aspectRatio: "4 / 3", background: "#101118", borderRadius: 16, overflow: "hidden", marginBottom: 12 },
+  scanVideo: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  scanLijn: { position: "absolute", left: "8%", right: "8%", top: "50%", height: 2, background: "var(--red)", opacity: 0.85, boxShadow: "0 0 12px rgba(221,79,56,0.9)" },
+  scanVenster: { position: "absolute", left: "8%", right: "8%", top: "28%", bottom: "28%", border: "2px solid rgba(255,255,255,0.85)", borderRadius: 10 },
+  scanStatus: { position: "absolute", left: 0, right: 0, bottom: 0, padding: "9px 12px", background: "rgba(16,17,24,0.72)", color: "#fff", fontSize: 12.5, fontWeight: 600, textAlign: "center" },
+
   uitslagRij: { display: "flex", justifyContent: "space-between", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 13.5 },
   uitslagLabel: { color: "var(--sub)", fontWeight: 600 },
   uitslagWaarde: { fontWeight: 700, textAlign: "right" },

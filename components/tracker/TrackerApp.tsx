@@ -72,10 +72,15 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     } catch (e) { setFout(bericht(e)); }
   };
 
-  const voegToe = async (payload: Record<string, unknown>) => {
+  const voegToe = async (payload: Record<string, unknown>, alsFavoriet = false) => {
     setBezig(true); setFout("");
     try {
       setDag(await trackerApi.addRegel(datum, payload));
+      // Het bewaren als favoriet mag de regel zelf niet in de weg zitten:
+      // die staat al in het logboek, ook als dit misgaat.
+      if (alsFavoriet) {
+        await trackerApi.bewaarFavoriet(payload).catch(() => {});
+      }
       ga(`/tracker?datum=${datum}`);
     } catch (e) {
       setFout(bericht(e));
@@ -127,7 +132,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
 
             {pagina === "toevoegen" && (
               <Toevoegen
-                maaltijd={maaltijd} datum={datum} datumLabel={toonDatum(datum, vandaag)}
+                maaltijd={maaltijd} datumLabel={toonDatum(datum, vandaag)}
                 bezig={bezig} fout={fout} schaal={schaal} onOpslaan={voegToe}
               />
             )}

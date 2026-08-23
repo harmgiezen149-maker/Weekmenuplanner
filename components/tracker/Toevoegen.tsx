@@ -1,221 +1,148 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { Check, Loader2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Keyboard, ScanLine, Search, Zap } from "lucide-react";
 import { T } from "./stijl";
-import { naarGram, rawPoints, toonPunten, effectiveSugar } from "@/lib/tracker/points";
-import { nl } from "@/lib/tracker/datum";
-import {
-  CATEGORIEEN, CATEGORIE_LABEL, MAALTIJDEN_TRACKER, MAALTIJD_LABEL,
-} from "@/lib/tracker/types";
-import type { Category, Maaltijd, Nutrients } from "@/lib/tracker/types";
+import Snel from "./Snel";
+import Zoeken from "./Zoeken";
+import Scanner from "./Scanner";
+import Handmatig from "./Handmatig";
+import Portiekiezer, { naarPer100 } from "./Portiekiezer";
+import { trackerApi } from "./api";
+import type { FoodTemplate, Maaltijd, Product } from "@/lib/tracker/types";
 
-const EENHEDEN = ["g", "ml", "stuk", "portie"];
+type Modus = "snel" | "zoeken" | "scannen" | "handmatig";
 
-// Etiketten staan per 100 g, maar een enkel koekje of een kant-en-klare portie
-// staat er als geheel op. Beide invoerwijzen leiden tot dezelfde absolute
-// voedingswaarden voor de gelogde hoeveelheid.
-type Basis = "per100" | "totaal";
+const MODI: { id: Modus; label: string; icon: typeof Zap }[] = [
+  { id: "snel", label: "Snel", icon: Zap },
+  { id: "zoeken", label: "Zoeken", icon: Search },
+  { id: "scannen", label: "Scannen", icon: ScanLine },
+  { id: "handmatig", label: "Handmatig", icon: Keyboard },
+];
 
-const LEEG = {
-  kcal: "", protein_g: "", fat_g: "", satfat_g: "",
-  carbs_g: "", sugar_g: "", added_sugar_g: "", fiber_g: "",
-};
-type Velden = typeof LEEG;
-
+/**
+ * Keuzescherm voor het toevoegen van een regel. De vier routes komen allemaal
+ * uit op dezelfde opslagfunctie; alleen de weg ernaartoe verschilt.
+ */
 export default function Toevoegen({
-  maaltijd, datum, datumLabel, bezig, fout, onOpslaan, schaal,
+  maaltijd, datumLabel, schaal, bezig, fout, onOpslaan,
 }: {
   maaltijd: Maaltijd;
-  datum: string;
   datumLabel: string;
+  schaal: number;
   bezig: boolean;
   fout: string;
-  schaal: number;
-  onOpslaan: (payload: Record<string, unknown>) => void;
+  onOpslaan: (payload: Record<string, unknown>, alsFavoriet: boolean) => void;
 }) {
-  const [naam, setNaam] = useState("");
-  const [merk, setMerk] = useState("");
+  const [modus, setModus] = useState<Modus>("snel");
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
-  const [hoev, setHoev] = useState("100");
-  const [eenheid, setEenheid] = useState("g");
-  const [basis, setBasis] = useState<Basis>("per100");
-  const [categorie, setCategorie] = useState<Category>("default");
-  const [v, setV] = useState<Velden>(LEEG);
+  const [gekozen, setGekozen] = useState<Product | null>(null);
+  const [voorvulling, setVoorvulling] = useState<{ naam?: string; barcode?: string }>();
 
-  const stukEenheid = eenheid === "stuk" || eenheid === "portie";
-  // Bij stuks is "per 100 g" betekenisloos; dan telt altijd het totaal.
-  const echteBasis: Basis = stukEenheid ? "totaal" : basis;
-  // Bij precies 100 g of ml komen beide keuzes op hetzelfde neer; de knoppen
-  // dan tonen levert alleen verwarring op.
-  const keuzeDoetErToe = !stukEenheid && Math.abs(getal(hoev) - 100) > 0.001;
+  const [favorieten, setFavorieten] = useState<FoodTemplate[]>([]);
+  const [recent, setRecent] = useState<FoodTemplate[]>([]);
+  const [scanFout, setScanFout] = useState("");
 
-  const grams = naarGram(getal(hoev), eenheid);
+  useEffect(() => { setMaal(maaltijd); }, [maaltijd]);
 
-  const nutrients: Nutrients = useMemo(() => {
-    const factor = echteBasis === "per100" ? grams / 100 : 1;
-    const toegevoegd = v.added_sugar_g.trim();
-    return {
-      kcal: getal(v.kcal) * factor,
-      protein_g: getal(v.protein_g) * factor,
-      fat_g: getal(v.fat_g) * factor,
-      satfat_g: getal(v.satfat_g) * factor,
-      carbs_g: getal(v.carbs_g) * factor,
-      sugar_g: getal(v.sugar_g) * factor,
-      fiber_g: getal(v.fiber_g) * factor,
-      ...(toegevoegd === "" ? {} : { added_sugar_g: getal(toegevoegd) * factor }),
-      category: categorie,
-    };
-  }, [v, echteBasis, grams, categorie]);
+  useEffect(() => {
+    trackerApi.getSnel()
+      .then((d) => { setFavorieten(d.favorieten); setRecent(d.recent); })
+      .catch(() => { /* lege lijsten zijn hier een prima uitkomst */ });
+  }, []);
 
-  const raw = rawPoints(nutrients, grams);
-  const punten = toonPunten(raw, schaal);
-  const suiker = effectiveSugar(nutrients, grams);
-  const suikerGecorrigeerd = nutrients.sugar_g > 0 && suiker < nutrients.sugar_g - 0.05;
+  const kies = (p: Product) => { setGekozen(p); setScanFout(""); };
 
-  const zet = (k: keyof Velden) => (e: React.ChangeEvent<HTMLInputElement>) =>
-    setV((s) => ({ ...s, [k]: e.target.value }));
+  const naarHandmatig = (barcode?: string) => {
+    setVoorvulling(barcode ? { barcode } : undefined);
+    setModus("handmatig");
+  };
 
-  const kanOpslaan = naam.trim().length > 0 && grams > 0 && !bezig;
-
-  const opslaan = () => {
-    if (!kanOpslaan) return;
+  // Een sjabloon uit favorieten of recent: meteen loggen met de bewaarde
+  // hoeveelheid. Dat is het hele punt van deze lijst.
+  const logSjabloon = (t: FoodTemplate) => {
     onOpslaan({
-      name: naam.trim(),
-      brand: merk.trim() || undefined,
-      meal: maal,
-      amount: getal(hoev),
-      unit: eenheid,
-      grams,
-      nutrients,
+      name: t.name, brand: t.brand, meal: maal, source: t.source || "favorite",
+      amount: t.amount, unit: t.unit, grams: t.grams,
+      nutrients: t.nutrients, ref: t.ref,
+    }, false);
+  };
+
+  // Wel hetzelfde product, maar een andere hoeveelheid.
+  const pasSjabloonAan = (t: FoodTemplate) => {
+    setGekozen({
+      id: t.id,
+      name: t.name,
+      ...(t.brand ? { brand: t.brand } : {}),
+      bron: "bewaard",
+      eenheid: t.unit === "ml" ? "ml" : "g",
+      per100: naarPer100(t.nutrients, t.grams),
+      portie: { grams: t.grams, label: "vorige keer" },
+      ...(t.ref ? { barcode: t.ref } : {}),
     });
   };
 
+  const zoekBarcode = async (code: string) => {
+    setScanFout("");
+    try {
+      const d = await trackerApi.barcode(code);
+      if (d.gevonden && d.product) { setGekozen(d.product); return; }
+      // Onbekende code: handmatig invullen met de code alvast ingevuld.
+      setVoorvulling({ barcode: code });
+      setModus("handmatig");
+    } catch {
+      setScanFout("Opzoeken mislukt. Probeer opnieuw of vul het product handmatig in.");
+    }
+  };
+
+  const wisFavoriet = async (id: string) => {
+    try { setFavorieten(await trackerApi.wisFavoriet(id)); } catch { /* stil */ }
+  };
+
+  if (gekozen) {
+    return (
+      <Portiekiezer
+        product={gekozen} maaltijd={maal} datumLabel={datumLabel} schaal={schaal}
+        bezig={bezig} fout={fout}
+        onOpslaan={onOpslaan}
+        onTerug={() => setGekozen(null)}
+      />
+    );
+  }
+
   return (
     <>
-      {fout && <div style={T.fout}>{fout}</div>}
-
-      <div style={T.live} role="status" aria-live="polite">
-        <span style={T.liveGetal}>{punten}</span>
-        <span style={T.liveTekst}>
-          {punten === 1 ? "punt" : "punten"} voor deze portie<br />
-          {datumLabel.toLowerCase()} · {MAALTIJD_LABEL[maal].toLowerCase()}
-        </span>
+      <div style={T.modusRij} role="tablist" aria-label="Manier van toevoegen">
+        {MODI.map((m) => (
+          <button key={m.id} role="tab" aria-selected={modus === m.id}
+            onClick={() => { setModus(m.id); setVoorvulling(undefined); }}
+            style={{ ...T.modusKnop, ...(modus === m.id ? T.modusKnopAan : {}) }}>
+            <m.icon size={18} />
+            {m.label}
+          </button>
+        ))}
       </div>
 
-      <div style={T.veldVak}>
-        <label style={T.label} htmlFor="tr-naam">Wat heb je gegeten?</label>
-        <input id="tr-naam" style={T.veld} value={naam} onChange={(e) => setNaam(e.target.value)}
-          placeholder="Bijvoorbeeld: volkoren boterham met kaas" autoFocus />
-      </div>
+      {scanFout && <div style={T.fout}>{scanFout}</div>}
 
-      <div style={T.veldVak}>
-        <label style={T.label} htmlFor="tr-merk">Merk (optioneel)</label>
-        <input id="tr-merk" style={T.veld} value={merk} onChange={(e) => setMerk(e.target.value)} />
-      </div>
-
-      <div style={T.veldVak}>
-        <span style={T.label}>Maaltijd</span>
-        <div style={T.chips}>
-          {MAALTIJDEN_TRACKER.map((m) => (
-            <button key={m} type="button" onClick={() => setMaal(m)}
-              style={{ ...T.chip, ...(maal === m ? T.chipAan : {}) }}>
-              {MAALTIJD_LABEL[m]}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={T.veldRij}>
-        <div style={{ flex: 1 }}>
-          <label style={T.label} htmlFor="tr-hoev">Hoeveelheid</label>
-          <input id="tr-hoev" style={T.veld} value={hoev} onChange={(e) => setHoev(e.target.value)}
-            inputMode="decimal" />
-        </div>
-        <div style={{ flex: 1 }}>
-          <label style={T.label} htmlFor="tr-eenheid">Eenheid</label>
-          <select id="tr-eenheid" style={T.veld} value={eenheid} onChange={(e) => setEenheid(e.target.value)}>
-            {EENHEDEN.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
-        </div>
-      </div>
-
-      <h2 style={T.sectieKop}>Voedingswaarde</h2>
-
-      {keuzeDoetErToe && (
-        <div style={{ ...T.veldVak, marginBottom: 14 }}>
-          <div style={T.chips}>
-            <button type="button" onClick={() => setBasis("per100")}
-              style={{ ...T.chip, ...(basis === "per100" ? T.chipAan : {}) }}>
-              Per 100 {eenheid}
-            </button>
-            <button type="button" onClick={() => setBasis("totaal")}
-              style={{ ...T.chip, ...(basis === "totaal" ? T.chipAan : {}) }}>
-              Totaal voor {hoev || 0} {eenheid}
-            </button>
-          </div>
-          <p style={T.hint}>
-            Op de verpakking staan de waarden meestal per 100 {eenheid}. Neem ze dan zo over;
-            de app rekent naar jouw portie om.
-          </p>
-        </div>
+      {modus === "snel" && (
+        <Snel
+          favorieten={favorieten} recent={recent} maaltijd={maal} onMaaltijd={setMaal}
+          schaal={schaal} onLog={logSjabloon} onAanpassen={pasSjabloonAan}
+          onWisFavoriet={wisFavoriet}
+        />
       )}
 
-      <div style={T.veldRij}>
-        <Getal id="kcal" label="Calorieën (kcal)" waarde={v.kcal} onChange={zet("kcal")} />
-        <Getal id="protein" label="Eiwit (g)" waarde={v.protein_g} onChange={zet("protein_g")} />
-      </div>
-      <div style={T.veldRij}>
-        <Getal id="fat" label="Vet (g)" waarde={v.fat_g} onChange={zet("fat_g")} />
-        <Getal id="satfat" label="Waarvan verzadigd (g)" waarde={v.satfat_g} onChange={zet("satfat_g")} />
-      </div>
-      <div style={T.veldRij}>
-        <Getal id="carbs" label="Koolhydraten (g)" waarde={v.carbs_g} onChange={zet("carbs_g")} />
-        <Getal id="sugar" label="Waarvan suikers (g)" waarde={v.sugar_g} onChange={zet("sugar_g")} />
-      </div>
-      <div style={T.veldRij}>
-        <Getal id="fiber" label="Vezels (g)" waarde={v.fiber_g} onChange={zet("fiber_g")} />
-        <Getal id="added" label="Toegevoegde suiker (g)" waarde={v.added_sugar_g} onChange={zet("added_sugar_g")} />
-      </div>
+      {modus === "zoeken" && <Zoeken schaal={schaal} onKies={kies} />}
 
-      <div style={T.veldVak}>
-        <label style={T.label} htmlFor="tr-cat">Soort product</label>
-        <select id="tr-cat" style={T.veld} value={categorie}
-          onChange={(e) => setCategorie(e.target.value as Category)}>
-          {CATEGORIEEN.map((c) => <option key={c} value={c}>{CATEGORIE_LABEL[c]}</option>)}
-        </select>
-        <p style={T.hint}>
-          Etiketten tellen lactose en fruitsuiker mee bij de suikers. Kies je hier de juiste
-          soort, dan telt alleen toegevoegde suiker mee in de punten.
-          {suikerGecorrigeerd && (
-            <>
-              {" "}Nu wordt er gerekend met {nl(suiker)} g in plaats van {nl(nutrients.sugar_g)} g.
-            </>
-          )}
-        </p>
-      </div>
+      {modus === "scannen" && <Scanner onCode={zoekBarcode} onHandmatig={naarHandmatig} />}
 
-      <button style={{ ...T.primair, opacity: kanOpslaan ? 1 : 0.5 }} onClick={opslaan} disabled={!kanOpslaan}>
-        {bezig ? <><Loader2 size={16} className="spin" /> Opslaan...</> : <><Check size={16} /> Toevoegen aan {datumLabel.toLowerCase()}</>}
-      </button>
+      {modus === "handmatig" && (
+        <Handmatig
+          maaltijd={maal} datumLabel={datumLabel} bezig={bezig} fout={fout}
+          schaal={schaal} voorvulling={voorvulling} onOpslaan={onOpslaan}
+        />
+      )}
     </>
   );
-}
-
-function Getal({ id, label, waarde, onChange }: {
-  id: string; label: string; waarde: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}) {
-  return (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <label style={T.label} htmlFor={`tr-${id}`}>{label}</label>
-      <input id={`tr-${id}`} style={T.veld} value={waarde} onChange={onChange}
-        inputMode="decimal" placeholder="0" />
-    </div>
-  );
-}
-
-function getal(s: string): number {
-  const n = Number(String(s).replace(",", "."));
-  return Number.isFinite(n) && n >= 0 ? n : 0;
 }

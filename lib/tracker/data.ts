@@ -1,7 +1,7 @@
 import { redis } from "../redis";
-import type { Day, Entry, Profile } from "./types";
+import type { Day, Entry, FoodTemplate, Product, Profile } from "./types";
 import {
-  STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT,
+  STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT, RECENT_MAX,
 } from "./types";
 import { berekenBudget, eiwitDoelGram } from "./budget";
 import { berekenTotalen } from "./points";
@@ -16,14 +16,25 @@ export { datumSleutel, geldigeDatum };
 //   wl:profile          -> JSON van het profiel
 //   wl:day:<YYYY-MM-DD> -> JSON van één dag (regels + totalen)
 //   wl:day:index        -> sorted set met gelogde datums, score = epoch
+//   wl:favorites        -> JSON-lijst met bewaarde sjablonen
+//   wl:recent           -> JSON-lijst met de laatst gelogde items
+//   wl:food:<barcode>   -> gecachet product uit Open Food Facts, 90 dagen
 //
-// De volgende fases voegen hier wl:week:*, wl:weight:*, wl:favorites,
-// wl:recent, wl:food:* en wl:recipe:points:* aan toe.
+// De volgende fases voegen hier wl:week:*, wl:weight:* en
+// wl:recipe:points:* aan toe.
 // ---------------------------------------------------------------------------
 
 const PROFILE_KEY = "wl:profile";
 const DAY = (datum: string) => `wl:day:${datum}`;
 const DAY_INDEX = "wl:day:index";
+const FAVORITES_KEY = "wl:favorites";
+const RECENT_KEY = "wl:recent";
+const FOOD = (barcode: string) => `wl:food:${barcode}`;
+
+// Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
+// een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
+// gewijzigd recept van de fabrikant een keer doorkomt.
+const FOOD_TTL_SECONDEN = 90 * 24 * 60 * 60;
 
 export function nieuwId(): string {
   return "w" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
@@ -151,4 +162,75 @@ export async function gelogdeDatums(vanaf: string, tot: string): Promise<string[
   const t = Date.parse(tot + "T00:00:00Z");
   const leden = await redis.zrange<string[]>(DAY_INDEX, van, t, { byScore: true });
   return leden ?? [];
+}
+
+// -- favorieten --------------------------------------------------------------
+
+export async function getFavorieten(): Promise<FoodTemplate[]> {
+  return (await redis.get<FoodTemplate[]>(FAVORITES_KEY)) ?? [];
+}
+
+export async function addFavoriet(f: FoodTemplate): Promise<FoodTemplate[]> {
+  const lijst = await getFavorieten();
+  // Hetzelfde product twee keer bewaren heeft geen zin: naam plus merk telt
+  // als dezelfde favoriet en wordt overschreven.
+  const zonderDubbel = lijst.filter((x) => !zelfdeProduct(x, f));
+  const nieuw = [f, ...zonderDubbel];
+  await redis.set(FAVORITES_KEY, nieuw);
+  return nieuw;
+}
+
+export async function deleteFavoriet(id: string): Promise<FoodTemplate[]> {
+  const nieuw = (await getFavorieten()).filter((f) => f.id !== id);
+  await redis.set(FAVORITES_KEY, nieuw);
+  return nieuw;
+}
+
+function zelfdeProduct(a: FoodTemplate, b: FoodTemplate): boolean {
+  const sleutel = (t: FoodTemplate) =>
+    `${t.name.trim().toLowerCase()}|${(t.brand ?? "").trim().toLowerCase()}`;
+  return sleutel(a) === sleutel(b);
+}
+
+// -- recent ------------------------------------------------------------------
+
+export async function getRecent(): Promise<FoodTemplate[]> {
+  return (await redis.get<FoodTemplate[]>(RECENT_KEY)) ?? [];
+}
+
+/**
+ * Zet een gelogd item bovenaan de recente lijst. Een item dat je vaker logt
+ * schuift dus vanzelf naar boven in plaats van de lijst vol te zetten.
+ */
+export async function noteerRecent(f: FoodTemplate): Promise<void> {
+  const lijst = await getRecent();
+  const nieuw = [f, ...lijst.filter((x) => !zelfdeProduct(x, f))].slice(0, RECENT_MAX);
+  await redis.set(RECENT_KEY, nieuw);
+}
+
+/** Maakt van een gelogde regel een herbruikbaar sjabloon. */
+export function entryNaarTemplate(e: Entry): FoodTemplate {
+  return {
+    id: nieuwId(),
+    name: e.name,
+    ...(e.brand ? { brand: e.brand } : {}),
+    source: e.source,
+    amount: e.amount,
+    unit: e.unit,
+    grams: e.grams,
+    nutrients: e.nutrients,
+    points_raw: e.points_raw,
+    ...(e.ref ? { ref: e.ref } : {}),
+    last_used: Date.now(),
+  };
+}
+
+// -- productcache ------------------------------------------------------------
+
+export async function getGecachetProduct(barcode: string): Promise<Product | null> {
+  return (await redis.get<Product>(FOOD(barcode))) ?? null;
+}
+
+export async function cacheProduct(barcode: string, p: Product): Promise<void> {
+  await redis.set(FOOD(barcode), p, { ex: FOOD_TTL_SECONDEN });
 }

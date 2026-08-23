@@ -183,8 +183,52 @@ budget op onderhoud.
 | Route | Wat je er doet |
 |---|---|
 | `/tracker` | Dagoverzicht: puntenring, eiwitbalk, macro's en je regels per maaltijd |
-| `/tracker/toevoegen` | Handmatig een product loggen, met punten die live meerekenen |
+| `/tracker/toevoegen` | Een product loggen: snel, zoeken, scannen of handmatig |
 | `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
+
+### Vier manieren om iets te loggen
+
+**Snel** — je favorieten en de laatste 50 dingen die je gelogd hebt. Eén tik
+logt het opnieuw bij de gekozen maaltijd; het potlood erachter opent hetzelfde
+product met een andere hoeveelheid. In de praktijk de snelste route.
+
+**Zoeken** — doorzoekt twee bronnen tegelijk. Eerst een eigen basislijst met
+onbewerkte Nederlandse producten (ei, rijst, kipfilet, groente), want daar is
+Open Food Facts zwak in. Daarna Open Food Facts zelf, gefilterd op Nederland.
+Resultaten tonen de punten per 100 g én per standaardportie. Is de externe
+database onbereikbaar, dan komen de eigen resultaten alsnog door met een
+melding erbij.
+
+**Scannen** — de streepjescode met de camera. Waar de browser `BarcodeDetector`
+heeft (Chrome op Android) wordt die gebruikt; Safari op iOS heeft hem niet, daar
+wordt `@zxing/browser` pas op dat moment bijgeladen. Werkt de camera niet, dan
+kun je de code overtikken. Kent de database de code niet, dan opent het
+handmatige formulier met de code al ingevuld.
+
+**Handmatig** — de zeven voedingswaarden van het etiket, met punten die
+meerekenen terwijl je typt. Etiketwaarden staan per 100 g; kies je een andere
+hoeveelheid, dan rekent de app het om.
+
+Bij alle vier kun je het resultaat als favoriet bewaren, zodat het de volgende
+keer bovenaan bij **Snel** staat.
+
+### De eigen basislijst aanvullen
+
+`lib/tracker/basisproducten.ts` bevat een kleine vijftig Nederlandse
+basisproducten met hun waarden per 100 g of ml. Eén regel erbij is genoeg — de
+zoekfunctie pikt hem vanzelf op:
+
+```ts
+{ id: "rode-kool", naam: "Rode kool", ook: ["kool"], categorie: "vegetable",
+  w: [31, 1.4, 0.2, 0.0, 7.0, 3.8, 2.1], portie: { grams: 150, label: "1 portie" } },
+```
+
+De volgorde in `w` is: calorieën, eiwit, vet, verzadigd vet, koolhydraten,
+suiker, vezels. Een test controleert dat suiker nooit boven de koolhydraten
+uitkomt, verzadigd vet nooit boven het totale vet, en dat de calorieën ruwweg
+kloppen met de macro's — tikfouten vallen daardoor meteen om.
+
+Een volledige NEVO-dataset zit er bewust niet in; die mag je zelf aanleveren.
 
 ### Opslag
 
@@ -195,6 +239,10 @@ kookboek-keys:
 - `wl:day:<YYYY-MM-DD>` — één dag: alle regels plus de opgetelde totalen.
 - `wl:day:index` — sorted set met de dagen waarop iets gelogd is. Lege dagen staan
   er niet in, zodat ze straks buiten de weekgemiddelden vallen.
+- `wl:favorites` — je bewaarde favorieten.
+- `wl:recent` — de laatste 50 gelogde items, voor snelle herinvoer.
+- `wl:food:<barcode>` — gescande producten uit Open Food Facts, 90 dagen
+  houdbaar. Hierdoor werkt een barcode die je vaker scant ook zonder netwerk.
 
 ### Tests
 
@@ -212,11 +260,10 @@ de onafgeronde waarden wordt gerekend.
 
 ### Wat er nog niet in zit
 
-Deze eerste versie is bewust zelfstandig bruikbaar, maar nog niet compleet.
-Gepland, in deze volgorde: favorieten en recent gelogde items, zoeken in Open
-Food Facts en barcode scannen; daarna weeglog met trendlijn, weekbuffer en
-weekoverzicht; daarna punten per portie voor recepten uit het kookboek; en tot
-slot bewegingspunten, foto-schatting en het delen van links vanuit de browser.
+Gepland, in deze volgorde: weeglog met trendlijn, weekbuffer, herberekening van
+het budget en een weekoverzicht; daarna punten per portie voor recepten uit het
+kookboek en een dagmenu dat met één klik in het logboek belandt; en tot slot
+bewegingspunten, foto-schatting en het delen van links vanuit de browser.
 
 ---
 
@@ -245,15 +292,23 @@ app/
     recipes/[id]/route.ts   PUT / DELETE per recept
     week/route.ts           GET / PUT weekplanning
     import/route.ts         Foto- en link-import via Anthropic API
-    tracker/profiel/route.ts     GET / PUT profiel + berekend budget
-    tracker/dag/[datum]/route.ts GET dag, POST / PATCH / DELETE een regel
+    tracker/profiel/route.ts      GET / PUT profiel + berekend budget
+    tracker/dag/[datum]/route.ts  GET dag, POST / PATCH / DELETE een regel
+    tracker/zoeken/route.ts       Zoeken in basislijst + Open Food Facts
+    tracker/barcode/[code]/route.ts  Streepjescode opzoeken, met cache
+    tracker/favorieten/route.ts   Favorieten en recent gelogde items
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   tracker/
     TrackerApp.tsx      Shell van de tracker: navigatie, laden, opslaan
     Dagoverzicht.tsx    Puntenring, eiwitbalk, regels per maaltijd
-    Toevoegen.tsx       Handmatige invoer met live punten
+    Toevoegen.tsx       Keuze tussen snel, zoeken, scannen en handmatig
+    Snel.tsx            Favorieten en recent gelogde items
+    Zoeken.tsx          Zoeken met punten per 100 g en per portie
+    Scanner.tsx         Barcode scannen, met terugval voor iOS
+    Handmatig.tsx       Handmatige invoer met live punten
+    Portiekiezer.tsx    Hoeveelheid en maaltijd kiezen bij een product
     Instellingen.tsx    Profiel met live budgetberekening
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
@@ -266,6 +321,8 @@ lib/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule
     budget.ts           Basaal metabolisme, tempo en dagbudget
+    off.ts              Open Food Facts: omzetting naar ons formaat
+    basisproducten.ts   Eigen lijst met NL-basisproducten
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)
