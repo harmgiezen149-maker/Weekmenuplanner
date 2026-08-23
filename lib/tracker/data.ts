@@ -4,6 +4,7 @@ import {
   STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT, RECENT_MAX,
 } from "./types";
 import { berekenBudget, eiwitDoelGram } from "./budget";
+import type { Weging } from "./gewicht";
 import { berekenTotalen } from "./points";
 import { datumSleutel, geldigeDatum } from "./datum";
 
@@ -30,6 +31,8 @@ const DAY_INDEX = "wl:day:index";
 const FAVORITES_KEY = "wl:favorites";
 const RECENT_KEY = "wl:recent";
 const FOOD = (barcode: string) => `wl:food:${barcode}`;
+const WEIGHT_LOG = "wl:weight:log";
+const WEIGHT = (datum: string) => `wl:weight:${datum}`;
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -233,4 +236,113 @@ export async function getGecachetProduct(barcode: string): Promise<Product | nul
 
 export async function cacheProduct(barcode: string, p: Product): Promise<void> {
   await redis.set(FOOD(barcode), p, { ex: FOOD_TTL_SECONDEN });
+}
+
+// -- dagen in bulk -----------------------------------------------------------
+
+/**
+ * Haalt meerdere dagen in één keer op. Datums zonder logboek komen niet terug;
+ * de aanroeper vult die zelf aan als lege dag.
+ */
+export async function getDays(datums: string[]): Promise<Day[]> {
+  if (datums.length === 0) return [];
+  const rauw = await redis.mget<(Day | null)[]>(...datums.map(DAY));
+  const uit: Day[] = [];
+  (rauw ?? []).forEach((d, i) => {
+    if (!d) return;
+    const entries = Array.isArray(d.entries) ? d.entries : [];
+    uit.push({
+      date: datums[i],
+      entries,
+      activity: Array.isArray(d.activity) ? d.activity : [],
+      totals: berekenTotalen(entries),
+      buffer_used: Number(d.buffer_used) || 0,
+    });
+  });
+  return uit;
+}
+
+// -- wegingen ----------------------------------------------------------------
+
+/** Kilo's op één decimaal; de sleutel in de sorted set moet stabiel zijn. */
+function kiloTekst(kg: number): string {
+  return kg.toFixed(1);
+}
+
+export async function getWegingen(): Promise<Weging[]> {
+  const leden = (await redis.zrange<string[]>(WEIGHT_LOG, 0, -1)) ?? [];
+  const wegingen: Weging[] = [];
+  for (const lid of leden) {
+    const scheiding = lid.lastIndexOf(":");
+    if (scheiding < 0) continue;
+    const datum = lid.slice(0, scheiding);
+    const kg = Number(lid.slice(scheiding + 1));
+    if (!geldigeDatum(datum) || !Number.isFinite(kg) || kg <= 0) continue;
+    wegingen.push({ date: datum, kg });
+  }
+  return wegingen.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Slaat een weging op. Was er op dezelfde dag al gewogen, dan vervangt deze
+ * die: één weging per dag houdt de trendlijn eerlijk.
+ */
+export async function saveWeging(datum: string, kg: number, note?: string): Promise<Weging[]> {
+  const bestaand = await getWegingen();
+  const oud = bestaand.find((w) => w.date === datum);
+  if (oud) await redis.zrem(WEIGHT_LOG, `${datum}:${kiloTekst(oud.kg)}`);
+
+  await redis.zadd(WEIGHT_LOG, {
+    score: Date.parse(datum + "T00:00:00Z"),
+    member: `${datum}:${kiloTekst(kg)}`,
+  });
+  await redis.set(WEIGHT(datum), { kg, ...(note ? { note } : {}) });
+
+  return getWegingen();
+}
+
+export async function deleteWeging(datum: string): Promise<Weging[]> {
+  const bestaand = await getWegingen();
+  const oud = bestaand.find((w) => w.date === datum);
+  if (oud) await redis.zrem(WEIGHT_LOG, `${datum}:${kiloTekst(oud.kg)}`);
+  await redis.del(WEIGHT(datum));
+  return getWegingen();
+}
+
+export async function getWegingNotitie(datum: string): Promise<string | undefined> {
+  const w = await redis.get<{ kg: number; note?: string }>(WEIGHT(datum));
+  return w?.note;
+}
+
+/**
+ * Zet het gewicht in het profiel bij en herberekent het dagbudget wanneer dat
+ * meer dan een kilo scheelt met het gewicht waar het huidige budget op rust.
+ *
+ * Er wordt op de trend gestuurd, niet op de losse meting: een vochtdag van
+ * anderhalve kilo hoort je budget niet te verzetten. Dat is precies waar de
+ * trendlijn voor is.
+ */
+export async function verwerkWeging(trendKg: number): Promise<{
+  profiel: Profile | null;
+  herberekend: boolean;
+}> {
+  const huidig = await getProfile();
+  if (!huidig) return { profiel: null, herberekend: false };
+
+  const herberekend = Math.abs(trendKg - huidig.budget_basis_weight_kg) > 1;
+  const bijgewerkt: Profile = { ...huidig, current_weight_kg: trendKg };
+
+  if (!herberekend) {
+    await redis.set(PROFILE_KEY, bijgewerkt);
+    return { profiel: bijgewerkt, herberekend: false };
+  }
+
+  const budget = berekenBudget(bijgewerkt);
+  const nieuw: Profile = {
+    ...bijgewerkt,
+    daily_budget: budget.dagbudgetPunten,
+    budget_basis_weight_kg: trendKg,
+  };
+  await redis.set(PROFILE_KEY, nieuw);
+  return { profiel: nieuw, herberekend: true };
 }

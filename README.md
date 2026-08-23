@@ -184,6 +184,8 @@ budget op onderhoud.
 |---|---|
 | `/tracker` | Dagoverzicht: puntenring, eiwitbalk, macro's en je regels per maaltijd |
 | `/tracker/toevoegen` | Een product loggen: snel, zoeken, scannen of handmatig |
+| `/tracker/week` | Punten per dag tegen je budget, weekbuffer, gemiddelde, voedingsstoffen |
+| `/tracker/gewicht` | Wegen, trendlijn en voortgang naar je streefgewicht |
 | `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
 
 ### Vier manieren om iets te loggen
@@ -211,6 +213,38 @@ hoeveelheid, dan rekent de app het om.
 
 Bij alle vier kun je het resultaat als favoriet bewaren, zodat het de volgende
 keer bovenaan bij **Snel** staat.
+
+### Wegen en de trendlijn
+
+Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Eén
+getal is genoeg. Weeg je twee keer op dezelfde dag, dan vervangt de nieuwe
+meting de oude.
+
+De grafiek toont je losse metingen als terugtredende punten en de **trendlijn**
+als hoofdfiguur: een exponentieel voortschrijdend gemiddelde met een wegingsfactor
+van 0,25. Een kilo verschil van dag tot dag is vocht, geen vet — de trend haalt
+dat eruit. Een uitschieter van anderhalve kilo verschuift de trend maar een paar
+honderd gram.
+
+**De app stuurt op de trend, niet op je laatste meting.** Wijkt het trendgewicht
+meer dan een kilo af van het gewicht waarop je huidige budget rust, dan wordt het
+budget herberekend en zie je dat op het weegscherm terug. Zonder die dempingsstap
+zou een dag met vocht vasthouden je budget omhoog gooien.
+
+### De weekbuffer
+
+Naast je dagbudget is er een vaste buffer van 28 punten per week. Ga je op een dag
+over je dagbudget heen, dan komt het verschil uit die buffer; je dagbudget zelf
+gaat nooit negatief, elke dag begint weer op nul. Een dag ver ónder je budget
+levert niets terug — de buffer vult niet aan.
+
+De week loopt van weegdag tot weegdag, niet van maandag tot zondag: op de weegdag
+reset de buffer, dus daar hoort ook de week te beginnen. Op het dagoverzicht zie
+je wat er nog over is en hoeveel dagen de week nog telt.
+
+Dagen zonder logging tellen niet mee in het weekgemiddelde. Een dag die je vergat
+bij te houden was geen dag van nul punten, dus het gemiddelde deelt door het
+aantal gelogde dagen — dat aantal staat erbij, zodat je het kunt wegen.
 
 ### De eigen basislijst aanvullen
 
@@ -243,6 +277,16 @@ kookboek-keys:
 - `wl:recent` — de laatste 50 gelogde items, voor snelle herinvoer.
 - `wl:food:<barcode>` — gescande producten uit Open Food Facts, 90 dagen
   houdbaar. Hierdoor werkt een barcode die je vaker scant ook zonder netwerk.
+- `wl:weight:log` — sorted set met al je wegingen.
+- `wl:weight:<datum>` — een losse weging met eventuele notitie.
+
+Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
+
+- Het **bufferverbruik** volgt uit de dagen zelf, niet uit een aparte weekkey.
+  Zo kan het nooit uit de pas gaan lopen met je logboek.
+- De **trendwaarde** hangt van de hele reeks wegingen af. Corrigeer je een oude
+  weging, dan kloppen alle latere waarden meteen weer; een opgeslagen trend zou
+  stil verouderen.
 
 ### Tests
 
@@ -258,12 +302,24 @@ testset legt onder meer vast dat kipfilet 1 punt is, broccoli 0 en een koekje 6,
 dat het budget nooit onder het basaal metabolisme zakt, en dat het dagtotaal op
 de onafgeronde waarden wordt gerekend.
 
+### Over de grafieken
+
+De twee grafieken zijn met de hand geschreven SVG, zonder grafiekbibliotheek.
+Twee keuzes zijn bewust:
+
+- **"Over budget" heeft een eigen, donkerder tint** (`--over`). De lichtere
+  `--gold` haalde op een witte kaart maar 2:1 contrast, te weinig voor precies
+  de balk die je moet opvallen. De gekozen tint haalt ruim 3:1 en blijft ook
+  voor kleurenblinde lezers goed van het accent te onderscheiden.
+- **Verschil zit nooit alleen in kleur.** In de trendgrafiek verschillen de twee
+  reeksen ook van vorm (punten tegen lijn); in het staafdiagram staat bij een dag
+  boven budget het getal erbij.
+
 ### Wat er nog niet in zit
 
-Gepland, in deze volgorde: weeglog met trendlijn, weekbuffer, herberekening van
-het budget en een weekoverzicht; daarna punten per portie voor recepten uit het
-kookboek en een dagmenu dat met één klik in het logboek belandt; en tot slot
-bewegingspunten, foto-schatting en het delen van links vanuit de browser.
+Gepland, in deze volgorde: punten per portie voor recepten uit het kookboek en
+een dagmenu dat met één klik in het logboek belandt; daarna bewegingspunten,
+foto-schatting en het delen van links vanuit de browser.
 
 ---
 
@@ -297,6 +353,8 @@ app/
     tracker/zoeken/route.ts       Zoeken in basislijst + Open Food Facts
     tracker/barcode/[code]/route.ts  Streepjescode opzoeken, met cache
     tracker/favorieten/route.ts   Favorieten en recent gelogde items
+    tracker/gewicht/route.ts      Wegingen, trendlijn en voortgang
+    tracker/week/route.ts         Weeksamenvatting en bufferverbruik
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
@@ -309,6 +367,10 @@ components/
     Scanner.tsx         Barcode scannen, met terugval voor iOS
     Handmatig.tsx       Handmatige invoer met live punten
     Portiekiezer.tsx    Hoeveelheid en maaltijd kiezen bij een product
+    Gewicht.tsx         Wegen, trendgewicht en voortgang
+    Trendgrafiek.tsx    Metingen en voortschrijdend gemiddelde (SVG)
+    Weekoverzicht.tsx   Week, buffer, gemiddelde en voedingsstoffen
+    Weekbalken.tsx      Punten per dag tegen de budgetlijn (SVG)
     Instellingen.tsx    Profiel met live budgetberekening
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
@@ -323,6 +385,8 @@ lib/
     budget.ts           Basaal metabolisme, tempo en dagbudget
     off.ts              Open Food Facts: omzetting naar ons formaat
     basisproducten.ts   Eigen lijst met NL-basisproducten
+    gewicht.ts          Trendlijn, voortgang en tempo
+    week.ts             Weekgrenzen, weekbuffer en samenvatting
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

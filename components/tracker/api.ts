@@ -1,5 +1,7 @@
 import type { Day, FoodTemplate, Product, Profile } from "@/lib/tracker/types";
 import type { BudgetResultaat } from "@/lib/tracker/budget";
+import type { WeekSamenvatting } from "@/lib/tracker/week";
+import type { GewichtGegevens } from "./Gewicht";
 
 export interface ProfielAntwoord {
   profiel: Profile | null;
@@ -51,6 +53,21 @@ export const trackerApi = {
   barcode: (code: string) =>
     fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" })
       .then(lees<{ gevonden: boolean; product?: Product; uitCache?: boolean; offline?: boolean }>),
+
+  getGewicht: () =>
+    fetch("/api/tracker/gewicht", { cache: "no-store" }).then(lees<GewichtGegevens>),
+
+  weeg: (kg: number, note?: string) =>
+    fetch("/api/tracker/gewicht", { method: "POST", headers: json, body: JSON.stringify({ kg, note }) })
+      .then(lees<GewichtGegevens & { herberekend: boolean }>),
+
+  wisWeging: (datum: string) =>
+    fetch(`/api/tracker/gewicht?datum=${encodeURIComponent(datum)}`, { method: "DELETE" })
+      .then(lees<GewichtGegevens>),
+
+  getWeek: (datum: string) =>
+    fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })
+      .then(lees<{ week: WeekSamenvatting | null; profiel: Profile | null; dagenTeGaan: number }>),
 
   zoek: (q: string) =>
     fetch(`/api/tracker/zoeken?q=${encodeURIComponent(q)}`, { cache: "no-store" })

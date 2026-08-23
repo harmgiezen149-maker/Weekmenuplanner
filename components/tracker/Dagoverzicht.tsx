@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Settings } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Settings, Scale } from "lucide-react";
 import { T } from "./stijl";
 import Ring from "./Ring";
 import { toonPunten } from "@/lib/tracker/points";
@@ -21,16 +21,21 @@ export function toonDatum(datum: string, vandaag: string): string {
 }
 
 export default function Dagoverzicht({
-  dag, profiel, datum, vandaag, onDatum, onWis, onToevoegen, onInstellingen,
+  dag, profiel, datum, vandaag, buffer, moetWegen,
+  onDatum, onWis, onToevoegen, onInstellingen, onWegen,
 }: {
   dag: Day;
   profiel: Profile | null;
   datum: string;
   vandaag: string;
+  /** Restant van de weekbuffer en het aantal dagen dat de week nog telt. */
+  buffer: { rest: number; totaal: number; dagenTeGaan: number } | null;
+  moetWegen: boolean;
   onDatum: (d: string) => void;
   onWis: (id: string) => void;
   onToevoegen: (m: Maaltijd) => void;
   onInstellingen: () => void;
+  onWegen: () => void;
 }) {
   const schaal = profiel?.points_scale ?? 1;
   const budget = profiel?.daily_budget ?? 0;
@@ -71,6 +76,19 @@ export default function Dagoverzicht({
         </button>
       </div>
 
+      {moetWegen && profiel && (
+        <button style={T.weegPrompt} onClick={onWegen}>
+          <Scale size={20} style={{ flexShrink: 0 }} />
+          <span style={{ textAlign: "left" }}>
+            <span style={T.weegPromptKop}>Het is je weegdag</span>
+            <span style={T.weegPromptSub}>
+              Eén getal is genoeg. Daarna reset de weekbuffer en kijkt de app of je
+              budget nog klopt.
+            </span>
+          </span>
+        </button>
+      )}
+
       {!profiel && (
         <div style={T.melding}>
           <strong style={{ color: "var(--ink)" }}>Nog geen profiel ingevuld.</strong><br />
@@ -93,6 +111,27 @@ export default function Dagoverzicht({
               </div>
             </div>
           </div>
+
+          {buffer && (
+            <div style={T.balkWrap}>
+              <div style={T.balkKop}>
+                <span>Weekbuffer</span>
+                <span style={{ color: buffer.rest < 0 ? "var(--red)" : "var(--sub)" }}>
+                  {buffer.rest < 0
+                    ? `${Math.abs(buffer.rest)} eroverheen`
+                    : `${buffer.rest} van ${buffer.totaal} over`}
+                  {` · nog ${buffer.dagenTeGaan} ${buffer.dagenTeGaan === 1 ? "dag" : "dagen"}`}
+                </span>
+              </div>
+              <div style={T.balkBaan}>
+                <div style={{
+                  ...T.balkVul,
+                  width: `${Math.min(100, buffer.totaal > 0 ? ((buffer.totaal - buffer.rest) / buffer.totaal) * 100 : 0)}%`,
+                  background: buffer.rest < 0 ? "var(--red)" : "var(--over)",
+                }} />
+              </div>
+            </div>
+          )}
 
           {eiwitDoel > 0 && (
             <div style={T.balkWrap}>

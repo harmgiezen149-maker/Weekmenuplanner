@@ -23,3 +23,8 @@ export function verschuifDatum(datum: string, dagen: number): string {
 export function nl(n: number, decimalen = 1): string {
   return n.toLocaleString("nl-NL", { maximumFractionDigits: decimalen });
 }
+
+/** Gewicht in kilo, altijd op één decimaal. Houdt een kolom cijfers rustig. */
+export function nlKg(n: number): string {
+  return n.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}

@@ -7,6 +7,10 @@
   --accent: #4f46e5;
   --accent-soft: #eeedfd;
   --gold: #f0a93a;
+  /* Vlakvulling voor "over budget" in de grafieken. De lichtere --gold haalt
+     op wit maar 2:1 contrast; deze donkerdere tint haalt ruim 3:1 en blijft
+     ook voor kleurenblinde lezers van het accent te onderscheiden. */
+  --over: #b45309;
   --green: #189e68;
   --red: #dd4f38;
   --schaduw-zacht: 0 1px 2px rgba(16, 17, 24, 0.04), 0 4px 16px rgba(16, 17, 24, 0.04);

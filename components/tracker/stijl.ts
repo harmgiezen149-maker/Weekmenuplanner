@@ -24,6 +24,10 @@ export const T: Record<string, React.CSSProperties> = {
   datumLabel: { flex: 1, textAlign: "center", fontSize: 15, fontWeight: 700, textTransform: "capitalize" },
   vandaagKnop: { background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 },
 
+  weegPrompt: { display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", background: "var(--accent-soft)", border: "1px solid var(--accent)", color: "var(--accent)", borderRadius: 16, padding: "14px 16px", marginBottom: 12, cursor: "pointer" },
+  weegPromptKop: { display: "block", fontSize: 14.5, fontWeight: 800, marginBottom: 2 },
+  weegPromptSub: { display: "block", fontSize: 12.5, fontWeight: 500, lineHeight: 1.5 },
+
   kaart: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 18, padding: "16px 16px", marginBottom: 12 },
   kaartStrak: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 18, overflow: "hidden", marginBottom: 12 },
 

@@ -2,22 +2,28 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, BookOpen, ListPlus, Loader2, Settings } from "lucide-react";
+import { Activity, BookOpen, CalendarRange, ListPlus, Loader2, Scale, Settings } from "lucide-react";
 import { T } from "./stijl";
 import Dagoverzicht, { toonDatum } from "./Dagoverzicht";
 import Toevoegen from "./Toevoegen";
 import Instellingen from "./Instellingen";
+import Gewicht from "./Gewicht";
+import type { GewichtGegevens } from "./Gewicht";
+import Weekoverzicht from "./Weekoverzicht";
+import type { WeekSamenvatting } from "@/lib/tracker/week";
 import { trackerApi } from "./api";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { toonPunten } from "@/lib/tracker/points";
 import type { Day, Maaltijd, Profile } from "@/lib/tracker/types";
 import { MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
 
-export type Pagina = "dag" | "toevoegen" | "instellingen";
+export type Pagina = "dag" | "toevoegen" | "week" | "gewicht" | "instellingen";
 
 const PAGINAS: { id: Pagina; pad: string; label: string; icon: typeof Activity }[] = [
   { id: "dag", pad: "/tracker", label: "Vandaag", icon: Activity },
   { id: "toevoegen", pad: "/tracker/toevoegen", label: "Toevoegen", icon: ListPlus },
+  { id: "week", pad: "/tracker/week", label: "Week", icon: CalendarRange },
+  { id: "gewicht", pad: "/tracker/gewicht", label: "Gewicht", icon: Scale },
   { id: "instellingen", pad: "/tracker/instellingen", label: "Instellingen", icon: Settings },
 ];
 
@@ -33,6 +39,10 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState("");
   const [opgeslagen, setOpgeslagen] = useState(false);
+  const [gewicht, setGewicht] = useState<GewichtGegevens | null>(null);
+  const [week, setWeek] = useState<{ week: WeekSamenvatting | null; dagenTeGaan: number } | null>(null);
+  const [weekDatum, setWeekDatum] = useState(datumSleutel());
+  const [herberekend, setHerberekend] = useState(false);
 
   // De datum en de gekozen maaltijd reizen via de URL mee naar het
   // invoerscherm, zodat "toevoegen bij lunch" op de juiste plek belandt.
@@ -50,10 +60,13 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     let afgebroken = false;
     (async () => {
       try {
-        const [p, d] = await Promise.all([trackerApi.getProfiel(), trackerApi.getDag(datum)]);
+        const [p, d, g] = await Promise.all([
+          trackerApi.getProfiel(), trackerApi.getDag(datum), trackerApi.getGewicht(),
+        ]);
         if (afgebroken) return;
         setProfiel(p.profiel);
         setDag(d);
+        setGewicht(g);
       } catch (e) {
         if (!afgebroken) setFout(bericht(e));
       } finally {
@@ -64,6 +77,35 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   }, [datum]);
 
   const ga = useCallback((pad: string) => { router.push(pad); }, [router]);
+
+  // De weekgegevens zijn zowel voor het weekoverzicht als voor de bufferbalk
+  // op het dagoverzicht nodig; ze volgen de gekozen week.
+  useEffect(() => {
+    let afgebroken = false;
+    trackerApi.getWeek(pagina === "week" ? weekDatum : datum)
+      .then((w) => { if (!afgebroken) setWeek({ week: w.week, dagenTeGaan: w.dagenTeGaan }); })
+      .catch(() => { /* de bufferbalk verdwijnt dan, de rest werkt door */ });
+    return () => { afgebroken = true; };
+  }, [pagina, weekDatum, datum, dag]);
+
+  const weeg = async (kg: number, note?: string) => {
+    setBezig(true); setFout(""); setHerberekend(false);
+    try {
+      const g = await trackerApi.weeg(kg, note);
+      setGewicht(g);
+      setHerberekend(g.herberekend);
+      if (g.profiel) setProfiel(g.profiel);
+    } catch (e) { setFout(bericht(e)); } finally { setBezig(false); }
+  };
+
+  const wisWeging = async (d: string) => {
+    setFout(""); setHerberekend(false);
+    try {
+      const g = await trackerApi.wisWeging(d);
+      setGewicht(g);
+      if (g.profiel) setProfiel(g.profiel);
+    } catch (e) { setFout(bericht(e)); }
+  };
 
   const wisRegel = async (id: string) => {
     setFout("");
@@ -123,10 +165,15 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
             {pagina === "dag" && (
               <Dagoverzicht
                 dag={dag} profiel={profiel} datum={datum} vandaag={vandaag}
+                buffer={week?.week
+                  ? { rest: week.week.bufferRest, totaal: week.week.bufferTotaal, dagenTeGaan: week.dagenTeGaan }
+                  : null}
+                moetWegen={gewicht?.moetWegen ?? false}
                 onDatum={(d) => { setDatum(d); ga(`/tracker?datum=${d}`); }}
                 onWis={wisRegel}
                 onToevoegen={(m) => ga(`/tracker/toevoegen?datum=${datum}&maaltijd=${m}`)}
                 onInstellingen={() => ga("/tracker/instellingen")}
+                onWegen={() => ga("/tracker/gewicht")}
               />
             )}
 
@@ -134,6 +181,20 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
               <Toevoegen
                 maaltijd={maaltijd} datumLabel={toonDatum(datum, vandaag)}
                 bezig={bezig} fout={fout} schaal={schaal} onOpslaan={voegToe}
+              />
+            )}
+
+            {pagina === "week" && (
+              <Weekoverzicht
+                week={week?.week ?? null} dagenTeGaan={week?.dagenTeGaan ?? 0}
+                peildatum={weekDatum} vandaag={vandaag} onPeildatum={setWeekDatum}
+              />
+            )}
+
+            {pagina === "gewicht" && gewicht && (
+              <Gewicht
+                gegevens={gewicht} vandaag={vandaag} bezig={bezig} fout={fout}
+                herberekend={herberekend} onWeeg={weeg} onWis={wisWeging}
               />
             )}
 
