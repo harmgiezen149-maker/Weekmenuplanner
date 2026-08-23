@@ -112,6 +112,12 @@ export const T: Record<string, React.CSSProperties> = {
   bronMerk: { display: "inline-block", fontSize: 10, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 4, padding: "1px 5px", marginRight: 6, verticalAlign: "1px" },
   potloodKnop: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--sub)", cursor: "pointer", padding: 0, flexShrink: 0 },
 
+  // Foto-schatting
+  fotoLeeg: { display: "flex", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", padding: "26px 20px", border: "1.5px dashed var(--line)", borderRadius: 14, background: "var(--surface)", color: "var(--accent)", fontSize: 15, fontWeight: 700, cursor: "pointer" },
+  fotoWrap: { position: "relative", borderRadius: 14, overflow: "hidden", border: "1px solid var(--line)", marginBottom: 12, background: "var(--bg)" },
+  fotoVoorbeeld: { width: "100%", maxHeight: 260, objectFit: "cover", display: "block" },
+  fotoOpnieuw: { position: "absolute", right: 10, bottom: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(22,25,39,0.78)", color: "#fff", border: "none", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
+
   // Scanner
   scanKader: { position: "relative", width: "100%", aspectRatio: "4 / 3", background: "#101118", borderRadius: 16, overflow: "hidden", marginBottom: 12 },
   scanVideo: { width: "100%", height: "100%", objectFit: "cover", display: "block" },

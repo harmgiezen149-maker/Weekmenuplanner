@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { ChefHat, Keyboard, ScanLine, Search, Zap } from "lucide-react";
+import { Camera, ChefHat, Keyboard, ScanLine, Search, Zap } from "lucide-react";
 import { T } from "./stijl";
 import Snel from "./Snel";
 import Zoeken from "./Zoeken";
@@ -9,17 +9,19 @@ import Scanner from "./Scanner";
 import Handmatig from "./Handmatig";
 import Maaltijdbouwer from "./Maaltijdbouwer";
 import Recepten from "./Recepten";
+import Foto from "./Foto";
 import Portiekiezer, { naarPer100 } from "./Portiekiezer";
 import { trackerApi } from "./api";
 import type { FoodTemplate, Maaltijd, Maaltijdsjabloon, Product } from "@/lib/tracker/types";
 
-type Modus = "snel" | "zoeken" | "scannen" | "recept" | "handmatig";
+type Modus = "snel" | "zoeken" | "scannen" | "recept" | "foto" | "handmatig";
 
 const MODI: { id: Modus; label: string; icon: typeof Zap }[] = [
   { id: "snel", label: "Snel", icon: Zap },
   { id: "zoeken", label: "Zoeken", icon: Search },
   { id: "scannen", label: "Scannen", icon: ScanLine },
   { id: "recept", label: "Recept", icon: ChefHat },
+  { id: "foto", label: "Foto", icon: Camera },
   { id: "handmatig", label: "Handmatig", icon: Keyboard },
 ];
 
@@ -188,6 +190,13 @@ export default function Toevoegen({
           maaltijd={maal} datumLabel={datumLabel} schaal={schaal}
           bezig={bezig} fout={fout}
           onLog={(payload) => onOpslaan(payload, false)}
+        />
+      )}
+
+      {modus === "foto" && (
+        <Foto
+          maaltijd={maal} datumLabel={datumLabel} schaal={schaal}
+          bezig={bezig} fout={fout} onOpslaan={onOpslaan}
         />
       )}
 

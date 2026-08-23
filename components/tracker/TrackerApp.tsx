@@ -10,14 +10,16 @@ import Instellingen from "./Instellingen";
 import Gewicht from "./Gewicht";
 import type { GewichtGegevens } from "./Gewicht";
 import Weekoverzicht from "./Weekoverzicht";
+import Import from "./Import";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import { trackerApi } from "./api";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { toonPunten } from "@/lib/tracker/points";
+import { dagBewegingspunten } from "@/lib/tracker/activiteit";
 import type { Day, Maaltijd, Profile } from "@/lib/tracker/types";
 import { MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
 
-export type Pagina = "dag" | "toevoegen" | "week" | "gewicht" | "instellingen";
+export type Pagina = "dag" | "toevoegen" | "week" | "gewicht" | "instellingen" | "import";
 
 const PAGINAS: { id: Pagina; pad: string; label: string; icon: typeof Activity }[] = [
   { id: "dag", pad: "/tracker", label: "Vandaag", icon: Activity },
@@ -46,6 +48,9 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
 
   // De datum en de gekozen maaltijd reizen via de URL mee naar het
   // invoerscherm, zodat "toevoegen bij lunch" op de juiste plek belandt.
+  // Het deelmenu van Android geeft url, text en title mee; de link kan in
+  // allebei de eerste twee velden zitten.
+  const gedeeldeUrl = (zoek.get("url") || zoek.get("text") || "").trim();
   const urlDatum = zoek.get("datum");
   const urlMaaltijd = zoek.get("maaltijd");
   const maaltijd: Maaltijd = MAALTIJDEN_TRACKER.includes(urlMaaltijd as Maaltijd)
@@ -98,6 +103,18 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     } catch (e) { setFout(bericht(e)); } finally { setBezig(false); }
   };
 
+  const voegBewegingToe = async (soort: string, minuten: number) => {
+    setBezig(true); setFout("");
+    try {
+      setDag(await trackerApi.voegBewegingToe(datum, soort, minuten));
+    } catch (e) { setFout(bericht(e)); } finally { setBezig(false); }
+  };
+
+  const wisBeweging = async (id: string) => {
+    setFout("");
+    try { setDag(await trackerApi.wisBeweging(datum, id)); } catch (e) { setFout(bericht(e)); }
+  };
+
   const wisWeging = async (d: string) => {
     setFout(""); setHerberekend(false);
     try {
@@ -142,6 +159,10 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
 
   const schaal = profiel?.points_scale ?? 1;
   const gebruikt = dag ? toonPunten(dag.totals.points_raw, schaal) : 0;
+  // Bewegingspunten verruimen het budget van die dag; de kop toont hetzelfde
+  // getal als de ring op het dagoverzicht.
+  const budgetVandaag = (profiel?.daily_budget ?? 0)
+    + (dag ? dagBewegingspunten(dag.activity).meetellend : 0);
 
   return (
     <div style={T.app}>
@@ -150,7 +171,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
         <h1 style={T.titel}>Tracker</h1>
         <div style={T.headerRechts}>
           {profiel && (
-            <span style={T.headerSub}>{gebruikt} / {profiel.daily_budget} pt</span>
+            <span style={T.headerSub}>{gebruikt} / {budgetVandaag} pt</span>
           )}
         </div>
       </header>
@@ -174,6 +195,8 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
                 onToevoegen={(m) => ga(`/tracker/toevoegen?datum=${datum}&maaltijd=${m}`)}
                 onInstellingen={() => ga("/tracker/instellingen")}
                 onWegen={() => ga("/tracker/gewicht")}
+                bewegingBezig={bezig} bewegingFout={fout}
+                onBeweging={voegBewegingToe} onWisBeweging={wisBeweging}
               />
             )}
 
@@ -195,6 +218,14 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
               <Gewicht
                 gegevens={gewicht} vandaag={vandaag} bezig={bezig} fout={fout}
                 herberekend={herberekend} onWeeg={weeg} onWis={wisWeging}
+              />
+            )}
+
+            {pagina === "import" && (
+              <Import
+                gedeeldeUrl={gedeeldeUrl} datumLabel={toonDatum(datum, vandaag)}
+                schaal={schaal} bezig={bezig} fout={fout}
+                onLog={(payload) => voegToe(payload, false)}
               />
             )}
 

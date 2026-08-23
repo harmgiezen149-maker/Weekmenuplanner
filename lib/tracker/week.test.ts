@@ -151,3 +151,49 @@ test("de macro's worden over de hele week opgeteld", () => {
   // 24 punten is 1000 kcal, twee dagen dus 2000.
   assert.ok(Math.abs(s.macros.kcal - 2000) < 0.5);
 });
+
+// -- bewegingspunten ---------------------------------------------------------
+
+/** Een dag met punten en een activiteit erbij. */
+function dagMetBeweging(datum: string, punten: number, bewegingspunten: number): Day {
+  const d = dag(datum, punten);
+  return {
+    ...d,
+    activity: [{ id: "a", ts: 0, name: "Wandelen", met: 3.5, minutes: 60, points: bewegingspunten }],
+  };
+}
+
+test("bewegingspunten verruimen het dagbudget", () => {
+  // 52 punten bij een budget van 40 is 12 over; met 5 bewegingspunten nog 7.
+  const zonder = vatWeekSamen([dag("2026-08-23", 52)], PROFIEL, "2026-08-26");
+  const met = vatWeekSamen([dagMetBeweging("2026-08-23", 52, 5)], PROFIEL, "2026-08-26");
+  assert.equal(zonder.dagen[0].overBudget, 12);
+  assert.equal(met.dagen[0].overBudget, 7);
+  assert.equal(met.dagen[0].bewegingspunten, 5);
+});
+
+test("bewegingspunten kunnen een dag helemaal binnen budget trekken", () => {
+  const s = vatWeekSamen([dagMetBeweging("2026-08-23", 44, 6)], PROFIEL, "2026-08-26");
+  assert.equal(s.dagen[0].overBudget, 0);
+  assert.equal(s.bufferGebruikt, 0);
+});
+
+test("het dagplafond van zes geldt ook in de weeksamenvatting", () => {
+  const s = vatWeekSamen([dagMetBeweging("2026-08-23", 60, 20)], PROFIEL, "2026-08-26");
+  assert.equal(s.dagen[0].bewegingspunten, 6, "twintig punten sport telt als zes");
+  assert.equal(s.dagen[0].overBudget, 14); // 60 - 40 - 6
+});
+
+test("bewegingspunten worden over de week opgeteld", () => {
+  const s = vatWeekSamen([
+    dagMetBeweging("2026-08-23", 30, 4),
+    dagMetBeweging("2026-08-24", 30, 3),
+  ], PROFIEL, "2026-08-26");
+  assert.equal(s.bewegingspuntenTotaal, 7);
+});
+
+test("bewegen zonder te eten levert geen negatieve overschrijding op", () => {
+  const s = vatWeekSamen([dagMetBeweging("2026-08-23", 10, 6)], PROFIEL, "2026-08-26");
+  assert.equal(s.dagen[0].overBudget, 0);
+  assert.equal(s.bufferRest, 28);
+});

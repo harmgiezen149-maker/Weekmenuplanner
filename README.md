@@ -188,7 +188,7 @@ budget op onderhoud.
 | `/tracker/gewicht` | Wegen, trendlijn en voortgang naar je streefgewicht |
 | `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
 
-### Vijf manieren om iets te loggen
+### Zes manieren om iets te loggen
 
 **Snel** — je vaste maaltijden, je favorieten en de laatste 50 dingen die je
 gelogd hebt. Eén tik logt het opnieuw bij de gekozen maaltijd; het potlood
@@ -210,6 +210,8 @@ handmatige formulier met de code al ingevuld.
 
 **Recept** — een recept uit je eigen kookboek, doorgerekend naar punten per
 portie. Zie hieronder.
+
+**Foto** — een foto van je bord laten schatten. Zie hieronder.
 
 **Handmatig** — de zeven voedingswaarden van het etiket, met punten die
 meerekenen terwijl je typt. Etiketwaarden staan per 100 g; kies je een andere
@@ -294,6 +296,75 @@ vandaag, bij de bijbehorende maaltijd.
 Er wordt nergens een puntwaarde van een bron overgenomen; alles komt uit de
 eigen formule.
 
+### Bewegingspunten
+
+Op het dagoverzicht staat onder de maaltijden een blok **Beweging**. Kies wat je
+gedaan hebt en hoe lang; de punten verruimen je dagbudget van die dag.
+
+De verbranding komt uit een MET-waarde maal je gewicht maal de duur. Daar gaat
+je **rustverbranding** vanaf: tijdens dat uur wandelen verbrand je ook de
+calorieën die je op de bank zou hebben verbruikt, en alleen het verschil is
+extra.
+
+**Er tellen maximaal 6 bewegingspunten per dag mee.** Dat plafond is er met
+reden: verbrandingsschattingen vallen structureel te hoog uit, en zonder
+plafond eet je je tekort weg met een getal dat je niet kunt controleren. Bij een
+gewicht rond de 95 kg raakt vrijwel elke activiteit dat plafond binnen een uur —
+je verdiende punten blijven zichtbaar, maar er tellen er zes mee.
+
+### Een foto van je bord
+
+Bij **Foto** maak je een foto van je bord en laat je de voedingswaarden schatten.
+Het resultaat is nadrukkelijk een **bewerkbaar concept**: elk herkend onderdeel
+staat er los in, met zijn eigen hoeveelheid, voedingswaarden en soort. Is de
+zekerheid over een portiegrootte laag, dan wordt dat veld gemarkeerd. Er wordt
+niets opgeslagen voordat je het hebt nagekeken — een schatting uit een foto is
+een startpunt, geen meting.
+
+Elk onderdeel houdt zijn eigen soort, dus ook hier telt de melksuiker in een
+glas melk niet mee en de suiker in een koekje wel.
+
+Hiervoor is een `ANTHROPIC_API_KEY` nodig. Zonder die sleutel geeft het scherm
+een nette melding en werken de andere vijf routes gewoon door.
+
+### Een receptlink delen
+
+**Android** — deel een receptpagina rechtstreeks vanuit je browser naar de app;
+hij komt binnen op `/tracker/import` en wordt meteen doorgerekend. Dat werkt via
+`share_target` in het manifest en vereist dat je de app op je beginscherm hebt
+gezet.
+
+**iOS** kent `share_target` niet. Twee manieren:
+
+1. **Plakken** — kopieer de link, open `/tracker/import` en tik op de plakknop.
+2. **Een Shortcut** — zie hieronder.
+
+De pagina wordt in drie stappen uitgelezen, van exact naar geraden: eerst het
+`schema.org`-receptblok dat veel receptsites meeleveren, dan de
+ingrediëntenlijst uit de HTML, en pas als laatste het model op de platte tekst.
+Op het scherm staat welke van de drie het geworden is.
+
+**De punten komen altijd uit de eigen formule.** Een puntwaarde of calorieënlijst
+die op de bronpagina staat wordt nooit overgenomen — daar staat een test op.
+
+#### De iOS-Shortcut instellen
+
+Zet eerst `TRACKER_IMPORT_TOKEN` in je omgeving op een lange, zelfverzonnen
+tekst (in Vercel bij Settings → Environment Variables). Maak daarna in de
+Opdrachten-app een nieuwe opdracht:
+
+1. **Ontvang** — zet bovenaan "Toon in deelblad" aan, en laat hem URL's ontvangen.
+2. **Haal inhoud van URL op** met deze instellingen:
+   - URL: `https://<jouw-app>.vercel.app/api/tracker/import`
+   - Methode: `POST`
+   - Koptekst: `x-tracker-token` met jouw token als waarde
+   - Aanvraagtekst: `JSON`, met één veld `url` waarvan de waarde de
+     **Opdrachtinvoer** is
+3. **Toon resultaat** — zo zie je meteen of het gelukt is.
+
+Geef de opdracht een naam als "Naar tracker". Vanaf dan staat hij in het
+deelmenu van Safari, naast alle andere deelopties.
+
 ### De eigen basislijst aanvullen
 
 `lib/tracker/basisproducten.ts` bevat een kleine vijftig Nederlandse
@@ -366,10 +437,18 @@ Twee keuzes zijn bewust:
   reeksen ook van vorm (punten tegen lijn); in het staafdiagram staat bij een dag
   boven budget het getal erbij.
 
-### Wat er nog niet in zit
+### Over de Anthropic API
 
-Gepland: bewegingspunten, een foto-schatting van je bord, en het delen van een
-receptlink vanuit de browser naar de tracker.
+De foto-schatting en de laatste stap van de link-import gebruiken de Anthropic
+API, net als de foto- en link-import van het kookboek. Ze draaien op hetzelfde
+model als de rest van de app.
+
+De SDK-versie in dit project (0.32) kent nog geen structured outputs. De JSON
+wordt daarom afgedwongen via de systeeminstructie en daarna defensief gelezen:
+markdown-fences eromheen, tekst ervoor of erna, ontbrekende velden, negatieve
+getallen en onbekende categorieën worden allemaal opgevangen. Wil je het
+strakker, dan is een nieuwere SDK met `output_config` de weg — dat raakt ook de
+drie bestaande aanroepen in het kookboek.
 
 ---
 
@@ -409,6 +488,9 @@ app/
     tracker/recepten/route.ts     Receptenlijst uit het kookboek
     tracker/recepten/[id]/route.ts  Eén recept doorgerekend, met cache
     tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
+    tracker/beweging/route.ts     Bewegingsactiviteiten en hun punten
+    tracker/foto/route.ts         Foto-schatting via de Anthropic API
+    tracker/import/route.ts       Receptlink ophalen en doorrekenen
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
@@ -427,6 +509,9 @@ components/
     Weekbalken.tsx      Punten per dag tegen de budgetlijn (SVG)
     Maaltijdbouwer.tsx  Een vaste maaltijd samenstellen uit onderdelen
     Recepten.tsx        Kookboekrecepten met punten per portie
+    Beweging.tsx        Activiteit loggen, met het dagplafond
+    Foto.tsx            Foto-schatting als bewerkbaar concept
+    Import.tsx          Gedeelde receptlink doorrekenen
     Instellingen.tsx    Profiel met live budgetberekening
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
@@ -445,6 +530,9 @@ lib/
     week.ts             Weekgrenzen, weekbuffer en samenvatting
     maaltijd.ts         Onderdelen optellen en schalen
     recept.ts           Ingredienten omrekenen, matchen en doorrekenen
+    activiteit.ts       MET-tabel, verbranding en het dagplafond
+    foto.ts             Het antwoord van de foto-schatting uitlezen
+    link.ts             Recept uit een webpagina halen
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

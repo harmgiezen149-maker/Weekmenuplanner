@@ -1,12 +1,14 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2, Settings, Scale } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2, Settings, Scale, Footprints } from "lucide-react";
 import { T } from "./stijl";
 import Ring from "./Ring";
 import { toonPunten } from "@/lib/tracker/points";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import { nl, verschuifDatum } from "@/lib/tracker/datum";
+import { dagBewegingspunten } from "@/lib/tracker/activiteit";
+import Beweging from "./Beweging";
 import type { Day, Entry, Maaltijd, Profile } from "@/lib/tracker/types";
 
 const NL_DATUM = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
@@ -23,6 +25,7 @@ export function toonDatum(datum: string, vandaag: string): string {
 export default function Dagoverzicht({
   dag, profiel, datum, vandaag, buffer, moetWegen,
   onDatum, onWis, onToevoegen, onInstellingen, onWegen,
+  bewegingBezig, bewegingFout, onBeweging, onWisBeweging,
 }: {
   dag: Day;
   profiel: Profile | null;
@@ -36,14 +39,22 @@ export default function Dagoverzicht({
   onToevoegen: (m: Maaltijd) => void;
   onInstellingen: () => void;
   onWegen: () => void;
+  bewegingBezig: boolean;
+  bewegingFout: string;
+  onBeweging: (soort: string, minuten: number) => void;
+  onWisBeweging: (id: string) => void;
 }) {
+  const [bewegingOpen, setBewegingOpen] = useState(false);
+  const beweging = dagBewegingspunten(dag.activity);
   const schaal = profiel?.points_scale ?? 1;
   const budget = profiel?.daily_budget ?? 0;
 
   // Eén afronding over het dagtotaal, niet per regel: zo stapelen
   // afrondingsfouten zich niet op over een dag met tien items.
   const gebruikt = toonPunten(dag.totals.points_raw, schaal);
-  const rest = budget - gebruikt;
+  // Bewegingspunten verruimen het budget van vandaag, tot het dagplafond.
+  const budgetVandaag = budget + beweging.meetellend;
+  const rest = budgetVandaag - gebruikt;
 
   const perMaaltijd = useMemo(() => {
     const groepen: Record<Maaltijd, Entry[]> = { ontbijt: [], lunch: [], diner: [], snack: [] };
@@ -102,10 +113,17 @@ export default function Dagoverzicht({
       {profiel && (
         <div style={T.kaart}>
           <div style={T.ringWrap}>
-            <Ring gebruikt={gebruikt} budget={budget} />
+            <Ring gebruikt={gebruikt} budget={budgetVandaag} />
             <div style={T.ringCijfers}>
               <div style={T.ringGroot}>{gebruikt}</div>
-              <div style={T.ringSub}>van {budget} punten</div>
+              <div style={T.ringSub}>
+                van {budgetVandaag} punten
+                {beweging.meetellend > 0 && (
+                  <span style={{ color: "var(--green)", fontWeight: 700 }}>
+                    {" "}(+{beweging.meetellend} beweging)
+                  </span>
+                )}
+              </div>
               <div style={{ ...T.ringRegel, color: rest < 0 ? "var(--red)" : "var(--green)" }}>
                 {rest >= 0 ? `${rest} punten te gaan` : `${Math.abs(rest)} punten over budget`}
               </div>
@@ -160,6 +178,51 @@ export default function Dagoverzicht({
           </div>
         </div>
       )}
+
+      <section style={T.kaartStrak}>
+        <header style={T.maaltijdKop}>
+          <Footprints size={15} style={{ color: "var(--sub)" }} />
+          <span style={T.maaltijdNaam}>Beweging</span>
+          <span style={T.maaltijdPunten}>
+            {beweging.meetellend > 0 ? `+${beweging.meetellend} pt` : "0 pt"}
+          </span>
+        </header>
+
+        {dag.activity.length === 0 && !bewegingOpen && (
+          <div style={T.maaltijdLeeg}>Nog niets gelogd.</div>
+        )}
+
+        {!bewegingOpen && dag.activity.map((a) => (
+          <div key={a.id} style={T.regel}>
+            <div style={T.regelTekst}>
+              <div style={T.regelNaam}>{a.name}</div>
+              <div style={T.regelSub}>{a.minutes} minuten</div>
+            </div>
+            <span style={T.puntBadge}>{a.points}</span>
+          </div>
+        ))}
+
+        {!bewegingOpen && beweging.afgetopt && (
+          <div style={T.maaltijdLeeg}>
+            Je verdiende {beweging.ruw} punten; er tellen er {beweging.meetellend} mee.
+            Schattingen van verbranding vallen structureel te hoog uit.
+          </div>
+        )}
+
+        {bewegingOpen && (
+          <div style={{ padding: "14px 15px" }}>
+            <Beweging
+              activiteiten={dag.activity} datumLabel={toonDatum(datum, vandaag)}
+              bezig={bewegingBezig} fout={bewegingFout}
+              onVoegToe={onBeweging} onWis={onWisBeweging}
+            />
+          </div>
+        )}
+
+        <button style={T.maaltijdPlus} onClick={() => setBewegingOpen((v) => !v)}>
+          {bewegingOpen ? "Klaar" : <><Plus size={15} /> Beweging toevoegen</>}
+        </button>
+      </section>
 
       {MAALTIJDEN_TRACKER.map((m) => {
         const regels = perMaaltijd[m];

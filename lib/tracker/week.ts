@@ -1,6 +1,7 @@
 import type { Day, Profile } from "./types";
 import { toonPunten } from "./points.ts";
 import { datumSleutel, verschuifDatum } from "./datum.ts";
+import { dagBewegingspunten } from "./activiteit.ts";
 
 // ---------------------------------------------------------------------------
 // De trackerweek.
@@ -34,7 +35,9 @@ export function weekDatums(datum: string, weegdag: number): string[] {
 export interface DagSamenvatting {
   datum: string;
   punten: number;
-  /** Boven het dagbudget, en dus uit de weekbuffer betaald. */
+  /** Bewegingspunten die meetellen, na het dagplafond. */
+  bewegingspunten: number;
+  /** Boven het dagbudget plus de bewegingspunten, en dus uit de weekbuffer betaald. */
   overBudget: number;
   gelogd: boolean;
 }
@@ -49,6 +52,8 @@ export interface WeekSamenvatting {
   /** Gemiddelde punten per gelogde dag. Null als er niets gelogd is. */
   gemiddeldePunten: number | null;
   totaalPunten: number;
+  /** Bewegingspunten die deze week hebben meegeteld. */
+  bewegingspuntenTotaal: number;
   bufferTotaal: number;
   bufferGebruikt: number;
   bufferRest: number;
@@ -77,10 +82,13 @@ export function vatWeekSamen(
     const dag = perDatum.get(datum);
     const gelogd = dag != null && dag.entries.length > 0;
     const punten = dag ? toonPunten(dag.totals.points_raw, profiel.points_scale) : 0;
+    // Bewegingspunten verruimen het dagbudget, tot het dagplafond.
+    const bewegingspunten = dag ? dagBewegingspunten(dag.activity).meetellend : 0;
     return {
       datum,
       punten,
-      overBudget: Math.max(0, punten - profiel.daily_budget),
+      bewegingspunten,
+      overBudget: Math.max(0, punten - profiel.daily_budget - bewegingspunten),
       gelogd,
     };
   });
@@ -108,6 +116,7 @@ export function vatWeekSamen(
     gelogdeDagen: gelogde.length,
     gemiddeldePunten: gelogde.length > 0 ? totaalPunten / gelogde.length : null,
     totaalPunten,
+    bewegingspuntenTotaal: samenvatting.reduce((s, d) => s + d.bewegingspunten, 0),
     bufferTotaal: profiel.weekly_buffer,
     bufferGebruikt,
     bufferRest: profiel.weekly_buffer - bufferGebruikt,

@@ -1,5 +1,5 @@
 import { redis } from "../redis";
-import type { Day, Entry, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./types";
+import type { Activity, Day, Entry, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./types";
 import {
   STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT, RECENT_MAX,
 } from "./types";
@@ -398,4 +398,19 @@ export async function getReceptPunten<T>(id: string, hash: string): Promise<T | 
 
 export async function cacheReceptPunten<T>(id: string, hash: string, berekend: T): Promise<void> {
   await redis.set(RECIPE_POINTS(id), { hash, berekend });
+}
+
+// -- bewegingsactiviteiten ---------------------------------------------------
+
+export async function addActiviteit(datum: string, activiteit: Activity): Promise<Day> {
+  const dag = await getDay(datum);
+  dag.activity.push(activiteit);
+  dag.activity.sort((a, b) => a.ts - b.ts);
+  return saveDay(dag);
+}
+
+export async function deleteActiviteit(datum: string, id: string): Promise<Day> {
+  const dag = await getDay(datum);
+  dag.activity = dag.activity.filter((a) => a.id !== id);
+  return saveDay(dag);
 }

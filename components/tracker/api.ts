@@ -54,6 +54,14 @@ export const trackerApi = {
     fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" })
       .then(lees<{ gevonden: boolean; product?: Product; uitCache?: boolean; offline?: boolean }>),
 
+  voegBewegingToe: (datum: string, soort: string, minuten: number) =>
+    fetch("/api/tracker/beweging", { method: "POST", headers: json, body: JSON.stringify({ datum, soort, minuten }) })
+      .then(lees<Day>),
+
+  wisBeweging: (datum: string, id: string) =>
+    fetch(`/api/tracker/beweging?datum=${datum}&id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      .then(lees<Day>),
+
   getMaaltijden: () =>
     fetch("/api/tracker/maaltijden", { cache: "no-store" })
       .then(lees<{ maaltijden: Maaltijdsjabloon[] }>).then((d) => d.maaltijden),
