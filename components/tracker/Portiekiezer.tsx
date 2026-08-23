@@ -45,7 +45,7 @@ export function naarPer100(nutrients: Nutrients, grams: number): Nutrients {
  * scherm is waar een product een regel wordt.
  */
 export default function Portiekiezer({
-  product, maaltijd, datumLabel, schaal, bezig, fout, onOpslaan, onTerug,
+  product, maaltijd, datumLabel, schaal, bezig, fout, modus = "log", onOpslaan, onTerug,
 }: {
   product: Product;
   maaltijd: Maaltijd;
@@ -53,9 +53,12 @@ export default function Portiekiezer({
   schaal: number;
   bezig: boolean;
   fout: string;
+  /** "component" = onderdeel van een maaltijd; dan geen maaltijdkeuze of favoriet. */
+  modus?: "log" | "component";
   onOpslaan: (payload: Record<string, unknown>, alsFavoriet: boolean) => void;
   onTerug: () => void;
 }) {
+  const alsComponent = modus === "component";
   const heeftPortie = product.portie != null;
   const [hoev, setHoev] = useState(String(product.portie?.grams ?? 100));
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
@@ -107,7 +110,9 @@ export default function Portiekiezer({
         <span style={T.liveGetal}>{punten}</span>
         <span style={T.liveTekst}>
           {punten === 1 ? "punt" : "punten"} voor {nl(grams)} {product.eenheid}<br />
-          {datumLabel.toLowerCase()} · {MAALTIJD_LABEL[maal].toLowerCase()}
+          {alsComponent
+            ? "als onderdeel van deze maaltijd"
+            : `${datumLabel.toLowerCase()} · ${MAALTIJD_LABEL[maal].toLowerCase()}`}
         </span>
       </div>
 
@@ -134,29 +139,33 @@ export default function Portiekiezer({
         </div>
       </div>
 
-      <div style={T.veldVak}>
-        <span style={T.label}>Maaltijd</span>
-        <div style={T.chips}>
-          {MAALTIJDEN_TRACKER.map((m) => (
-            <button key={m} type="button" onClick={() => setMaal(m)}
-              style={{ ...T.chip, ...(maal === m ? T.chipAan : {}) }}>
-              {MAALTIJD_LABEL[m]}
-            </button>
-          ))}
-        </div>
-      </div>
+      {!alsComponent && (
+        <>
+          <div style={T.veldVak}>
+            <span style={T.label}>Maaltijd</span>
+            <div style={T.chips}>
+              {MAALTIJDEN_TRACKER.map((m) => (
+                <button key={m} type="button" onClick={() => setMaal(m)}
+                  style={{ ...T.chip, ...(maal === m ? T.chipAan : {}) }}>
+                  {MAALTIJD_LABEL[m]}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <button type="button" onClick={() => setFavoriet((v) => !v)}
-        style={{ ...T.favorietKnop, ...(favoriet ? T.favorietKnopAan : {}) }}>
-        <Star size={15} fill={favoriet ? "currentColor" : "none"} />
-        {favoriet ? "Wordt bewaard als favoriet" : "Bewaar als favoriet"}
-      </button>
+          <button type="button" onClick={() => setFavoriet((v) => !v)}
+            style={{ ...T.favorietKnop, ...(favoriet ? T.favorietKnopAan : {}) }}>
+            <Star size={15} fill={favoriet ? "currentColor" : "none"} />
+            {favoriet ? "Wordt bewaard als favoriet" : "Bewaar als favoriet"}
+          </button>
+        </>
+      )}
 
       <button style={{ ...T.primair, opacity: grams > 0 && !bezig ? 1 : 0.5 }}
         onClick={opslaan} disabled={grams <= 0 || bezig}>
         {bezig
           ? <><Loader2 size={16} className="spin" /> Opslaan...</>
-          : <><Check size={16} /> Toevoegen aan {datumLabel.toLowerCase()}</>}
+          : <><Check size={16} /> {alsComponent ? "Aan maaltijd toevoegen" : `Toevoegen aan ${datumLabel.toLowerCase()}`}</>}
       </button>
     </>
   );

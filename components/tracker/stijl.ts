@@ -57,6 +57,10 @@ export const T: Record<string, React.CSSProperties> = {
   regelSub: { fontSize: 12, color: "var(--sub)", marginTop: 2 },
   puntBadge: { fontSize: 13, fontWeight: 800, color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 999, padding: "4px 11px", flexShrink: 0, minWidth: 34, textAlign: "center" },
   wisKnop: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "var(--sub)", cursor: "pointer", padding: 0, flexShrink: 0 },
+  onderdeelRegel: { display: "flex", alignItems: "center", gap: 10, padding: "8px 15px 8px 28px", borderBottom: "1px solid var(--line)", background: "var(--bg)" },
+  onderdeelNaam: { display: "block", fontSize: 13, fontWeight: 500, color: "var(--sub)" },
+  onderdeelPunt: { fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, minWidth: 24, textAlign: "right" },
+
   maaltijdLeeg: { padding: "13px 15px", fontSize: 13, color: "var(--sub)", borderBottom: "1px solid var(--line)" },
   maaltijdPlus: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px", background: "none", color: "var(--accent)", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 

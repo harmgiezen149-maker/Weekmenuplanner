@@ -58,7 +58,7 @@ export const MAALTIJD_LABEL: Record<Maaltijd, string> = {
 // Waar een regel vandaan komt. Fase 1 gebruikt alleen 'manual'; de rest is
 // alvast vastgelegd zodat het datamodel niet hoeft te wijzigen.
 export type EntrySource =
-  | "barcode" | "search" | "manual" | "photo" | "link" | "recipe" | "favorite";
+  | "barcode" | "search" | "manual" | "photo" | "link" | "recipe" | "favorite" | "meal";
 
 export interface Entry {
   id: string;
@@ -78,6 +78,40 @@ export interface Entry {
   points_raw: number;
   note?: string;
   ref?: string;
+  /**
+   * Onderdelen, als deze regel uit een samengestelde maaltijd of een recept
+   * komt. points_raw van de regel is de som van de componenten, niet een
+   * herberekening over de opgetelde voedingswaarden — zie lib/tracker/maaltijd.ts.
+   */
+  components?: MaaltijdComponent[];
+}
+
+// ---------------------------------------------------------------------------
+// Samengestelde maaltijden: een vast ontbijt, een lunch met brood en beleg.
+// ---------------------------------------------------------------------------
+
+/** Eén onderdeel van een samengestelde maaltijd, met zijn eigen punten. */
+export interface MaaltijdComponent {
+  id: string;
+  name: string;
+  brand?: string;
+  amount: number;
+  unit: string;
+  grams: number;
+  /** Absoluut voor deze hoeveelheid. */
+  nutrients: Nutrients;
+  /** Onafgerond en schaalvrij, met de eigen categorie van dit onderdeel. */
+  points_raw: number;
+}
+
+export interface Maaltijdsjabloon {
+  id: string;
+  name: string;
+  /** Bij welke maaltijd deze standaard hoort. */
+  meal: Maaltijd;
+  components: MaaltijdComponent[];
+  created_at: number;
+  last_used: number;
 }
 
 // Bewegingspunten (fase 5). Het veld staat er nu al zodat opgeslagen dagen

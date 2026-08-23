@@ -7,7 +7,7 @@ import {
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
-  Activity,
+  Activity, ClipboardCheck,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -73,6 +73,16 @@ const api = {
       const e = await res.json().catch(() => ({} as any));
       throw new Error(e.error || "Opschonen mislukt");
     }
+    return res.json();
+  },
+  async dagmenuNaarLogboek(datum: string, gerechten: { id: string; maaltijd: string }[]): Promise<{
+    toegevoegd: string[]; mislukt: string[]; nietHerkend: string[];
+  }> {
+    const res = await fetch("/api/tracker/dagmenu", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ datum, gerechten }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || "Toevoegen mislukt"); }
     return res.json();
   },
   async importRecept(payload: any): Promise<any> {
@@ -1294,6 +1304,37 @@ function Weekmenu({
   const [evaluatie, setEvaluatie] = useState<{ recept: Recept; keren: number }[] | null>(null);
   // Voor welke dag het "maaltijd toevoegen"-menu open staat.
   const [plusDag, setPlusDag] = useState<string | null>(null);
+  // Dagmenu naar het logboek van de tracker: welke dag bezig is, en wat de
+  // laatste uitkomst was.
+  const [logboekDag, setLogboekDag] = useState<string | null>(null);
+  const [logboekUitslag, setLogboekUitslag] = useState<{ dag: string; tekst: string; fout: boolean } | null>(null);
+
+  // Zet alle gerechten van een dag als losse regels in het voedingslogboek.
+  // De datum is die van vandaag: de weekplanner kent alleen dagnamen, geen
+  // kalenderdatums, dus een andere dag zou een gok zijn.
+  const naarLogboek = async (dag: string) => {
+    const gerechten = [HOOFD_MAALTIJD, ...EXTRA_MAALTIJDEN]
+      .map((m) => ({ maaltijd: m, slot: week.slots[slotKey(dag, m)] }))
+      .filter((x) => x.slot)
+      .map((x) => ({ id: x.slot!.recipeId, maaltijd: x.maaltijd === HOOFD_MAALTIJD ? "Avondeten" : x.maaltijd }));
+
+    if (gerechten.length === 0) return;
+    setLogboekDag(dag); setLogboekUitslag(null);
+    try {
+      const vandaag = new Date();
+      const p = (n: number) => String(n).padStart(2, "0");
+      const datum = `${vandaag.getFullYear()}-${p(vandaag.getMonth() + 1)}-${p(vandaag.getDate())}`;
+      const uit = await api.dagmenuNaarLogboek(datum, gerechten);
+
+      const delen: string[] = [];
+      if (uit.toegevoegd.length > 0) delen.push(`${uit.toegevoegd.length} gerecht${uit.toegevoegd.length === 1 ? "" : "en"} in het logboek van vandaag`);
+      if (uit.mislukt.length > 0) delen.push(`${uit.mislukt.length} niet gelukt`);
+      if (uit.nietHerkend.length > 0) delen.push(`niet meegeteld: ${uit.nietHerkend.slice(0, 4).join(", ")}`);
+      setLogboekUitslag({ dag, tekst: delen.join(" · ") || "Niets toegevoegd", fout: uit.toegevoegd.length === 0 });
+    } catch (e) {
+      setLogboekUitslag({ dag, tekst: e instanceof Error ? e.message : "Toevoegen mislukt", fout: true });
+    } finally { setLogboekDag(null); }
+  };
 
   const plaatsOpSlot = (key: string, recept: Recept) => {
     setWeek((p) => ({ ...p, slots: { ...p.slots, [key]: { recipeId: recept.id, personen: recept.personen || 4 } } }));
@@ -1384,6 +1425,8 @@ function Weekmenu({
           .map((m) => ({ maaltijd: m, key: slotKey(dag, m), slot: week.slots[slotKey(dag, m)] }))
           .filter((e) => e.slot);
         const nogToeTeVoegen = EXTRA_MAALTIJDEN.filter((m) => !week.slots[slotKey(dag, m)]);
+        const heeftIets = Boolean(r) || extras.length > 0;
+        const uitslag = logboekUitslag?.dag === dag ? logboekUitslag : null;
         return (
           <div key={dag} style={S.weekBlok}>
             <div style={S.weekRow}>
@@ -1453,6 +1496,26 @@ function Weekmenu({
                 </div>
               );
             })}
+
+            {/* Dagmenu naar het voedingslogboek van de tracker */}
+            {heeftIets && !verplaatsVan && (
+              <div style={S.logboekRij}>
+                <button
+                  onClick={() => naarLogboek(dag)}
+                  disabled={logboekDag === dag}
+                  style={{ ...S.logboekKnop, opacity: logboekDag === dag ? 0.6 : 1 }}
+                >
+                  {logboekDag === dag
+                    ? <><Loader2 size={13} className="spin" /> Bezig...</>
+                    : <><ClipboardCheck size={13} /> Zet dagmenu in logboek</>}
+                </button>
+                {uitslag && (
+                  <span style={{ ...S.logboekUitslag, color: uitslag.fout ? "var(--red)" : "var(--green)" }}>
+                    {uitslag.tekst}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Maaltijd toevoegen aan deze dag */}
             {!verplaatsVan && nogToeTeVoegen.length > 0 && (
@@ -2738,6 +2801,10 @@ const S: Record<string, React.CSSProperties> = {
   zoomLabel: { color: "#fff", fontSize: 13, fontWeight: 700, minWidth: 44, textAlign: "center" },
   zoomSluit: { position: "fixed", top: 16, right: 16, width: 40, height: 40, borderRadius: 20, border: "none", background: "rgba(255,255,255,0.12)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" },
   cardPlaatsBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "9px", background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderTop: "1px solid var(--line)", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+
+  logboekRij: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", padding: "8px 0 2px" },
+  logboekKnop: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderRadius: 999, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
+  logboekUitslag: { fontSize: 11.5, fontWeight: 600, lineHeight: 1.4, flex: 1, minWidth: 0 },
 
   empty: { gridColumn: "1 / -1", textAlign: "center", color: "var(--sub)", fontSize: 14, padding: "40px 20px", lineHeight: 1.6 },
 

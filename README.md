@@ -188,11 +188,12 @@ budget op onderhoud.
 | `/tracker/gewicht` | Wegen, trendlijn en voortgang naar je streefgewicht |
 | `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
 
-### Vier manieren om iets te loggen
+### Vijf manieren om iets te loggen
 
-**Snel** — je favorieten en de laatste 50 dingen die je gelogd hebt. Eén tik
-logt het opnieuw bij de gekozen maaltijd; het potlood erachter opent hetzelfde
-product met een andere hoeveelheid. In de praktijk de snelste route.
+**Snel** — je vaste maaltijden, je favorieten en de laatste 50 dingen die je
+gelogd hebt. Eén tik logt het opnieuw bij de gekozen maaltijd; het potlood
+erachter opent hetzelfde product met een andere hoeveelheid. In de praktijk de
+snelste route.
 
 **Zoeken** — doorzoekt twee bronnen tegelijk. Eerst een eigen basislijst met
 onbewerkte Nederlandse producten (ei, rijst, kipfilet, groente), want daar is
@@ -206,6 +207,9 @@ heeft (Chrome op Android) wordt die gebruikt; Safari op iOS heeft hem niet, daar
 wordt `@zxing/browser` pas op dat moment bijgeladen. Werkt de camera niet, dan
 kun je de code overtikken. Kent de database de code niet, dan opent het
 handmatige formulier met de code al ingevuld.
+
+**Recept** — een recept uit je eigen kookboek, doorgerekend naar punten per
+portie. Zie hieronder.
 
 **Handmatig** — de zeven voedingswaarden van het etiket, met punten die
 meerekenen terwijl je typt. Etiketwaarden staan per 100 g; kies je een andere
@@ -246,6 +250,50 @@ Dagen zonder logging tellen niet mee in het weekgemiddelde. Een dag die je verga
 bij te houden was geen dag van nul punten, dus het gemiddelde deelt door het
 aantal gelogde dagen — dat aantal staat erbij, zodat je het kunt wegen.
 
+### Vaste maaltijden
+
+Eet je elke ochtend hetzelfde, dan hoef je dat niet elke ochtend opnieuw in te
+voeren. Stel bij **Snel** een maaltijd samen uit losse onderdelen — havermout,
+melk en een banaan; of brood met beleg — geef hem een naam, en hij staat
+voortaan bovenaan. Eén tik logt de hele maaltijd.
+
+**De punten van een maaltijd zijn de som van de onderdelen, niet een
+herberekening over de opgetelde voedingswaarden.** Dat klinkt als een detail
+maar scheelt echt iets. De suikercorrectie hangt aan de soort van het
+onderdeel: de melksuiker in een glas melk telt niet mee, de fruitsuiker van een
+banaan ook niet, maar de suiker in havermout wel. Tel je eerst alles op en pas
+je daarna één soort toe, dan komt datzelfde ontbijt op **12 punten** uit in
+plaats van **9**. In het dagoverzicht kun je een samengestelde regel uitklappen
+om te zien waar de punten vandaan komen.
+
+### Recepten uit je kookboek
+
+Bij **Recept** staan de recepten uit het kookboek van deze app, doorgerekend
+naar punten per portie. Elk ingrediënt wordt herkend als product, omgerekend
+naar gram en apart doorgerekend — dus ook hier houdt elk ingrediënt zijn eigen
+soort.
+
+Twee stappen kunnen daarbij misgaan, en dat hoor je te zien:
+
+- **De hoeveelheid omrekenen.** "500 g kipfilet" is exact; "2 el olijfolie" is
+  een schatting (30 g), en "1 stuk" leunt op de standaardportie van het product.
+  Bij elk ingrediënt staat wat er is aangenomen.
+- **Het ingrediënt herkennen.** Wat niet in de productlijst staat, telt niet mee
+  en wordt met naam genoemd, met de melding dat de punten dus aan de lage kant
+  zijn. Liever een getal met een kanttekening dan een getal dat doet alsof het
+  klopt.
+
+Het resultaat wordt gecachet met een vingerafdruk van de ingrediënten en het
+aantal personen. Pas je het recept aan in het kookboek, dan klopt die
+vingerafdruk niet meer en wordt er automatisch opnieuw gerekend.
+
+In de **weekplanner** staat bij elke dag met gerechten een knop **Zet dagmenu in
+logboek**. Die logt elk gerecht van die dag als één portie in het logboek van
+vandaag, bij de bijbehorende maaltijd.
+
+Er wordt nergens een puntwaarde van een bron overgenomen; alles komt uit de
+eigen formule.
+
 ### De eigen basislijst aanvullen
 
 `lib/tracker/basisproducten.ts` bevat een kleine vijftig Nederlandse
@@ -279,6 +327,9 @@ kookboek-keys:
   houdbaar. Hierdoor werkt een barcode die je vaker scant ook zonder netwerk.
 - `wl:weight:log` — sorted set met al je wegingen.
 - `wl:weight:<datum>` — een losse weging met eventuele notitie.
+- `wl:meals` — je vaste, samengestelde maaltijden.
+- `wl:recipe:points:<id>` — een doorgerekend kookboekrecept, met de
+  vingerafdruk waarmee de cache vervalt.
 
 Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
 
@@ -317,9 +368,8 @@ Twee keuzes zijn bewust:
 
 ### Wat er nog niet in zit
 
-Gepland, in deze volgorde: punten per portie voor recepten uit het kookboek en
-een dagmenu dat met één klik in het logboek belandt; daarna bewegingspunten,
-foto-schatting en het delen van links vanuit de browser.
+Gepland: bewegingspunten, een foto-schatting van je bord, en het delen van een
+receptlink vanuit de browser naar de tracker.
 
 ---
 
@@ -355,6 +405,10 @@ app/
     tracker/favorieten/route.ts   Favorieten en recent gelogde items
     tracker/gewicht/route.ts      Wegingen, trendlijn en voortgang
     tracker/week/route.ts         Weeksamenvatting en bufferverbruik
+    tracker/maaltijden/route.ts   Vaste, samengestelde maaltijden
+    tracker/recepten/route.ts     Receptenlijst uit het kookboek
+    tracker/recepten/[id]/route.ts  Eén recept doorgerekend, met cache
+    tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
@@ -371,6 +425,8 @@ components/
     Trendgrafiek.tsx    Metingen en voortschrijdend gemiddelde (SVG)
     Weekoverzicht.tsx   Week, buffer, gemiddelde en voedingsstoffen
     Weekbalken.tsx      Punten per dag tegen de budgetlijn (SVG)
+    Maaltijdbouwer.tsx  Een vaste maaltijd samenstellen uit onderdelen
+    Recepten.tsx        Kookboekrecepten met punten per portie
     Instellingen.tsx    Profiel met live budgetberekening
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
@@ -387,6 +443,8 @@ lib/
     basisproducten.ts   Eigen lijst met NL-basisproducten
     gewicht.ts          Trendlijn, voortgang en tempo
     week.ts             Weekgrenzen, weekbuffer en samenvatting
+    maaltijd.ts         Onderdelen optellen en schalen
+    recept.ts           Ingredienten omrekenen, matchen en doorrekenen
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

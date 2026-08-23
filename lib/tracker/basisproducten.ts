@@ -176,12 +176,18 @@ function normaliseer(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
 }
 
+export interface Treffer {
+  product: Product;
+  /** 0 tot 100. Onder de 50 is het een gok en hoort de gebruiker het te zien. */
+  score: number;
+}
+
 /**
- * Zoekt in de basislijst. Een treffer aan het begin van de naam weegt zwaarder
- * dan een treffer ergens in het midden, zodat "ei" bovenaan het ei geeft en
- * niet de sperziebonen.
+ * Zoekt in de basislijst en geeft de score erbij. Wordt gebruikt bij het
+ * matchen van receptingredienten, waar zichtbaar moet zijn hoe zeker een
+ * match is.
  */
-export function zoekBasisproducten(term: string, limiet = 8): Product[] {
+export function zoekMetScore(term: string, limiet = 8): Treffer[] {
   const q = normaliseer(term);
   if (q.length < 1) return [];
 
@@ -210,5 +216,14 @@ export function zoekBasisproducten(term: string, limiet = 8): Product[] {
       a.p.name.length - b.p.name.length ||
       a.p.name.localeCompare(b.p.name))
     .slice(0, limiet)
-    .map((s) => s.p);
+    .map((s) => ({ product: s.p, score: s.score }));
+}
+
+/**
+ * Zoekt in de basislijst. Een treffer aan het begin van de naam weegt zwaarder
+ * dan een treffer ergens in het midden, zodat "ei" bovenaan het ei geeft en
+ * niet de sperziebonen.
+ */
+export function zoekBasisproducten(term: string, limiet = 8): Product[] {
+  return zoekMetScore(term, limiet).map((t) => t.product);
 }

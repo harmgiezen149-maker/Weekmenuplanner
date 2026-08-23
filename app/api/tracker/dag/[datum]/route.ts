@@ -4,10 +4,11 @@ import {
   noteerRecent, entryNaarTemplate,
 } from "@/lib/tracker/data";
 import { naarGram, rawPoints } from "@/lib/tracker/points";
+import { telComponentenOp } from "@/lib/tracker/maaltijd";
 import { CATEGORIEEN, MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
 
-const BRONNEN: EntrySource[] = ["barcode", "search", "manual", "photo", "link", "recipe", "favorite"];
-import type { Category, Entry, EntrySource, Maaltijd, Nutrients } from "@/lib/tracker/types";
+const BRONNEN: EntrySource[] = ["barcode", "search", "manual", "photo", "link", "recipe", "favorite", "meal"];
+import type { Category, Entry, EntrySource, Maaltijd, MaaltijdComponent, Nutrients } from "@/lib/tracker/types";
 
 export const dynamic = "force-dynamic";
 
@@ -69,10 +70,20 @@ export async function DELETE(req: NextRequest, { params }: Params) {
 // ---------------------------------------------------------------------------
 
 function bouwEntry(body: any, naam: string): Entry {
-  const nutrients = leesNutrients(body?.nutrients ?? body);
-  const amount = nummer(body?.amount, 100);
-  const unit = String(body?.unit ?? "g").trim() || "g";
-  const grams = nummer(body?.grams, naarGram(amount, unit));
+  const componenten = leesComponenten(body?.components);
+
+  // Bij een samengestelde maaltijd of een recept zijn de punten de SOM van de
+  // onderdelen, niet een herberekening over de opgetelde voedingswaarden. De
+  // suikercorrectie hangt namelijk aan de categorie van elk onderdeel apart:
+  // de melksuiker in een glas melk telt niet mee, de suiker in havermout wel.
+  // Eerst optellen en dan pas rekenen maakt zo'n ontbijt drie punten duurder.
+  const samengesteld = componenten != null && componenten.length > 0;
+  const totaal = samengesteld ? telComponentenOp(componenten!) : null;
+
+  const nutrients = totaal ? totaal.nutrients : leesNutrients(body?.nutrients ?? body);
+  const amount = nummer(body?.amount, totaal ? totaal.grams : 100);
+  const unit = String(body?.unit ?? (totaal ? "g" : "g")).trim() || "g";
+  const grams = nummer(body?.grams, totaal ? totaal.grams : naarGram(amount, unit));
 
   return {
     id: nieuwId(),
@@ -85,9 +96,30 @@ function bouwEntry(body: any, naam: string): Entry {
     unit,
     grams,
     nutrients,
-    points_raw: rawPoints(nutrients, grams),
+    points_raw: totaal ? totaal.points_raw : rawPoints(nutrients, grams),
     ...(body?.note ? { note: String(body.note).slice(0, 300) } : {}),
+    ...(body?.ref ? { ref: String(body.ref).slice(0, 64) } : {}),
+    ...(samengesteld ? { components: componenten! } : {}),
   };
+}
+
+/** Onderdelen van een maaltijd of recept; de punten worden hier herrekend. */
+function leesComponenten(rauw: unknown): MaaltijdComponent[] | null {
+  if (!Array.isArray(rauw) || rauw.length === 0) return null;
+  return rauw.map((c: any) => {
+    const nutrients = leesNutrients(c?.nutrients ?? c);
+    const grams = nummer(c?.grams, nummer(c?.amount, 100));
+    return {
+      id: typeof c?.id === "string" && c.id ? c.id : nieuwId(),
+      name: String(c?.name ?? "Onderdeel").slice(0, 80),
+      ...(c?.brand ? { brand: String(c.brand).slice(0, 80) } : {}),
+      amount: nummer(c?.amount, grams),
+      unit: String(c?.unit ?? "g").trim() || "g",
+      grams,
+      nutrients,
+      points_raw: rawPoints(nutrients, grams),
+    };
+  });
 }
 
 function leesNutrients(n: any): Nutrients {

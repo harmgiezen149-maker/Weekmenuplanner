@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Settings, Scale } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2, Settings, Scale } from "lucide-react";
 import { T } from "./stijl";
 import Ring from "./Ring";
 import { toonPunten } from "@/lib/tracker/points";
@@ -174,20 +174,7 @@ export default function Dagoverzicht({
             {regels.length === 0 && <div style={T.maaltijdLeeg}>Nog niets gelogd.</div>}
 
             {regels.map((e) => (
-              <div key={e.id} style={T.regel}>
-                <div style={T.regelTekst}>
-                  <div style={T.regelNaam}>{e.name}</div>
-                  <div style={T.regelSub}>
-                    {toonHoeveelheid(e)}
-                    {e.brand ? ` · ${e.brand}` : ""}
-                    {` · ${Math.round(e.nutrients.kcal)} kcal`}
-                  </div>
-                </div>
-                <span style={T.puntBadge}>{toonPunten(e.points_raw, schaal)}</span>
-                <button style={T.wisKnop} onClick={() => onWis(e.id)} aria-label={`${e.name} verwijderen`}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
+              <Regel key={e.id} entry={e} schaal={schaal} onWis={onWis} />
             ))}
 
             <button style={T.maaltijdPlus} onClick={() => onToevoegen(m)}>
@@ -196,6 +183,68 @@ export default function Dagoverzicht({
           </section>
         );
       })}
+    </>
+  );
+}
+
+/**
+ * Een regel in het logboek. Komt hij uit een samengestelde maaltijd of een
+ * recept, dan zijn de onderdelen uit te klappen — anders is niet te zien waar
+ * de punten vandaan komen.
+ */
+function Regel({ entry, schaal, onWis }: {
+  entry: Entry; schaal: number; onWis: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const onderdelen = entry.components ?? [];
+  const samengesteld = onderdelen.length > 0;
+
+  return (
+    <>
+      <div style={T.regel}>
+        {samengesteld ? (
+          <button style={{ ...T.resultaat, padding: 0, borderBottom: "none" }}
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}>
+            <span style={T.resultaatTekst}>
+              <span style={T.resultaatNaam}>{entry.name}</span>
+              <span style={T.resultaatSub}>
+                {toonHoeveelheid(entry)} · {onderdelen.length}{" "}
+                {onderdelen.length === 1 ? "onderdeel" : "onderdelen"} ·{" "}
+                {Math.round(entry.nutrients.kcal)} kcal
+              </span>
+            </span>
+            <ChevronDown size={15} style={{
+              color: "var(--sub)", flexShrink: 0,
+              transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s",
+            }} />
+          </button>
+        ) : (
+          <div style={T.regelTekst}>
+            <div style={T.regelNaam}>{entry.name}</div>
+            <div style={T.regelSub}>
+              {toonHoeveelheid(entry)}
+              {entry.brand ? ` · ${entry.brand}` : ""}
+              {` · ${Math.round(entry.nutrients.kcal)} kcal`}
+            </div>
+          </div>
+        )}
+        <span style={T.puntBadge}>{toonPunten(entry.points_raw, schaal)}</span>
+        <button style={T.wisKnop} onClick={() => onWis(entry.id)}
+          aria-label={`${entry.name} verwijderen`}>
+          <Trash2 size={15} />
+        </button>
+      </div>
+
+      {open && onderdelen.map((c) => (
+        <div key={c.id} style={T.onderdeelRegel}>
+          <span style={T.regelTekst}>
+            <span style={T.onderdeelNaam}>{c.name}</span>
+            <span style={T.regelSub}>{nl(c.amount)} {c.unit}</span>
+          </span>
+          <span style={T.onderdeelPunt}>{toonPunten(c.points_raw, schaal)}</span>
+        </div>
+      ))}
     </>
   );
 }

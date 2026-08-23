@@ -1,22 +1,25 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Keyboard, ScanLine, Search, Zap } from "lucide-react";
+import { ChefHat, Keyboard, ScanLine, Search, Zap } from "lucide-react";
 import { T } from "./stijl";
 import Snel from "./Snel";
 import Zoeken from "./Zoeken";
 import Scanner from "./Scanner";
 import Handmatig from "./Handmatig";
+import Maaltijdbouwer from "./Maaltijdbouwer";
+import Recepten from "./Recepten";
 import Portiekiezer, { naarPer100 } from "./Portiekiezer";
 import { trackerApi } from "./api";
-import type { FoodTemplate, Maaltijd, Product } from "@/lib/tracker/types";
+import type { FoodTemplate, Maaltijd, Maaltijdsjabloon, Product } from "@/lib/tracker/types";
 
-type Modus = "snel" | "zoeken" | "scannen" | "handmatig";
+type Modus = "snel" | "zoeken" | "scannen" | "recept" | "handmatig";
 
 const MODI: { id: Modus; label: string; icon: typeof Zap }[] = [
   { id: "snel", label: "Snel", icon: Zap },
   { id: "zoeken", label: "Zoeken", icon: Search },
   { id: "scannen", label: "Scannen", icon: ScanLine },
+  { id: "recept", label: "Recept", icon: ChefHat },
   { id: "handmatig", label: "Handmatig", icon: Keyboard },
 ];
 
@@ -41,6 +44,8 @@ export default function Toevoegen({
 
   const [favorieten, setFavorieten] = useState<FoodTemplate[]>([]);
   const [recent, setRecent] = useState<FoodTemplate[]>([]);
+  const [maaltijden, setMaaltijden] = useState<Maaltijdsjabloon[]>([]);
+  const [bouwt, setBouwt] = useState<{ bestaand?: Maaltijdsjabloon } | null>(null);
   const [scanFout, setScanFout] = useState("");
 
   useEffect(() => { setMaal(maaltijd); }, [maaltijd]);
@@ -49,6 +54,9 @@ export default function Toevoegen({
     trackerApi.getSnel()
       .then((d) => { setFavorieten(d.favorieten); setRecent(d.recent); })
       .catch(() => { /* lege lijsten zijn hier een prima uitkomst */ });
+    trackerApi.getMaaltijden()
+      .then(setMaaltijden)
+      .catch(() => { /* idem */ });
   }, []);
 
   const kies = (p: Product) => { setGekozen(p); setScanFout(""); };
@@ -99,6 +107,40 @@ export default function Toevoegen({
     try { setFavorieten(await trackerApi.wisFavoriet(id)); } catch { /* stil */ }
   };
 
+  // Een vaste maaltijd loggen: de onderdelen gaan mee, zodat de server de
+  // punten per onderdeel optelt in plaats van over de som te rekenen.
+  const logMaaltijd = (m: Maaltijdsjabloon) => {
+    onOpslaan({
+      name: m.name,
+      meal: maal,
+      source: "meal",
+      ref: m.id,
+      amount: 1,
+      unit: "portie",
+      components: m.components,
+    }, false);
+  };
+
+  const bewaarMaaltijd = async (m: Omit<Maaltijdsjabloon, "created_at" | "last_used">) => {
+    setScanFout("");
+    try {
+      setMaaltijden(await trackerApi.bewaarMaaltijd(m));
+      setBouwt(null);
+      setModus("snel");
+    } catch (e) {
+      setScanFout(e instanceof Error ? e.message : "Opslaan mislukt");
+    }
+  };
+
+  if (bouwt) {
+    return (
+      <Maaltijdbouwer
+        bestaand={bouwt.bestaand} schaal={schaal} bezig={bezig} fout={scanFout}
+        onOpslaan={bewaarMaaltijd} onTerug={() => setBouwt(null)}
+      />
+    );
+  }
+
   if (gekozen) {
     return (
       <Portiekiezer
@@ -127,15 +169,27 @@ export default function Toevoegen({
 
       {modus === "snel" && (
         <Snel
-          favorieten={favorieten} recent={recent} maaltijd={maal} onMaaltijd={setMaal}
+          maaltijden={maaltijden} favorieten={favorieten} recent={recent}
+          maaltijd={maal} onMaaltijd={setMaal}
           schaal={schaal} onLog={logSjabloon} onAanpassen={pasSjabloonAan}
           onWisFavoriet={wisFavoriet}
+          onLogMaaltijd={logMaaltijd}
+          onBewerkMaaltijd={(m) => setBouwt({ bestaand: m })}
+          onNieuweMaaltijd={() => setBouwt({})}
         />
       )}
 
       {modus === "zoeken" && <Zoeken schaal={schaal} onKies={kies} />}
 
       {modus === "scannen" && <Scanner onCode={zoekBarcode} onHandmatig={naarHandmatig} />}
+
+      {modus === "recept" && (
+        <Recepten
+          maaltijd={maal} datumLabel={datumLabel} schaal={schaal}
+          bezig={bezig} fout={fout}
+          onLog={(payload) => onOpslaan(payload, false)}
+        />
+      )}
 
       {modus === "handmatig" && (
         <Handmatig

@@ -1,5 +1,5 @@
 import { redis } from "../redis";
-import type { Day, Entry, FoodTemplate, Product, Profile } from "./types";
+import type { Day, Entry, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./types";
 import {
   STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT, RECENT_MAX,
 } from "./types";
@@ -33,6 +33,8 @@ const RECENT_KEY = "wl:recent";
 const FOOD = (barcode: string) => `wl:food:${barcode}`;
 const WEIGHT_LOG = "wl:weight:log";
 const WEIGHT = (datum: string) => `wl:weight:${datum}`;
+const MEALS_KEY = "wl:meals";
+const RECIPE_POINTS = (id: string) => `wl:recipe:points:${id}`;
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -345,4 +347,55 @@ export async function verwerkWeging(trendKg: number): Promise<{
   };
   await redis.set(PROFILE_KEY, nieuw);
   return { profiel: nieuw, herberekend: true };
+}
+
+// -- samengestelde maaltijden ------------------------------------------------
+
+export async function getMaaltijden(): Promise<Maaltijdsjabloon[]> {
+  const lijst = (await redis.get<Maaltijdsjabloon[]>(MEALS_KEY)) ?? [];
+  return lijst.sort((a, b) => b.last_used - a.last_used);
+}
+
+export async function saveMaaltijd(m: Maaltijdsjabloon): Promise<Maaltijdsjabloon[]> {
+  const lijst = await getMaaltijden();
+  // Bewerken van een bestaande maaltijd overschrijft hem op zijn id.
+  const nieuw = [m, ...lijst.filter((x) => x.id !== m.id)];
+  await redis.set(MEALS_KEY, nieuw);
+  return nieuw.sort((a, b) => b.last_used - a.last_used);
+}
+
+export async function deleteMaaltijd(id: string): Promise<Maaltijdsjabloon[]> {
+  const nieuw = (await getMaaltijden()).filter((m) => m.id !== id);
+  await redis.set(MEALS_KEY, nieuw);
+  return nieuw;
+}
+
+/** Zet een maaltijd bovenaan zonder de rest te raken. */
+export async function raakMaaltijdAan(id: string): Promise<void> {
+  const lijst = await getMaaltijden();
+  const m = lijst.find((x) => x.id === id);
+  if (!m) return;
+  await redis.set(MEALS_KEY, lijst.map((x) => (x.id === id ? { ...x, last_used: Date.now() } : x)));
+}
+
+// -- doorgerekende recepten --------------------------------------------------
+
+export interface ReceptCache<T> {
+  /** Vingerafdruk van het recept toen dit werd berekend. */
+  hash: string;
+  berekend: T;
+}
+
+/**
+ * Leest een doorgerekend recept uit de cache. Klopt de vingerafdruk niet meer
+ * met het recept, dan komt er niets terug en wordt er opnieuw gerekend — zo
+ * vervalt de cache vanzelf zodra je het recept aanpast.
+ */
+export async function getReceptPunten<T>(id: string, hash: string): Promise<T | null> {
+  const c = await redis.get<ReceptCache<T>>(RECIPE_POINTS(id));
+  return c && c.hash === hash ? c.berekend : null;
+}
+
+export async function cacheReceptPunten<T>(id: string, hash: string, berekend: T): Promise<void> {
+  await redis.set(RECIPE_POINTS(id), { hash, berekend });
 }

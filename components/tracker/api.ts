@@ -1,4 +1,4 @@
-import type { Day, FoodTemplate, Product, Profile } from "@/lib/tracker/types";
+import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "@/lib/tracker/types";
 import type { BudgetResultaat } from "@/lib/tracker/budget";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import type { GewichtGegevens } from "./Gewicht";
@@ -53,6 +53,18 @@ export const trackerApi = {
   barcode: (code: string) =>
     fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" })
       .then(lees<{ gevonden: boolean; product?: Product; uitCache?: boolean; offline?: boolean }>),
+
+  getMaaltijden: () =>
+    fetch("/api/tracker/maaltijden", { cache: "no-store" })
+      .then(lees<{ maaltijden: Maaltijdsjabloon[] }>).then((d) => d.maaltijden),
+
+  bewaarMaaltijd: (m: unknown) =>
+    fetch("/api/tracker/maaltijden", { method: "POST", headers: json, body: JSON.stringify(m) })
+      .then(lees<{ maaltijden: Maaltijdsjabloon[] }>).then((d) => d.maaltijden),
+
+  wisMaaltijd: (id: string) =>
+    fetch(`/api/tracker/maaltijden?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+      .then(lees<{ maaltijden: Maaltijdsjabloon[] }>).then((d) => d.maaltijden),
 
   getGewicht: () =>
     fetch("/api/tracker/gewicht", { cache: "no-store" }).then(lees<GewichtGegevens>),
