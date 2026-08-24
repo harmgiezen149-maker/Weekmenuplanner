@@ -1,13 +1,22 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, ChefHat, Loader2, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChefHat, Loader2, Plus, Search } from "lucide-react";
 import { T } from "./stijl";
 import { toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Maaltijd } from "@/lib/tracker/types";
 import type { ReceptPunten } from "@/lib/tracker/recept";
+import Aanvullen from "./Aanvullen";
+import type { Nutrients } from "@/lib/tracker/types";
+
+/** Alleen hier gebruikt, dus niet in het gedeelde stijlblad. */
+const AANVUL_KNOP: React.CSSProperties = {
+  display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 800,
+  color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 999,
+  padding: "5px 11px", flexShrink: 0,
+};
 
 export interface ReceptKop {
   id: string;
@@ -46,6 +55,9 @@ export default function Recepten({
   const [gekozen, setGekozen] = useState<Doorgerekend | null>(null);
   const [laadt, setLaadt] = useState(false);
   const [laadFout, setLaadFout] = useState("");
+  // Welk ontbrekend ingredient wordt op dit moment aangevuld.
+  const [aanvullen, setAanvullen] = useState<string | null>(null);
+  const [bewaart, setBewaart] = useState(false);
 
   useEffect(() => {
     fetch("/api/tracker/recepten", { cache: "no-store" })
@@ -53,6 +65,31 @@ export default function Recepten({
       .then((d) => setRecepten(Array.isArray(d.recepten) ? d.recepten : []))
       .catch(() => setRecepten([]));
   }, []);
+
+  /**
+   * Bewaart een aangevuld ingredient en rekent het recept meteen opnieuw door.
+   * De aanvulling geldt daarna voor elk recept, dus de vingerafdruk van alle
+   * recepten is verschoven en de cache is vanzelf vervallen.
+   */
+  const bewaarIngredient = async (gegevens: {
+    naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients;
+  }) => {
+    setBewaart(true); setLaadFout("");
+    try {
+      const res = await fetch("/api/tracker/ingredienten", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gegevens),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Opslaan mislukt");
+      }
+      setAanvullen(null);
+      if (gekozen) await kies(gekozen.recept.id);
+    } catch (e) {
+      setLaadFout(e instanceof Error ? e.message : "Opslaan mislukt");
+    } finally { setBewaart(false); }
+  };
 
   const kies = async (id: string) => {
     setLaadt(true); setLaadFout("");
@@ -65,10 +102,21 @@ export default function Recepten({
     } finally { setLaadt(false); }
   };
 
+  if (aanvullen) {
+    return (
+      <Aanvullen
+        ingredient={aanvullen} bezig={bewaart}
+        onOpslaan={bewaarIngredient}
+        onTerug={() => setAanvullen(null)}
+      />
+    );
+  }
+
   if (gekozen) {
     return (
       <Portie gekozen={gekozen} maaltijd={maaltijd} datumLabel={datumLabel} schaal={schaal}
-        bezig={bezig} fout={fout} onLog={onLog} onTerug={() => setGekozen(null)} />
+        bezig={bezig} fout={fout} onLog={onLog} onTerug={() => setGekozen(null)}
+        onAanvullen={setAanvullen} />
     );
   }
 
@@ -120,7 +168,7 @@ export default function Recepten({
 }
 
 function Portie({
-  gekozen, maaltijd, datumLabel, schaal, bezig, fout, onLog, onTerug,
+  gekozen, maaltijd, datumLabel, schaal, bezig, fout, onLog, onTerug, onAanvullen,
 }: {
   gekozen: Doorgerekend;
   maaltijd: Maaltijd;
@@ -130,6 +178,7 @@ function Portie({
   fout: string;
   onLog: (payload: Record<string, unknown>) => void;
   onTerug: () => void;
+  onAanvullen: (ingredient: string) => void;
 }) {
   const { recept, punten } = gekozen;
   const [porties, setPorties] = useState("1");
@@ -187,17 +236,34 @@ function Portie({
       </div>
 
       {punten.nietHerkend.length > 0 && (
-        <div style={T.waarschuwing}>
-          <strong>
-            {punten.nietHerkend.length}{" "}
-            {punten.nietHerkend.length === 1 ? "ingrediënt telt" : "ingrediënten tellen"} niet mee:
-          </strong>{" "}
-          {punten.nietHerkend.join(", ")}.{" "}
-          {punten.nietHerkend.length === 1
-            ? "Dat staat niet in de productlijst"
-            : "Die staan niet in de productlijst"}, dus de punten hierboven zijn aan
-          de lage kant.
-        </div>
+        <>
+          <div style={T.waarschuwing}>
+            <strong>
+              {punten.nietHerkend.length}{" "}
+              {punten.nietHerkend.length === 1 ? "ingrediënt telt" : "ingrediënten tellen"} niet mee:
+            </strong>{" "}
+            {punten.nietHerkend.length === 1
+              ? "dat staat niet in de productlijst"
+              : "die staan niet in de productlijst"}, dus de punten hierboven zijn aan
+            de lage kant. Vul {punten.nietHerkend.length === 1 ? "hem" : "ze"} hieronder
+            aan — dat hoeft maar één keer, daarna{" "}
+            {punten.nietHerkend.length === 1 ? "telt hij" : "tellen ze"} mee in élk recept
+            waar {punten.nietHerkend.length === 1 ? "hij" : "ze"} in{" "}
+            {punten.nietHerkend.length === 1 ? "zit" : "zitten"}.
+          </div>
+
+          <div style={T.kaartStrak}>
+            {punten.nietHerkend.map((naam) => (
+              <button key={naam} style={T.resultaat} onClick={() => onAanvullen(naam)}>
+                <span style={T.resultaatTekst}>
+                  <span style={T.resultaatNaam}>{naam}</span>
+                  <span style={T.resultaatSub}>nog geen voedingswaarden bekend</span>
+                </span>
+                <span style={AANVUL_KNOP}><Plus size={13} /> Aanvullen</span>
+              </button>
+            ))}
+          </div>
+        </>
       )}
 
       {punten.onzeker.length > 0 && (
