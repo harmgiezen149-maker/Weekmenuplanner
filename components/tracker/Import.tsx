@@ -3,34 +3,56 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Check, ClipboardPaste, Link2, Loader2 } from "lucide-react";
 import { T } from "./stijl";
-import { toonPunten } from "@/lib/tracker/points";
+import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
-import type { Maaltijd } from "@/lib/tracker/types";
+import type { Maaltijd, Product } from "@/lib/tracker/types";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 
-interface Uitslag {
+type Bron = "json-ld" | "html" | "model";
+
+interface ReceptUitslag {
+  soort: "recept";
   recept: { titel: string; personen: number };
   punten: ReceptPunten;
-  bron: "json-ld" | "html" | "model";
+  bron: Bron;
   url: string;
 }
 
-const BRON_UITLEG: Record<Uitslag["bron"], string> = {
+interface ProductUitslag {
+  soort: "product";
+  product: Product;
+  bron: Bron;
+  url: string;
+}
+
+type Uitslag = ReceptUitslag | ProductUitslag;
+
+const BRON_UITLEG: Record<Bron, string> = {
   "json-ld": "Uit de receptgegevens van de pagina zelf — die zijn exact.",
   html: "Uit de ingrediëntenlijst op de pagina. Kijk de hoeveelheden even na.",
   model: "Uit de tekst van de pagina afgeleid. Kijk het geheel even na.",
 };
 
+const PRODUCT_BRON_UITLEG: Record<Bron, string> = {
+  "json-ld": "Uit de productgegevens van de pagina zelf — die zijn exact.",
+  html: "Uit de voedingswaardetabel op de pagina.",
+  model: "Uit de tekst van de pagina afgeleid. Kijk de waarden even na.",
+};
+
 /**
- * Landingspunt voor een gedeelde receptlink.
+ * Landingspunt voor een gedeelde link.
+ *
+ * Werkt voor allebei: een receptpagina wordt per portie doorgerekend, een
+ * productpagina van een webshop levert een product op. Welke van de twee het
+ * is zoekt de app zelf uit — dat hoef je niet te weten voor je plakt.
  *
  * Op Android komt de link binnen via het deelmenu (share_target in het
  * manifest). iOS kent dat niet; daar plak je hem hier, of stuurt een Shortcut
  * hem naar dezelfde route.
  */
 export default function Import({
-  gedeeldeUrl, datumLabel, schaal, bezig, fout, onLog,
+  gedeeldeUrl, datumLabel, schaal, bezig, fout, onLog, onKiesProduct,
 }: {
   gedeeldeUrl: string;
   datumLabel: string;
@@ -38,6 +60,8 @@ export default function Import({
   bezig: boolean;
   fout: string;
   onLog: (payload: Record<string, unknown>) => void;
+  /** Een gevonden product gaat naar de portiekiezer. */
+  onKiesProduct: (p: Product) => void;
 }) {
   const [url, setUrl] = useState(gedeeldeUrl);
   const [laadt, setLaadt] = useState(false);
@@ -56,6 +80,10 @@ export default function Import({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Importeren mislukt");
+      if (data.soort === "product") {
+        setUitslag(data);
+        return;
+      }
       setUitslag(data);
     } catch (e) {
       setEigenFout(e instanceof Error ? e.message : "Er ging iets mis");
@@ -78,15 +106,15 @@ export default function Import({
   };
 
   const aantal = getal(porties);
-  const raw = (uitslag?.punten.perPortiePunten ?? 0) * aantal;
-  const punten = toonPunten(raw, schaal);
+  const perPortie = uitslag?.soort === "recept" ? uitslag.punten.perPortiePunten : 0;
+  const punten = toonPunten(perPortie * aantal, schaal);
 
   return (
     <>
       {(fout || eigenFout) && <div style={T.fout}>{fout || eigenFout}</div>}
 
       <div style={T.veldVak}>
-        <label style={T.label} htmlFor="im-url">Link naar het recept</label>
+        <label style={T.label} htmlFor="im-url">Link naar een recept of product</label>
         <input id="im-url" style={T.veld} value={url} inputMode="url"
           placeholder="https://..." onChange={(e) => setUrl(e.target.value)} />
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -94,7 +122,7 @@ export default function Import({
             disabled={!url.trim() || laadt} onClick={() => haalOp(url)}>
             {laadt
               ? <><Loader2 size={16} className="spin" /> Ophalen...</>
-              : <><Link2 size={16} /> Recept ophalen</>}
+              : <><Link2 size={16} /> Ophalen</>}
           </button>
           <button style={{ ...T.secundair, marginTop: 0, width: "auto", padding: "12px 14px" }}
             onClick={plak} aria-label="Link uit klembord plakken">
@@ -102,12 +130,60 @@ export default function Import({
           </button>
         </div>
         <p style={T.hint}>
-          Op Android kun je een receptpagina rechtstreeks vanuit je browser naar deze
-          app delen. Op iOS bestaat dat niet: kopieer de link en gebruik de plakknop.
+          Werkt voor een receptpagina én voor een productpagina van een webshop; de
+          app zoekt zelf uit welke van de twee het is. Op Android kun je een pagina
+          rechtstreeks vanuit je browser naar deze app delen. Op iOS bestaat dat
+          niet: kopieer de link en gebruik de plakknop.
         </p>
       </div>
 
-      {uitslag && (
+      {uitslag?.soort === "product" && (
+        <>
+          <div style={T.kaart}>
+            <div style={T.productNaam}>{uitslag.product.name}</div>
+            <div style={T.productSub}>
+              {uitslag.product.brand ? `${uitslag.product.brand} · ` : ""}
+              {PRODUCT_BRON_UITLEG[uitslag.bron]}
+            </div>
+            <div style={T.macroRij}>
+              <span style={T.macro}>
+                <span style={T.macroWaarde}>{Math.round(uitslag.product.per100.kcal)}</span>{" "}
+                kcal/100 {uitslag.product.eenheid}
+              </span>
+              <span style={T.macro}>
+                <span style={T.macroWaarde}>{nl(uitslag.product.per100.protein_g)}</span> g eiwit
+              </span>
+              <span style={T.macro}>
+                <span style={T.macroWaarde}>{nl(uitslag.product.per100.sugar_g)}</span> g suiker
+              </span>
+              <span style={T.macro}>
+                <span style={T.macroWaarde}>
+                  {toonPunten(rawPoints(uitslag.product.per100, 100), schaal)}
+                </span> pt per 100 {uitslag.product.eenheid}
+              </span>
+            </div>
+          </div>
+
+          {uitslag.product.barcode && (
+            <div style={{ ...T.melding, borderColor: "var(--green)" }}>
+              Streepjescode <strong style={{ color: "var(--ink)" }}>{uitslag.product.barcode}</strong>{" "}
+              stond op de pagina en is bewaard. Scan je dit product later, dan wordt
+              het meteen gevonden.
+            </div>
+          )}
+
+          <button style={T.primair} onClick={() => onKiesProduct(uitslag.product)}>
+            <Check size={16} /> Hoeveelheid kiezen en toevoegen
+          </button>
+
+          <p style={T.hint}>
+            De punten komen uit de eigen formule, berekend uit de voedingswaarden op
+            de pagina. Prijzen en bonusteksten worden genegeerd.
+          </p>
+        </>
+      )}
+
+      {uitslag?.soort === "recept" && (
         <>
           <div style={T.kaart}>
             <div style={T.productNaam}>{uitslag.recept.titel}</div>

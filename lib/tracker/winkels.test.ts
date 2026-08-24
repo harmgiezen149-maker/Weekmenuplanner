@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   winkelGetal, uitVoedingstabel, tabelNaarNutrients, leesGewicht,
-  uitAhDetail, uitJumboDetail, zoekBijWinkels,
+  uitAhDetail, uitJumboDetail, zoekBijWinkels, leesEnergie,
 } from "./winkels.ts";
 import { rawPoints, toonPunten } from "./points.ts";
 
@@ -187,4 +187,40 @@ test("geen token betekent geen AH-resultaat", async () => {
     throw new Error("had hier niet moeten komen");
   };
   assert.equal(await zoekBijWinkels("123", haal), null);
+});
+
+// -- energie: de eenheid staat niet altijd op dezelfde plek ------------------
+
+test("kcal in de naam van de rij", () => {
+  assert.equal(leesEnergie([{ naam: "Energie (kcal)", waarde: "380" }]), 380);
+});
+
+test("kcal in de waarde, niet in de naam", () => {
+  // Dit ging eerder mis: "Energie" werd als kilojoules gelezen en 380 werd 91.
+  assert.equal(leesEnergie([{ naam: "Energie", waarde: "380 kcal" }]), 380);
+});
+
+test("kilojoules en calorieen in één cel", () => {
+  assert.equal(leesEnergie([{ naam: "Energie", waarde: "1590 kJ / 380 kcal" }]), 380);
+  assert.equal(leesEnergie([{ naam: "Energie", waarde: "1590kJ/380kcal" }]), 380);
+});
+
+test("alleen kilojoules wordt omgerekend", () => {
+  const kcal = leesEnergie([{ naam: "Energie", waarde: "1046 kJ" }]);
+  assert.ok(kcal != null && Math.abs(kcal - 250) < 1);
+  const uitNaam = leesEnergie([{ naam: "Energie (kJ)", waarde: "1046" }]);
+  assert.ok(uitNaam != null && Math.abs(uitNaam - 250) < 1);
+});
+
+test("zonder energierij komt er null", () => {
+  assert.equal(leesEnergie([]), null);
+  assert.equal(leesEnergie([{ naam: "Eiwitten", waarde: "13 g" }]), null);
+});
+
+test("een volledige tabel met kcal in de waarde klopt nu", () => {
+  const n = tabelNaarNutrients([
+    { naam: "Energie", waarde: "380 kcal" },
+    { naam: "Eiwitten", waarde: "13 g" },
+  ]);
+  assert.equal(n?.kcal, 380);
 });

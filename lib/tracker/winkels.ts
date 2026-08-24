@@ -64,17 +64,50 @@ export function uitVoedingstabel(
 }
 
 /**
+ * Energie in kcal.
+ *
+ * De eenheid staat soms in de naam van de rij ("Energie (kcal)") en soms in de
+ * waarde ("380 kcal"), en vaak staan kilojoules en calorieen samen in één cel
+ * ("1590 kJ / 380 kcal"). Er wordt daarom naar allebei gekeken: pas als er
+ * nergens kcal te vinden is, worden kilojoules omgerekend. Zonder die volgorde
+ * wordt een waarde die al in kcal staat alsnog gedeeld door 4,184.
+ */
+export function leesEnergie(rijen: { naam: string; waarde: unknown }[]): number | null {
+  const noemtKcal = (r: { naam: string; waarde: unknown }) =>
+    /kcal|calorie/i.test(r.naam) || /kcal/i.test(String(r.waarde));
+
+  const kcalRij = rijen.find(noemtKcal);
+  if (kcalRij) {
+    const uitWaarde = /([\d.,]+)\s*kcal/i.exec(String(kcalRij.waarde));
+    if (uitWaarde) {
+      const n = Number(uitWaarde[1].replace(",", "."));
+      if (Number.isFinite(n) && n >= 0) return n;
+    }
+    const g = winkelGetal(kcalRij.waarde);
+    if (g != null) return g;
+  }
+
+  const kjRij = rijen.find((r) =>
+    /\bkj\b|kilojoule|energie/i.test(r.naam) || /\bkj\b/i.test(String(r.waarde)));
+  if (kjRij) {
+    const uitWaarde = /([\d.,]+)\s*kj/i.exec(String(kjRij.waarde));
+    const kj = uitWaarde
+      ? Number(uitWaarde[1].replace(",", "."))
+      : winkelGetal(kjRij.waarde);
+    if (kj != null && Number.isFinite(kj) && kj > 0) return kj / KJ_PER_KCAL;
+  }
+
+  return null;
+}
+
+/**
  * Zet een voedingstabel om naar ons model. Geeft null als er te weinig in
  * staat om punten mee te berekenen.
  */
 export function tabelNaarNutrients(
   rijen: { naam: string; waarde: unknown }[]
 ): Nutrients | null {
-  let kcal = uitVoedingstabel(rijen, ["energie (kcal)", "kcal", "calorie"]);
-  if (kcal == null) {
-    const kj = uitVoedingstabel(rijen, ["kj", "kilojoule", "energie"]);
-    if (kj != null) kcal = kj / KJ_PER_KCAL;
-  }
+  const kcal = leesEnergie(rijen);
 
   const eiwit = uitVoedingstabel(rijen, ["eiwit", "protein"]);
   const vet = uitVoedingstabel(rijen, ["vet", "fat"]);

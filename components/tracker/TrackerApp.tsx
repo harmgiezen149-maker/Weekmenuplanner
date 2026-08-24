@@ -11,12 +11,13 @@ import Gewicht from "./Gewicht";
 import type { GewichtGegevens } from "./Gewicht";
 import Weekoverzicht from "./Weekoverzicht";
 import Import from "./Import";
+import Portiekiezer from "./Portiekiezer";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import { trackerApi } from "./api";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { toonPunten } from "@/lib/tracker/points";
 import { dagBewegingspunten } from "@/lib/tracker/activiteit";
-import type { Day, Maaltijd, Profile } from "@/lib/tracker/types";
+import type { Day, Maaltijd, Product, Profile } from "@/lib/tracker/types";
 import { MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
 
 export type Pagina = "dag" | "toevoegen" | "week" | "gewicht" | "instellingen" | "import";
@@ -45,6 +46,8 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   const [week, setWeek] = useState<{ week: WeekSamenvatting | null; dagenTeGaan: number } | null>(null);
   const [weekDatum, setWeekDatum] = useState(datumSleutel());
   const [herberekend, setHerberekend] = useState(false);
+  // Een product uit een geïmporteerde link gaat langs de portiekiezer.
+  const [importProduct, setImportProduct] = useState<Product | null>(null);
 
   // De datum en de gekozen maaltijd reizen via de URL mee naar het
   // invoerscherm, zodat "toevoegen bij lunch" op de juiste plek belandt.
@@ -234,11 +237,22 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
             )}
 
             {pagina === "import" && (
-              <Import
-                gedeeldeUrl={gedeeldeUrl} datumLabel={toonDatum(datum, vandaag)}
-                schaal={schaal} bezig={bezig} fout={fout}
-                onLog={(payload) => voegToe(payload, false)}
-              />
+              importProduct ? (
+                <Portiekiezer
+                  product={importProduct} maaltijd={maaltijd}
+                  datumLabel={toonDatum(datum, vandaag)} schaal={schaal}
+                  bezig={bezig} fout={fout}
+                  onOpslaan={(payload, alsFavoriet) => voegToe(payload, alsFavoriet)}
+                  onTerug={() => setImportProduct(null)}
+                />
+              ) : (
+                <Import
+                  gedeeldeUrl={gedeeldeUrl} datumLabel={toonDatum(datum, vandaag)}
+                  schaal={schaal} bezig={bezig} fout={fout}
+                  onLog={(payload) => voegToe(payload, false)}
+                  onKiesProduct={setImportProduct}
+                />
+              )
             )}
 
             {pagina === "instellingen" && (

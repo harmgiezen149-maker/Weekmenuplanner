@@ -365,10 +365,29 @@ glas melk niet mee en de suiker in een koekje wel.
 Hiervoor is een `ANTHROPIC_API_KEY` nodig. Zonder die sleutel geeft het scherm
 een nette melding en werken de andere vijf routes gewoon door.
 
-### Een receptlink delen
+### Punten bij je recepten
 
-**Android** — deel een receptpagina rechtstreeks vanuit je browser naar de app;
-hij komt binnen op `/tracker/import` en wordt meteen doorgerekend. Dat werkt via
+Bij elk recept in het kookboek staat wat een portie kost: een badge op de
+receptkaart en een regel in het recept zelf. Die punten worden berekend uit de
+ingrediënten, precies zoals bij het loggen — er wordt niets apart opgeslagen,
+dus pas je een recept aan, dan klopt het getal meteen weer.
+
+Staat er een **tilde** voor (`~8 pt`) en is de badge donkeroranje, dan kon niet
+elk ingrediënt worden herkend. Het echte aantal ligt dan hoger; in het recept
+zelf staat om hoeveel ingrediënten het gaat. Vul je die aan in de basislijst,
+dan klopt het getal vanzelf.
+
+Zonder ingevuld trackerprofiel verschijnen de badges niet en werkt het kookboek
+verder gewoon door.
+
+### Een link delen: recept of product
+
+Op `/tracker/import` plak je een link. **De app zoekt zelf uit wat het is:** een
+receptpagina wordt per portie doorgerekend, een productpagina van een webshop
+levert een product op dat je meteen kunt loggen.
+
+**Android** — deel een pagina rechtstreeks vanuit je browser naar de app; hij
+komt binnen op `/tracker/import` en wordt meteen verwerkt. Dat werkt via
 `share_target` in het manifest en vereist dat je de app op je beginscherm hebt
 gezet.
 
@@ -378,9 +397,28 @@ gezet.
 2. **Een Shortcut** — zie hieronder.
 
 De pagina wordt in drie stappen uitgelezen, van exact naar geraden: eerst het
-`schema.org`-receptblok dat veel receptsites meeleveren, dan de
-ingrediëntenlijst uit de HTML, en pas als laatste het model op de platte tekst.
-Op het scherm staat welke van de drie het geworden is.
+`schema.org`-blok dat veel sites meeleveren, dan de ingrediëntenlijst of de
+voedingswaardetabel uit de HTML, en pas als laatste het model op de platte
+tekst. Op het scherm staat welke van de drie het geworden is.
+
+#### Een product via een link
+
+Plak de link van een productpagina — bijvoorbeeld van jumbo.com of ah.nl — en de
+app leest naam, merk, verpakkingsgrootte en de voedingswaarden per 100 eruit.
+Tracking-parameters (`utm_`, `gclid`, `channable` en dergelijke) worden er eerst
+afgehaald.
+
+**Staat de streepjescode op de pagina, dan wordt het product meteen bewaard.**
+Veel webshops zetten die als `gtin13` in hun productgegevens. Scan je datzelfde
+pak later, dan wordt het direct gevonden — importeren via een link vult dezelfde
+bibliotheek als handmatig invullen na een mislukte scan.
+
+Prijzen, bonusteksten en aanbevolen dagelijkse hoeveelheden worden genegeerd.
+Punten komen altijd uit de eigen formule.
+
+Bij een grote verpakking (500 g of meer) begint het hoeveelheidsveld op 100 in
+plaats van op de hele verpakking — een fles van anderhalve liter drink je niet in
+één keer leeg. De verpakkingsgrootte blijft als knop beschikbaar.
 
 **De punten komen altijd uit de eigen formule.** Een puntwaarde of calorieënlijst
 die op de bronpagina staat wordt nooit overgenomen — daar staat een test op.
@@ -528,6 +566,7 @@ app/
     tracker/maaltijden/route.ts   Vaste, samengestelde maaltijden
     tracker/recepten/route.ts     Receptenlijst uit het kookboek
     tracker/recepten/[id]/route.ts  Eén recept doorgerekend, met cache
+    tracker/recepten/punten/route.ts Punten van alle recepten in één keer
     tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
     tracker/beweging/route.ts     Bewegingsactiviteiten en hun punten
     tracker/foto/route.ts         Foto-schatting via de Anthropic API
@@ -576,6 +615,7 @@ lib/
     foto.ts             Het antwoord van de foto-schatting uitlezen
     link.ts             Recept uit een webpagina halen
     winkels.ts          Productgegevens van AH en Jumbo
+    productlink.ts      Een product uit een webshoppagina halen
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

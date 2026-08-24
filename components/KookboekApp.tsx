@@ -75,6 +75,14 @@ const api = {
     }
     return res.json();
   },
+  async getReceptPunten(): Promise<{
+    punten: Record<string, { punten: number; nietHerkend: number; totaal: number }>;
+    profiel: boolean;
+  }> {
+    const r = await fetch("/api/tracker/recepten/punten", { cache: "no-store" });
+    if (!r.ok) return { punten: {}, profiel: false };
+    return r.json();
+  },
   async dagmenuNaarLogboek(datum: string, gerechten: { id: string; maaltijd: string }[]): Promise<{
     toegevoegd: string[]; mislukt: string[]; nietHerkend: string[];
   }> {
@@ -164,6 +172,9 @@ function comprimeerAfbeelding(bron: string, kwaliteit = 0.82, maxDim = MAX_DIM):
 // ============================================================================
 // APP
 // ============================================================================
+/** Punten per portie per recept, uit de tracker. */
+export type ReceptPuntenKaart = Record<string, { punten: number; nietHerkend: number; totaal: number }>;
+
 export default function App() {
   const [recepten, setRecepten] = useState<Recept[]>([]);
   const [week, setWeek] = useState<WeekState>({ startDag: 0, slots: {} });
@@ -171,6 +182,9 @@ export default function App() {
   const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
   const [voorraad, setVoorraad] = useState<Voorraad>({ items: [] });
   const [tab, setTab] = useState("recepten");
+  // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
+  // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
+  const [receptPunten, setReceptPunten] = useState<ReceptPuntenKaart>({});
   const router = useRouter();
   const [laden, setLaden] = useState(true);
 
@@ -181,6 +195,9 @@ export default function App() {
       const slots: Record<string, { recipeId: string; personen: number }> = {};
       Object.entries(w.slots || {}).forEach(([k, v2]) => { slots[k.includes("|") ? k : slotKey(k, HOOFD_MAALTIJD)] = v2 as any; });
       setRecepten(r); setWeek({ ...w, slots }); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
+      api.getReceptPunten()
+        .then((d) => setReceptPunten(d.punten))
+        .catch(() => { /* zonder punten werkt het kookboek gewoon door */ });
     })();
   }, []);
 
@@ -392,6 +409,7 @@ export default function App() {
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onDelete={deleteRecept} onScore={(id, s) => updateRecept(id, { score: s })}
                 onUpdate={updateRecept} onNaarLijst={voegReceptToeAanLijst}
+                receptPunten={receptPunten}
               />
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
@@ -569,12 +587,13 @@ function PlaatsInWeekDialog({
 // RECEPTENLIJST + FILTERS
 // ============================================================================
 function ReceptenLijst({
-  recepten, week, setWeek, dagen, onDelete, onScore, onUpdate, onNaarLijst,
+  recepten, week, setWeek, dagen, onDelete, onScore, onUpdate, onNaarLijst, receptPunten,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>;
   dagen: readonly string[]; onDelete: (id: string) => void; onScore: (id: string, s: number) => void;
   onUpdate: (id: string, patch: Partial<Recept>) => Promise<void>;
   onNaarLijst: (recept: Recept, personen: number) => void;
+  receptPunten: ReceptPuntenKaart;
 }) {
   const [zoek, setZoek] = useState("");
   const [fKeuken, setFKeuken] = useState("");
@@ -674,13 +693,14 @@ function ReceptenLijst({
         {recepten.length === 0 && <p style={S.empty}>Nog geen recepten. Voeg er een toe via het tabblad Toevoegen.</p>}
         {recepten.length > 0 && gefilterd.length === 0 && <p style={S.empty}>Geen recepten gevonden. Pas je filters aan.</p>}
         {gefilterd.map((r) => (
-          <ReceptKaart key={r.id} r={r} onOpen={() => setOpen(r)} onPlaats={() => setPlaats(r)} />
+          <ReceptKaart key={r.id} r={r} punten={receptPunten[r.id]}
+            onOpen={() => setOpen(r)} onPlaats={() => setPlaats(r)} />
         ))}
       </div>
 
       {huidig && (
         <ReceptModal
-          r={huidig} onClose={() => setOpen(null)}
+          r={huidig} punten={receptPunten[huidig.id]} onClose={() => setOpen(null)}
           onDelete={() => { onDelete(huidig.id); setOpen(null); }}
           onScore={(s) => onScore(huidig.id, s)}
           onGegeten={(n) => onUpdate(huidig.id, { gegeten: n })}
@@ -743,7 +763,10 @@ function NaarLijstDialog({
   );
 }
 
-function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; onPlaats: () => void }) {
+function ReceptKaart({ r, punten, onOpen, onPlaats }: {
+  r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  onOpen: () => void; onPlaats: () => void;
+}) {
   return (
     <div className="card" style={S.card}>
       <button onClick={onOpen} style={S.cardBody}>
@@ -755,6 +778,7 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
           <Sterren n={r.score} small />
         </div>
         <div style={S.cardMeta}>
+          {punten && <PuntenTag {...punten} />}
           <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
@@ -769,10 +793,35 @@ function ReceptKaart({ r, onOpen, onPlaats }: { r: Recept; onOpen: () => void; o
   );
 }
 
+/**
+ * Punten per portie, doorgerekend uit de ingrediënten door de tracker.
+ *
+ * Kon niet elk ingrediënt worden herkend, dan staat er een tilde voor: het
+ * getal is dan aan de lage kant en dat hoort zichtbaar te zijn.
+ */
+function PuntenTag({ punten, nietHerkend, totaal }: {
+  punten: number; nietHerkend: number; totaal: number;
+}) {
+  const onvolledig = nietHerkend > 0;
+  const uitleg = onvolledig
+    ? `${punten} punten per portie. ${nietHerkend} van de ${totaal} ingrediënten werden niet herkend, dus dit is aan de lage kant.`
+    : `${punten} punten per portie`;
+
+  return (
+    <span
+      style={{ ...S.puntenTag, ...(onvolledig ? S.puntenTagOnvolledig : {}) }}
+      title={uitleg}
+    >
+      {onvolledig ? "~" : ""}{punten} pt
+    </span>
+  );
+}
+
 function ReceptModal({
-  r, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
+  r, punten, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
 }: {
-  r: Recept; onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
+  r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
 }) {
   const [zoom, setZoom] = useState(false);
   return (
@@ -794,11 +843,30 @@ function ReceptModal({
         )}
 
         <div style={S.cardMeta}>
+          {punten && <PuntenTag {...punten} />}
           <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
         </div>
+
+        {punten && (
+          <p style={S.puntenUitleg}>
+            <strong style={{ color: "var(--ink)" }}>
+              {punten.nietHerkend > 0 ? "Ongeveer " : ""}{punten.punten} punten per portie
+            </strong>{" "}
+            bij {r.personen} {r.personen === 1 ? "persoon" : "personen"}, berekend uit de
+            ingrediënten.
+            {punten.nietHerkend > 0 && (
+              <>
+                {" "}{punten.nietHerkend} van de {punten.totaal} ingrediënten{" "}
+                {punten.nietHerkend === 1 ? "staat" : "staan"} niet in de productlijst en{" "}
+                {punten.nietHerkend === 1 ? "telt" : "tellen"} niet mee, dus het echte aantal
+                ligt hoger.
+              </>
+            )}
+          </p>
+        )}
 
         {zoom && r.afbeelding && <AfbeeldingZoom src={r.afbeelding} onClose={() => setZoom(false)} />}
 
@@ -2774,6 +2842,10 @@ const S: Record<string, React.CSSProperties> = {
   cardTitle: { fontSize: 16, fontWeight: 700, color: "var(--ink)" },
   cardMeta: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },
+  puntenUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "10px 0 0" },
+  puntenTag: { fontSize: 11, fontWeight: 800, color: "#fff", background: "var(--accent)", padding: "4px 9px", borderRadius: 999, letterSpacing: "0.01em" },
+  puntenTagOnvolledig: { background: "var(--over)" },
+
   tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "4px 10px", borderRadius: 999 },
   tagMaaltijd: { color: "#fff", background: "var(--accent)" },
 

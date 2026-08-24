@@ -62,7 +62,15 @@ export default function Portiekiezer({
 }) {
   const alsComponent = modus === "component";
   const heeftPortie = product.portie != null;
-  const [hoev, setHoev] = useState(String(product.portie?.grams ?? 100));
+  // Een verpakking van 500 g of meer is geen portie: een pak kwark of een fles
+  // van anderhalve liter eet je niet in één keer op. Dan begint het veld op
+  // 100; de verpakking blijft als knop beschikbaar.
+  const GROTE_VERPAKKING = 500;
+  const startHoeveelheid =
+    product.portie && product.portie.grams <= GROTE_VERPAKKING
+      ? product.portie.grams
+      : 100;
+  const [hoev, setHoev] = useState(String(startHoeveelheid));
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
   const [favoriet, setFavoriet] = useState(false);
 
