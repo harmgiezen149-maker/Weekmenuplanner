@@ -37,7 +37,11 @@ export default function Toevoegen({
   schaal: number;
   bezig: boolean;
   fout: string;
-  onOpslaan: (payload: Record<string, unknown>, alsFavoriet: boolean) => void;
+  onOpslaan: (
+    payload: Record<string, unknown>,
+    alsFavoriet: boolean,
+    onthoudBij?: { barcode: string; per100: unknown; eenheid: "g" | "ml" }
+  ) => void;
 }) {
   const [modus, setModus] = useState<Modus>("snel");
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
@@ -137,7 +141,8 @@ export default function Toevoegen({
   if (bouwt) {
     return (
       <Maaltijdbouwer
-        bestaand={bouwt.bestaand} schaal={schaal} bezig={bezig} fout={scanFout}
+        bestaand={bouwt.bestaand} favorieten={favorieten} recent={recent}
+        schaal={schaal} bezig={bezig} fout={scanFout}
         onOpslaan={bewaarMaaltijd} onTerug={() => setBouwt(null)}
       />
     );

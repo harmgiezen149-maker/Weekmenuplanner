@@ -164,7 +164,7 @@ export interface Product {
   brand?: string;
   /** Waar het vandaan komt: de externe productdatabase, de eigen basislijst,
    *  of een eerder bewaarde regel (favoriet of recent). */
-  bron: "off" | "basis" | "bewaard";
+  bron: "off" | "basis" | "bewaard" | "winkel" | "eigen";
   /** g voor vaste producten, ml voor dranken. */
   eenheid: "g" | "ml";
   /** Voedingswaarden per 100 g of ml. */

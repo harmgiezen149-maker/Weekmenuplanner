@@ -19,7 +19,8 @@ export { datumSleutel, geldigeDatum };
 //   wl:day:index        -> sorted set met gelogde datums, score = epoch
 //   wl:favorites        -> JSON-lijst met bewaarde sjablonen
 //   wl:recent           -> JSON-lijst met de laatst gelogde items
-//   wl:food:<barcode>   -> gecachet product uit Open Food Facts, 90 dagen
+//   wl:food:<barcode>   -> gecachet product uit een externe bron, 90 dagen
+//   wl:eigen:<barcode>  -> zelf ingevoerd product, blijft staan
 //
 // De volgende fases voegen hier wl:week:*, wl:weight:* en
 // wl:recipe:points:* aan toe.
@@ -31,6 +32,7 @@ const DAY_INDEX = "wl:day:index";
 const FAVORITES_KEY = "wl:favorites";
 const RECENT_KEY = "wl:recent";
 const FOOD = (barcode: string) => `wl:food:${barcode}`;
+const EIGEN = (barcode: string) => `wl:eigen:${barcode}`;
 const WEIGHT_LOG = "wl:weight:log";
 const WEIGHT = (datum: string) => `wl:weight:${datum}`;
 const MEALS_KEY = "wl:meals";
@@ -413,4 +415,26 @@ export async function deleteActiviteit(datum: string, id: string): Promise<Day> 
   const dag = await getDay(datum);
   dag.activity = dag.activity.filter((a) => a.id !== id);
   return saveDay(dag);
+}
+
+// -- eigen producten op streepjescode ---------------------------------------
+
+/**
+ * Producten die je zelf hebt ingevoerd nadat een scan niets opleverde.
+ *
+ * Externe productdatabases dekken Nederlandse huismerken slecht. Wat je één
+ * keer zelf invult wordt hier onder zijn streepjescode bewaard en blijft
+ * staan: de volgende scan van datzelfde pak vindt hem meteen. Zonder
+ * vervaltermijn, want dit is jouw eigen invoer en niet andermans cache.
+ */
+export async function getEigenProduct(barcode: string): Promise<Product | null> {
+  return (await redis.get<Product>(EIGEN(barcode))) ?? null;
+}
+
+export async function saveEigenProduct(barcode: string, p: Product): Promise<void> {
+  await redis.set(EIGEN(barcode), p);
+}
+
+export async function deleteEigenProduct(barcode: string): Promise<void> {
+  await redis.del(EIGEN(barcode));
 }

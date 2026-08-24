@@ -202,7 +202,7 @@ Resultaten tonen de punten per 100 g én per standaardportie. Is de externe
 database onbereikbaar, dan komen de eigen resultaten alsnog door met een
 melding erbij.
 
-**Scannen** — de streepjescode met de camera. Waar de browser `BarcodeDetector`
+**Scannen** — de streepjescode met de camera. Zie hieronder. Waar de browser `BarcodeDetector`
 heeft (Chrome op Android) wordt die gebruikt; Safari op iOS heeft hem niet, daar
 wordt `@zxing/browser` pas op dat moment bijgeladen. Werkt de camera niet, dan
 kun je de code overtikken. Kent de database de code niet, dan opent het
@@ -259,6 +259,13 @@ voeren. Stel bij **Snel** een maaltijd samen uit losse onderdelen — havermout,
 melk en een banaan; of brood met beleg — geef hem een naam, en hij staat
 voortaan bovenaan. Eén tik logt de hele maaltijd.
 
+Bij **Onderdeel toevoegen** staan je favorieten en je recent gelogde items
+bovenaan: één tik voegt zo'n item toe in de hoeveelheid die je eerder gebruikte.
+Het potlood ernaast opent hetzelfde product met een andere hoeveelheid, en het
+zoekveld erboven is er voor alles wat er nog niet bij staat. Zo zet je een lunch
+met vast brood en vaste kaas in drie tikken in elkaar en voeg je daarna nog los
+een tomaat toe.
+
 **De punten van een maaltijd zijn de som van de onderdelen, niet een
 herberekening over de opgetelde voedingswaarden.** Dat klinkt als een detail
 maar scheelt echt iets. De suikercorrectie hangt aan de soort van het
@@ -311,6 +318,37 @@ reden: verbrandingsschattingen vallen structureel te hoog uit, en zonder
 plafond eet je je tekort weg met een getal dat je niet kunt controleren. Bij een
 gewicht rond de 95 kg raakt vrijwel elke activiteit dat plafond binnen een uur —
 je verdiende punten blijven zichtbaar, maar er tellen er zes mee.
+
+### Wat de scanner opzoekt
+
+Een gescande streepjescode gaat langs vier bronnen, in deze volgorde:
+
+1. **Je eigen invoer.** Wat je ooit zelf bij deze code hebt ingevuld wint altijd
+   — dat is precies het product uit jouw kast.
+2. **De cache** van een eerdere externe treffer. Werkt ook zonder netwerk.
+3. **Open Food Facts.** Dekt A-merken goed.
+4. **De supermarkten zelf** (Albert Heijn en Jumbo).
+
+**Nederlandse huismerken staan vaak in geen enkele externe database.** Scan je
+een pak AH-kwark, dan is de kans groot dat stap 3 en 4 allebei niets vinden. Dat
+is geen fout in de app maar een gat in de gegevens.
+
+Daarom leert de app je eigen boodschappen kennen. Vindt de scan niets, dan opent
+het handmatige formulier met de code al ingevuld en staat **"Wordt onthouden bij
+&lt;code&gt;"** aan. Vul je de verpakking één keer over, dan vindt de scanner dat
+product voortaan zelf — meteen, zonder netwerk. Na een paar weken boodschappen
+zit je vaste lijstje erin.
+
+De supermarktbronnen in `lib/tracker/winkels.ts` gebruiken **onofficiële**
+endpoints van de AH- en Jumbo-app. Die kunnen zonder aankondiging wijzigen, dus
+alles faalt daar stil: lukt het niet, dan valt de app terug op handmatige
+invoer. De endpoints staan bij elkaar in één `WINKELS`-tabel, zodat een
+gewijzigde URL op één plek te repareren is. Lidl heeft geen bruikbare
+productdienst en zit er daarom niet bij.
+
+Let op: deze webshops zijn geen voedingsdatabases. Staat er geen voedingstabel
+bij een product, dan telt het als niet gevonden — met alleen een naam en een
+prijs zijn geen punten te berekenen.
 
 ### Een foto van je bord
 
@@ -394,8 +432,11 @@ kookboek-keys:
   er niet in, zodat ze straks buiten de weekgemiddelden vallen.
 - `wl:favorites` — je bewaarde favorieten.
 - `wl:recent` — de laatste 50 gelogde items, voor snelle herinvoer.
-- `wl:food:<barcode>` — gescande producten uit Open Food Facts, 90 dagen
+- `wl:food:<barcode>` — gescande producten uit een externe bron, 90 dagen
   houdbaar. Hierdoor werkt een barcode die je vaker scant ook zonder netwerk.
+- `wl:eigen:<barcode>` — producten die je zelf hebt ingevuld nadat een scan
+  niets opleverde. Zonder vervaltermijn: dit is jouw invoer, geen andermans
+  cache.
 - `wl:weight:log` — sorted set met al je wegingen.
 - `wl:weight:<datum>` — een losse weging met eventuele notitie.
 - `wl:meals` — je vaste, samengestelde maaltijden.
@@ -509,6 +550,7 @@ components/
     Weekbalken.tsx      Punten per dag tegen de budgetlijn (SVG)
     Maaltijdbouwer.tsx  Een vaste maaltijd samenstellen uit onderdelen
     Recepten.tsx        Kookboekrecepten met punten per portie
+    Onderdeelkiezer.tsx Favorieten, recent en zoeken bij het samenstellen
     Beweging.tsx        Activiteit loggen, met het dagplafond
     Foto.tsx            Foto-schatting als bewerkbaar concept
     Import.tsx          Gedeelde receptlink doorrekenen
@@ -533,6 +575,7 @@ lib/
     activiteit.ts       MET-tabel, verbranding en het dagplafond
     foto.ts             Het antwoord van de foto-schatting uitlezen
     link.ts             Recept uit een webpagina halen
+    winkels.ts          Productgegevens van AH en Jumbo
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

@@ -12,6 +12,8 @@ const BRON_LABEL: Record<Product["bron"], string> = {
   off: "Productdatabase",
   basis: "Eigen basislijst",
   bewaard: "Eerder gelogd",
+  winkel: "Van de supermarkt",
+  eigen: "Zelf ingevoerd",
 };
 
 /** Voedingswaarden per 100 omrekenen naar een hoeveelheid. */
@@ -124,7 +126,7 @@ export default function Portiekiezer({
           {heeftPortie && (
             <button type="button" style={T.chip}
               onClick={() => setHoev(String(product.portie!.grams))}>
-              {product.portie!.label} ({product.portie!.grams} {product.eenheid})
+              {portieLabel(product)}
             </button>
           )}
           <button type="button" style={T.chip} onClick={() => setHoev("100")}>
@@ -169,6 +171,18 @@ export default function Portiekiezer({
       </button>
     </>
   );
+}
+
+/**
+ * Label voor de portieknop. Staat het gewicht al in de omschrijving ("500 g"),
+ * dan zou het er anders twee keer staan.
+ */
+function portieLabel(p: Product): string {
+  const { label, grams } = p.portie!;
+  const getal = String(grams);
+  return label.replace(/\s/g, "").includes(getal)
+    ? label
+    : `${label} (${grams} ${p.eenheid})`;
 }
 
 /** Waar de regel vandaan kwam, voor het logboek. */

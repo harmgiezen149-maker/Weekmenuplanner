@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Check, Loader2, Star } from "lucide-react";
+import { Check, Loader2, ScanBarcode, Star } from "lucide-react";
 import { T } from "./stijl";
 import { naarGram, rawPoints, toonPunten, effectiveSugar } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
@@ -33,7 +33,11 @@ export default function Handmatig({
   schaal: number;
   /** Ingevuld als het scannen wel een code maar geen product opleverde. */
   voorvulling?: { naam?: string; barcode?: string };
-  onOpslaan: (payload: Record<string, unknown>, alsFavoriet: boolean) => void;
+  onOpslaan: (
+    payload: Record<string, unknown>,
+    alsFavoriet: boolean,
+    onthoudBij?: { barcode: string; per100: Nutrients; eenheid: "g" | "ml" }
+  ) => void;
 }) {
   const [naam, setNaam] = useState(voorvulling?.naam ?? "");
   const [merk, setMerk] = useState("");
@@ -44,6 +48,8 @@ export default function Handmatig({
   const [categorie, setCategorie] = useState<Category>("default");
   const [v, setV] = useState<Velden>(LEEG);
   const [favoriet, setFavoriet] = useState(false);
+  // Na een scan die niets opleverde: standaard onthouden, dat is het hele punt.
+  const [onthoud, setOnthoud] = useState(true);
 
   const stukEenheid = eenheid === "stuk" || eenheid === "portie";
   // Bij stuks is "per 100 g" betekenisloos; dan telt altijd het totaal.
@@ -92,7 +98,15 @@ export default function Handmatig({
       grams,
       nutrients,
       ...(voorvulling?.barcode ? { ref: voorvulling.barcode } : {}),
-    }, favoriet);
+    }, favoriet, voorvulling?.barcode && onthoud && grams > 0
+      ? {
+          barcode: voorvulling.barcode,
+          // De bibliotheek bewaart per 100; de invoer hierboven geldt voor de
+          // ingevoerde hoeveelheid.
+          per100: perHonderd(nutrients, grams),
+          eenheid: eenheid === "ml" ? "ml" : "g",
+        }
+      : undefined);
   };
 
   return (
@@ -101,9 +115,10 @@ export default function Handmatig({
 
       {voorvulling?.barcode && (
         <div style={T.waarschuwing}>
-          Streepjescode {voorvulling.barcode} staat niet in de productdatabase.
-          Vul de waarden van de verpakking in; bewaar je het als favoriet, dan
-          hoeft dat maar één keer.
+          Streepjescode <strong>{voorvulling.barcode}</strong> staat in geen enkele
+          productdatabase. Nederlandse huismerken ontbreken daar vaak. Vul de
+          waarden van de verpakking één keer in — daarna vindt de scanner hem
+          zelf.
         </div>
       )}
 
@@ -207,6 +222,16 @@ export default function Handmatig({
         </p>
       </div>
 
+      {voorvulling?.barcode && (
+        <button type="button" onClick={() => setOnthoud((x) => !x)}
+          style={{ ...T.favorietKnop, ...(onthoud ? T.onthoudAan : {}) }}>
+          <ScanBarcode size={15} />
+          {onthoud
+            ? `Wordt onthouden bij ${voorvulling.barcode}`
+            : "Niet onthouden bij deze streepjescode"}
+        </button>
+      )}
+
       <button type="button" onClick={() => setFavoriet((x) => !x)}
         style={{ ...T.favorietKnop, ...(favoriet ? T.favorietKnopAan : {}) }}>
         <Star size={15} fill={favoriet ? "currentColor" : "none"} />
@@ -231,6 +256,19 @@ function Getal({ id, label, waarde, onChange }: {
         inputMode="decimal" placeholder="0" />
     </div>
   );
+}
+
+/** Absolute voedingswaarden terugrekenen naar per 100. */
+function perHonderd(n: Nutrients, grams: number): Nutrients {
+  if (grams <= 0) return n;
+  const f = 100 / grams;
+  return {
+    ...n,
+    kcal: n.kcal * f, protein_g: n.protein_g * f, fat_g: n.fat_g * f,
+    satfat_g: n.satfat_g * f, carbs_g: n.carbs_g * f,
+    sugar_g: n.sugar_g * f, fiber_g: n.fiber_g * f,
+    ...(n.added_sugar_g != null ? { added_sugar_g: n.added_sugar_g * f } : {}),
+  };
 }
 
 function getal(s: string): number {

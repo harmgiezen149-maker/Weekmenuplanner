@@ -3,13 +3,13 @@
 import React, { useState } from "react";
 import { ArrowLeft, Check, Loader2, Plus, Trash2 } from "lucide-react";
 import { T } from "./stijl";
-import Zoeken from "./Zoeken";
+import Onderdeelkiezer from "./Onderdeelkiezer";
 import Portiekiezer from "./Portiekiezer";
 import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { telComponentenOp } from "@/lib/tracker/maaltijd";
 import { nl } from "@/lib/tracker/datum";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
-import type { Maaltijd, MaaltijdComponent, Maaltijdsjabloon, Nutrients, Product } from "@/lib/tracker/types";
+import type { FoodTemplate, Maaltijd, MaaltijdComponent, Maaltijdsjabloon, Nutrients, Product } from "@/lib/tracker/types";
 
 /**
  * Een maaltijd samenstellen uit losse onderdelen: een vast ontbijt, een lunch
@@ -20,9 +20,11 @@ import type { Maaltijd, MaaltijdComponent, Maaltijdsjabloon, Nutrients, Product 
  * telt niet mee terwijl de suiker in havermout dat wel doet.
  */
 export default function Maaltijdbouwer({
-  bestaand, schaal, bezig, fout, onOpslaan, onTerug,
+  bestaand, favorieten, recent, schaal, bezig, fout, onOpslaan, onTerug,
 }: {
   bestaand?: Maaltijdsjabloon;
+  favorieten: FoodTemplate[];
+  recent: FoodTemplate[];
   schaal: number;
   bezig: boolean;
   fout: string;
@@ -59,7 +61,13 @@ export default function Maaltijdbouwer({
     setZoekt(false);
   };
 
-  // Onderdeel toevoegen: eerst zoeken, dan de hoeveelheid kiezen.
+  /** Een favoriet in één tik toevoegen, in de hoeveelheid die bewaard staat. */
+  const voegComponentToe = (c: MaaltijdComponent) => {
+    setComponenten((lijst) => [...lijst, { ...c, id: `${c.id}-${lijst.length}` }]);
+    setZoekt(false);
+  };
+
+  // Onderdeel toevoegen: eerst kiezen, dan zo nodig de hoeveelheid.
   if (gekozen) {
     return (
       <Portiekiezer
@@ -73,12 +81,12 @@ export default function Maaltijdbouwer({
 
   if (zoekt) {
     return (
-      <>
-        <button style={T.terugKnop} onClick={() => setZoekt(false)}>
-          <ArrowLeft size={15} /> Terug naar de maaltijd
-        </button>
-        <Zoeken schaal={schaal} onKies={setGekozen} />
-      </>
+      <Onderdeelkiezer
+        favorieten={favorieten} recent={recent} schaal={schaal}
+        onDirect={voegComponentToe}
+        onKiesProduct={setGekozen}
+        onTerug={() => setZoekt(false)}
+      />
     );
   }
 

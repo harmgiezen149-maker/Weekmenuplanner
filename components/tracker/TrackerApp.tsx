@@ -131,14 +131,26 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     } catch (e) { setFout(bericht(e)); }
   };
 
-  const voegToe = async (payload: Record<string, unknown>, alsFavoriet = false) => {
+  const voegToe = async (
+    payload: Record<string, unknown>,
+    alsFavoriet = false,
+    onthoudBij?: { barcode: string; per100: unknown; eenheid: "g" | "ml" }
+  ) => {
     setBezig(true); setFout("");
     try {
       setDag(await trackerApi.addRegel(datum, payload));
-      // Het bewaren als favoriet mag de regel zelf niet in de weg zitten:
-      // die staat al in het logboek, ook als dit misgaat.
+      // Bewaren als favoriet en onthouden bij de streepjescode zijn extra's:
+      // de regel staat al in het logboek, ook als die stappen misgaan.
       if (alsFavoriet) {
         await trackerApi.bewaarFavoriet(payload).catch(() => {});
+      }
+      if (onthoudBij) {
+        await trackerApi.onthoudBijBarcode(onthoudBij.barcode, {
+          name: payload.name,
+          brand: payload.brand,
+          per100: onthoudBij.per100,
+          eenheid: onthoudBij.eenheid,
+        }).catch(() => {});
       }
       ga(`/tracker?datum=${datum}`);
     } catch (e) {

@@ -52,7 +52,11 @@ export const trackerApi = {
 
   barcode: (code: string) =>
     fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" })
-      .then(lees<{ gevonden: boolean; product?: Product; uitCache?: boolean; offline?: boolean }>),
+      .then(lees<{
+        gevonden: boolean; product?: Product;
+        bron?: "eigen" | "cache" | "off" | "winkel";
+        uitCache?: boolean; offline?: boolean;
+      }>),
 
   voegBewegingToe: (datum: string, soort: string, minuten: number) =>
     fetch("/api/tracker/beweging", { method: "POST", headers: json, body: JSON.stringify({ datum, soort, minuten }) })
@@ -88,6 +92,11 @@ export const trackerApi = {
   getWeek: (datum: string) =>
     fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })
       .then(lees<{ week: WeekSamenvatting | null; profiel: Profile | null; dagenTeGaan: number }>),
+
+  onthoudBijBarcode: (barcode: string, product: unknown) =>
+    fetch(`/api/tracker/barcode/${encodeURIComponent(barcode)}`, {
+      method: "PUT", headers: json, body: JSON.stringify(product),
+    }).then(lees<{ bewaard: boolean }>),
 
   zoek: (q: string) =>
     fetch(`/api/tracker/zoeken?q=${encodeURIComponent(q)}`, { cache: "no-store" })

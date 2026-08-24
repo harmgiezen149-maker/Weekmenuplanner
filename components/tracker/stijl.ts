@@ -99,6 +99,7 @@ export const T: Record<string, React.CSSProperties> = {
   productSub: { fontSize: 12.5, color: "var(--sub)", marginTop: 4, fontWeight: 500 },
 
   favorietKnop: { display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", padding: "11px", background: "var(--surface)", color: "var(--sub)", border: "1px solid var(--line)", borderRadius: 12, fontSize: 13.5, fontWeight: 700, cursor: "pointer", marginTop: 4 },
+  onthoudAan: { background: "var(--accent-soft)", color: "var(--accent)", borderColor: "var(--accent)" },
   favorietKnopAan: { background: "#fff8ec", color: "#a3701a", borderColor: "var(--gold)" },
 
   // Zoeken en lijsten met producten
