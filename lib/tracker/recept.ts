@@ -1,6 +1,7 @@
 import type { MaaltijdComponent, Nutrients, Product } from "./types";
 import { rawPoints } from "./points.ts";
 import { zoekMetScore } from "./basisproducten.ts";
+import type { IngredientBibliotheek } from "./ingredienten";
 
 // ---------------------------------------------------------------------------
 // Van een kookboekrecept naar punten per portie.
@@ -112,12 +113,36 @@ export interface IngredientMatch {
   overgeslagen: boolean;
 }
 
-/** Zoekt bij één ingredient het beste product uit de basislijst. */
+/**
+ * Zoekt bij één ingredient het beste product.
+ *
+ * Je eigen aangevulde lijst gaat voor de ingebouwde basislijst: heb je zelf
+ * ingevuld wat "tahin" is, dan is dat het antwoord, ook als de basislijst
+ * toevallig iets zou vinden dat erop lijkt.
+ */
 export function matchIngredient(
   naam: string,
   hoev: number,
-  eenheid: string
+  eenheid: string,
+  eigen?: IngredientBibliotheek
 ): IngredientMatch {
+  if (eigen) {
+    // Losgekoppeld geimporteerd zodat deze module puur blijft en zonder
+    // bibliotheek precies werkt zoals hij deed.
+    const uitEigen = zoekEigen(eigen, naam);
+    if (uitEigen) {
+      return {
+        ingredient: naam,
+        hoev,
+        eenheid,
+        product: uitEigen,
+        score: 100,
+        omrekening: ingredientNaarGram(hoev, eenheid, uitEigen),
+        overgeslagen: false,
+      };
+    }
+  }
+
   const term = schoonIngredient(naam);
   const treffers = term.length >= 2 ? zoekMetScore(term, 1) : [];
   const beste = treffers[0];
@@ -186,12 +211,13 @@ export interface ReceptPunten {
 export function berekenReceptPunten(
   ingredienten: { naam: string; hoev: number; eenheid: string }[],
   personen: number,
-  overschrijvingen: Record<string, IngredientMatch> = {}
+  overschrijvingen: Record<string, IngredientMatch> = {},
+  eigen?: IngredientBibliotheek
 ): ReceptPunten {
   const delen = Number.isFinite(personen) && personen > 0 ? personen : 1;
 
   const matches = ingredienten.map((i) =>
-    overschrijvingen[i.naam] ?? matchIngredient(i.naam, i.hoev, i.eenheid)
+    overschrijvingen[i.naam] ?? matchIngredient(i.naam, i.hoev, i.eenheid, eigen)
   );
 
   const componenten = matches
@@ -240,14 +266,20 @@ export function berekenReceptPunten(
 /**
  * Vingerafdruk van een recept. Verandert er iets aan de ingredienten of het
  * aantal personen, dan verandert deze mee en vervalt de cache vanzelf.
+ *
+ * De revisie van je eigen ingredientenlijst telt mee. Vul je een ontbrekend
+ * ingredient aan, dan verschuift de afdruk van elk recept en wordt alles
+ * opnieuw doorgerekend — anders zou je aanvulling pas meetellen na een
+ * wijziging aan het recept zelf.
  */
 export function receptVingerafdruk(
   ingredienten: { naam: string; hoev: number; eenheid: string }[],
-  personen: number
+  personen: number,
+  eigenRevisie = 0
 ): string {
   const tekst = ingredienten
     .map((i) => `${i.naam}|${i.hoev}|${i.eenheid}`)
-    .join("~") + `#${personen}`;
+    .join("~") + `#${personen}@${eigenRevisie}`;
   let h = 2166136261;
   for (let i = 0; i < tekst.length; i++) {
     h ^= tekst.charCodeAt(i);
@@ -255,3 +287,7 @@ export function receptVingerafdruk(
   }
   return (h >>> 0).toString(36);
 }
+
+// ingredienten.ts leunt op schoonIngredient uit deze module; daarom wordt de
+// zoekfunctie hier onderaan binnengehaald in plaats van bovenaan.
+import { zoekEigenIngredient as zoekEigen } from "./ingredienten.ts";
