@@ -131,7 +131,7 @@ de bijgewerkte versie live.
 ## De tracker (`/tracker`)
 
 Een puntengebaseerde voedingstracker naast het kookboek, bereikbaar via de knop
-**Tracker** in de onderbalk. Eén gebruiker, geen accounts.
+**Tracker** in de onderbalk. Één gebruiker, geen accounts.
 
 ### Hoe de punten werken
 
@@ -191,7 +191,7 @@ budget op onderhoud.
 ### Zes manieren om iets te loggen
 
 **Snel** — je vaste maaltijden, je favorieten en de laatste 50 dingen die je
-gelogd hebt. Eén tik logt het opnieuw bij de gekozen maaltijd; het potlood
+gelogd hebt. Één tik logt het opnieuw bij de gekozen maaltijd; het potlood
 erachter opent hetzelfde product met een andere hoeveelheid. In de praktijk de
 snelste route.
 
@@ -222,7 +222,7 @@ keer bovenaan bij **Snel** staat.
 
 ### Wegen en de trendlijn
 
-Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Eén
+Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Één
 getal is genoeg. Weeg je twee keer op dezelfde dag, dan vervangt de nieuwe
 meting de oude.
 
@@ -257,7 +257,7 @@ aantal gelogde dagen — dat aantal staat erbij, zodat je het kunt wegen.
 Eet je elke ochtend hetzelfde, dan hoef je dat niet elke ochtend opnieuw in te
 voeren. Stel bij **Snel** een maaltijd samen uit losse onderdelen — havermout,
 melk en een banaan; of brood met beleg — geef hem een naam, en hij staat
-voortaan bovenaan. Eén tik logt de hele maaltijd.
+voortaan bovenaan. Één tik logt de hele maaltijd.
 
 Bij **Onderdeel toevoegen** staan je favorieten en je recent gelogde items
 bovenaan: één tik voegt zo'n item toe in de hoeveelheid die je eerder gebruikte.
@@ -292,9 +292,28 @@ Twee stappen kunnen daarbij misgaan, en dat hoor je te zien:
   zijn. Liever een getal met een kanttekening dan een getal dat doet alsof het
   klopt.
 
+#### Ontbrekende ingrediënten aanvullen
+
+Onder de melding staat elk niet-herkend ingrediënt met een knop **Aanvullen**.
+Daar vul je de voedingswaarden per 100 g in — of laat je ze schatten, en kijk je
+het voorstel na voordat je opslaat.
+
+**Dat hoeft maar één keer.** De aanvulling wordt bewaard op de naam van het
+ingrediënt, niet op het recept waar je hem tegenkwam. Vul je "harissa" in bij je
+kipgerecht, dan telt harissa vanaf dat moment ook mee in je kikkererwtenstoof —
+en verdwijnt daar de tilde van de puntenbadge in het kookboek.
+
+Je eigen lijst gaat vóór de ingebouwde basislijst. Vind je de standaardwaarde van
+iets niet kloppen, dan overschrijf je hem simpelweg door dat ingrediënt aan te
+vullen.
+
 Het resultaat wordt gecachet met een vingerafdruk van de ingrediënten en het
 aantal personen. Pas je het recept aan in het kookboek, dan klopt die
-vingerafdruk niet meer en wordt er automatisch opnieuw gerekend.
+vingerafdruk niet meer en wordt er automatisch opnieuw gerekend. Hetzelfde geldt
+voor je eigen ingrediëntenlijst: die heeft een revisienummer dat in de
+vingerafdruk zit, dus na een aanvulling worden álle recepten opnieuw
+doorgerekend. Zonder dat zou een aanvulling pas meetellen na een wijziging aan
+het recept zelf.
 
 In de **weekplanner** staat bij elke dag met gerechten een knop **Zet dagmenu in
 logboek**. Die logt elk gerecht van die dag als één portie in het logboek van
@@ -380,6 +399,9 @@ dan klopt het getal vanzelf.
 Zonder ingevuld trackerprofiel verschijnen de badges niet en werkt het kookboek
 verder gewoon door.
 
+De tilde verdwijnt vanzelf zodra je de ontbrekende ingrediënten aanvult — zie
+**Ontbrekende ingrediënten aanvullen** hierboven.
+
 ### Een link delen: recept of product
 
 Op `/tracker/import` plak je een link. **De app zoekt zelf uit wat het is:** een
@@ -444,7 +466,7 @@ deelmenu van Safari, naast alle andere deelopties.
 ### De eigen basislijst aanvullen
 
 `lib/tracker/basisproducten.ts` bevat een kleine vijftig Nederlandse
-basisproducten met hun waarden per 100 g of ml. Eén regel erbij is genoeg — de
+basisproducten met hun waarden per 100 g of ml. Één regel erbij is genoeg — de
 zoekfunctie pikt hem vanzelf op:
 
 ```ts
@@ -475,6 +497,8 @@ kookboek-keys:
 - `wl:eigen:<barcode>` — producten die je zelf hebt ingevuld nadat een scan
   niets opleverde. Zonder vervaltermijn: dit is jouw invoer, geen andermans
   cache.
+- `wl:ingredienten` — je eigen ingrediëntenlijst voor recepten, met een
+  revisienummer waarmee doorgerekende recepten vervallen.
 - `wl:weight:log` — sorted set met al je wegingen.
 - `wl:weight:<datum>` — een losse weging met eventuele notitie.
 - `wl:meals` — je vaste, samengestelde maaltijden.
@@ -541,7 +565,7 @@ In Upstash Redis:
 - `wl:*` — alles van de tracker (zie het hoofdstuk hierboven). Bewust een eigen
   prefix, zodat kookboek en tracker elkaars data nooit kunnen raken.
 
-Eén database = één huishouden. Wil je later meerdere gezinnen of gebruikers, dan zet
+Één database = één huishouden. Wil je later meerdere gezinnen of gebruikers, dan zet
 je een `userId:`-prefix voor de keys in `lib/data.ts`. De rest van de app blijft gelijk.
 
 ## Projectstructuur
@@ -567,6 +591,8 @@ app/
     tracker/recepten/route.ts     Receptenlijst uit het kookboek
     tracker/recepten/[id]/route.ts  Eén recept doorgerekend, met cache
     tracker/recepten/punten/route.ts Punten van alle recepten in één keer
+    tracker/ingredienten/route.ts    Eigen ingrediëntenlijst beheren
+    tracker/ingredienten/schat/route.ts  Voedingswaarden laten schatten
     tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
     tracker/beweging/route.ts     Bewegingsactiviteiten en hun punten
     tracker/foto/route.ts         Foto-schatting via de Anthropic API
@@ -590,6 +616,7 @@ components/
     Maaltijdbouwer.tsx  Een vaste maaltijd samenstellen uit onderdelen
     Recepten.tsx        Kookboekrecepten met punten per portie
     Onderdeelkiezer.tsx Favorieten, recent en zoeken bij het samenstellen
+    Aanvullen.tsx       Een ontbrekend ingrediënt van waarden voorzien
     Beweging.tsx        Activiteit loggen, met het dagplafond
     Foto.tsx            Foto-schatting als bewerkbaar concept
     Import.tsx          Gedeelde receptlink doorrekenen
@@ -616,6 +643,9 @@ lib/
     link.ts             Recept uit een webpagina halen
     winkels.ts          Productgegevens van AH en Jumbo
     productlink.ts      Een product uit een webshoppagina halen
+    ingredienten.ts     Eigen ingrediëntenlijst, op genormaliseerde naam
+    ingredienten-opslag.ts  Die lijst bewaren onder wl:ingredienten
+    schatting.ts        Een geschat ingrediënt uitlezen
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)
