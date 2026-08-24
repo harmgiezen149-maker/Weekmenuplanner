@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
@@ -15,6 +15,8 @@ import {
   type Recept, type WeekState, type Boodschappen, type BoodschapItem, type GebiedVolgorde,
   type Voorraad, type VoorraadArtikel,
 } from "@/lib/types";
+import Aanvullen from "./tracker/Aanvullen";
+import type { Nutrients } from "@/lib/tracker/types";
 
 // ============================================================================
 // API helpers
@@ -199,6 +201,15 @@ export default function App() {
         .then((d) => setReceptPunten(d.punten))
         .catch(() => { /* zonder punten werkt het kookboek gewoon door */ });
     })();
+  }, []);
+
+  // Na het aanvullen van een ingrediënt kloppen de badges van álle recepten
+  // niet meer: die aanvulling telt overal mee. Dus opnieuw ophalen, niet
+  // alleen voor het recept dat openstond.
+  const ververPunten = useCallback(() => {
+    api.getReceptPunten()
+      .then((d) => setReceptPunten(d.punten))
+      .catch(() => { /* de badges blijven dan even staan zoals ze stonden */ });
   }, []);
 
   const eersteWeek = useRef(true);
@@ -409,7 +420,7 @@ export default function App() {
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onDelete={deleteRecept} onScore={(id, s) => updateRecept(id, { score: s })}
                 onUpdate={updateRecept} onNaarLijst={voegReceptToeAanLijst}
-                receptPunten={receptPunten}
+                receptPunten={receptPunten} onPuntenVeranderd={ververPunten}
               />
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
@@ -588,12 +599,14 @@ function PlaatsInWeekDialog({
 // ============================================================================
 function ReceptenLijst({
   recepten, week, setWeek, dagen, onDelete, onScore, onUpdate, onNaarLijst, receptPunten,
+  onPuntenVeranderd,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>;
   dagen: readonly string[]; onDelete: (id: string) => void; onScore: (id: string, s: number) => void;
   onUpdate: (id: string, patch: Partial<Recept>) => Promise<void>;
   onNaarLijst: (recept: Recept, personen: number) => void;
   receptPunten: ReceptPuntenKaart;
+  onPuntenVeranderd: () => void;
 }) {
   const [zoek, setZoek] = useState("");
   const [fKeuken, setFKeuken] = useState("");
@@ -701,6 +714,7 @@ function ReceptenLijst({
       {huidig && (
         <ReceptModal
           r={huidig} punten={receptPunten[huidig.id]} onClose={() => setOpen(null)}
+          onPuntenVeranderd={onPuntenVeranderd}
           onDelete={() => { onDelete(huidig.id); setOpen(null); }}
           onScore={(s) => onScore(huidig.id, s)}
           onGegeten={(n) => onUpdate(huidig.id, { gegeten: n })}
@@ -817,13 +831,81 @@ function PuntenTag({ punten, nietHerkend, totaal }: {
   );
 }
 
+/**
+ * Eén ingrediënt zoals de tracker het herkende. Komt uit
+ * `/api/tracker/recepten/[id]` en staat in dezelfde volgorde als de
+ * ingrediënten van het recept zelf.
+ */
+interface IngredientStatus {
+  ingredient: string;
+  product: { name: string; eenheid: "g" | "ml"; per100: Nutrients } | null;
+  score: number;
+  omrekening: { aanname: string; onzeker: boolean };
+  overgeslagen: boolean;
+}
+
 function ReceptModal({
   r, punten, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
+  onPuntenVeranderd,
 }: {
   r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
   onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
+  onPuntenVeranderd: () => void;
 }) {
   const [zoom, setZoom] = useState(false);
+  // Per ingrediënt of de tracker het kent. Null zolang het nog niet geladen is.
+  const [status, setStatus] = useState<IngredientStatus[] | null>(null);
+  // Welk ingrediënt (index) op dit moment wordt aangevuld of aangepast.
+  const [aanvullen, setAanvullen] = useState<number | null>(null);
+  const [bewaart, setBewaart] = useState(false);
+  const [statusFout, setStatusFout] = useState("");
+
+  const laadStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/tracker/recepten/${r.id}`, { cache: "no-store" });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setStatus(Array.isArray(d?.punten?.matches) ? d.punten.matches : []);
+    } catch {
+      // Stil: dan blijft de ingrediëntenlijst gewoon zoals hij altijd was.
+      setStatus([]);
+    }
+  }, [r.id]);
+
+  // Alleen als er punten zijn is er ook een trackerprofiel; zonder profiel
+  // hoort dit hele blok er niet te staan.
+  const heeftPunten = punten != null;
+  useEffect(() => { if (heeftPunten) laadStatus(); }, [heeftPunten, laadStatus]);
+
+  /**
+   * Bewaart een aangevuld of aangepast ingrediënt. Daarna klopt de cache van
+   * elk recept niet meer, dus de badges worden ook opnieuw opgehaald.
+   */
+  const bewaarIngredient = async (gegevens: {
+    naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients;
+  }) => {
+    setBewaart(true); setStatusFout("");
+    try {
+      const res = await fetch("/api/tracker/ingredienten", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(gegevens),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        throw new Error(e.error || "Opslaan mislukt");
+      }
+      setAanvullen(null);
+      await laadStatus();
+      onPuntenVeranderd();
+    } catch (e) {
+      setStatusFout(e instanceof Error ? e.message : "Opslaan mislukt");
+    } finally { setBewaart(false); }
+  };
+
+  const onbekend = status?.filter((s) => s.overgeslagen).length ?? 0;
+  const bezigItem = aanvullen != null ? r.ingredienten[aanvullen] : null;
+  const bezigStatus = aanvullen != null ? status?.[aanvullen] : null;
+
   return (
     <div style={S.modalBg} onClick={onClose}>
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
@@ -862,7 +944,8 @@ function ReceptModal({
                 {" "}{punten.nietHerkend} van de {punten.totaal} ingrediënten{" "}
                 {punten.nietHerkend === 1 ? "staat" : "staan"} niet in de productlijst en{" "}
                 {punten.nietHerkend === 1 ? "telt" : "tellen"} niet mee, dus het echte aantal
-                ligt hoger.
+                ligt hoger. Hieronder zie je welke, en kun je{" "}
+                {punten.nietHerkend === 1 ? "hem" : "ze"} aanvullen.
               </>
             )}
           </p>
@@ -896,11 +979,77 @@ function ReceptModal({
         </div>
 
         <h3 style={S.sectionH}>Ingrediënten ({r.personen} pers.)</h3>
+
+        {status && status.length > 0 && (
+          <p style={S.ingUitleg}>
+            Eronder staat waarmee de tracker rekent. Tik op een ingrediënt om het aan te
+            vullen of aan te passen; dat hoeft maar één keer, daarna geldt het voor élk
+            recept waar het in zit.
+          </p>
+        )}
+        {statusFout && <p style={S.ingFout}>{statusFout}</p>}
+
         <ul style={S.ingList}>
-          {r.ingredienten.map((i, k) => (
-            <li key={k} style={S.ingLi}><span>{i.naam}</span><span style={S.ingAmt}>{i.hoev} {i.eenheid}</span></li>
-          ))}
+          {r.ingredienten.map((i, k) => {
+            const st = status?.[k];
+            // Zonder trackerprofiel of zolang het laadt: de lijst zoals hij was.
+            if (!st) {
+              return (
+                <li key={k} style={S.ingLi}>
+                  <span>{i.naam}</span><span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                </li>
+              );
+            }
+            const geschat = !st.overgeslagen && (st.score < 50 || st.omrekening.onzeker);
+            return (
+              <li key={k} style={S.ingRij}>
+                <button style={S.ingKnop} onClick={() => setAanvullen(k)}
+                  aria-label={st.overgeslagen ? `${i.naam} aanvullen` : `${i.naam} aanpassen`}>
+                  <span style={S.ingKop}>
+                    <span>{i.naam}</span>
+                    <span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                  </span>
+                  {st.overgeslagen ? (
+                    <span style={S.ingOnbekend}>
+                      <Plus size={12} /> niet bekend — tik om aan te vullen
+                    </span>
+                  ) : (
+                    <span style={S.ingBekend}>
+                      {geschat && <Info size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}
+                      {st.product!.name} · {st.omrekening.aanname}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
+
+        {aanvullen != null && bezigItem && (
+          <div style={S.modalBg} onClick={(e) => { e.stopPropagation(); setAanvullen(null); }}>
+            <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+              <div style={S.modalHead}>
+                <div>
+                  <span style={S.label}>
+                    {bezigStatus?.overgeslagen ? "Ingrediënt aanvullen" : "Ingrediënt aanpassen"}
+                  </span>
+                  <h2 style={S.modalTitle}>{bezigItem.naam}</h2>
+                </div>
+                <button onClick={() => setAanvullen(null)} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
+              </div>
+              <Aanvullen
+                ingredient={bezigItem.naam}
+                bezig={bewaart}
+                begin={bezigStatus?.product ? {
+                  weergavenaam: bezigStatus.product.name,
+                  eenheid: bezigStatus.product.eenheid,
+                  per100: bezigStatus.product.per100,
+                } : undefined}
+                onOpslaan={bewaarIngredient}
+              />
+            </div>
+          </div>
+        )}
 
         <h3 style={S.sectionH}>Bereiding</h3>
         <p style={S.bereiding}>{r.bereiding}</p>
@@ -2906,7 +3055,14 @@ const S: Record<string, React.CSSProperties> = {
   sectionH: { fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--sub)", margin: "18px 0 8px" },
   ingList: { listStyle: "none", padding: 0, margin: 0 },
   ingLi: { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--line)", fontSize: 14 },
-  ingAmt: { color: "var(--sub)", fontWeight: 600 },
+  ingAmt: { color: "var(--sub)", fontWeight: 600, flexShrink: 0 },
+  ingUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 6px" },
+  ingFout: { fontSize: 12.5, lineHeight: 1.5, color: "var(--over)", fontWeight: 600, margin: "0 0 8px" },
+  ingRij: { borderBottom: "1px solid var(--line)" },
+  ingKnop: { display: "flex", flexDirection: "column", gap: 3, width: "100%", padding: "8px 0", background: "none", border: "none", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" },
+  ingKop: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 },
+  ingBekend: { fontSize: 12, color: "var(--sub)" },
+  ingOnbekend: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--over)" },
   bereiding: { fontSize: 14, lineHeight: 1.65, color: "#3a3f52", margin: 0, whiteSpace: "pre-wrap" },
   kookSchaalHint: { fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--sub)" },
   kookIngList: { listStyle: "none", padding: 0, margin: 0 },

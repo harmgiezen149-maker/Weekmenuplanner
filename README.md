@@ -399,8 +399,23 @@ dan klopt het getal vanzelf.
 Zonder ingevuld trackerprofiel verschijnen de badges niet en werkt het kookboek
 verder gewoon door.
 
-De tilde verdwijnt vanzelf zodra je de ontbrekende ingrediënten aanvult — zie
-**Ontbrekende ingrediënten aanvullen** hierboven.
+#### Zien en aanpassen waarmee gerekend wordt
+
+Open je een recept, dan staat onder elk ingrediënt welk product de tracker eraan
+koppelde en hoeveel gram dat werd — "Olijfolie · 2 el ≈ 30 g". Wat hij niet kent
+staat er in het oranje bij als **niet bekend**.
+
+Tik op een regel om hem aan te vullen of aan te passen. Bij een onbekend
+ingrediënt krijg je een leeg formulier; bij een bekend ingrediënt staan de
+huidige waarden al ingevuld, zodat je ze kunt bijstellen als je ze niet vindt
+kloppen. Je eigen waarde gaat daarna vóór de basislijst.
+
+Dat hoeft maar één keer: de aanvulling hangt aan de naam van het ingrediënt, niet
+aan het recept. Zodra je opslaat wordt élk recept opnieuw doorgerekend en
+verspringen de badges meteen — de tilde verdwijnt vanzelf.
+
+Zonder ingevuld trackerprofiel blijft de ingrediëntenlijst zoals hij altijd was:
+alleen namen en hoeveelheden.
 
 ### Een link delen: recept of product
 
@@ -616,7 +631,7 @@ components/
     Maaltijdbouwer.tsx  Een vaste maaltijd samenstellen uit onderdelen
     Recepten.tsx        Kookboekrecepten met punten per portie
     Onderdeelkiezer.tsx Favorieten, recent en zoeken bij het samenstellen
-    Aanvullen.tsx       Een ontbrekend ingrediënt van waarden voorzien
+    Aanvullen.tsx       Ingrediënt van waarden voorzien (ook in het kookboek)
     Beweging.tsx        Activiteit loggen, met het dagplafond
     Foto.tsx            Foto-schatting als bewerkbaar concept
     Import.tsx          Gedeelde receptlink doorrekenen

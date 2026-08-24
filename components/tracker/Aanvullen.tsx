@@ -14,30 +14,37 @@ const LEEG = {
 type Velden = typeof LEEG;
 
 /**
- * Een ontbrekend ingrediënt aanvullen.
+ * Een ontbrekend ingrediënt aanvullen, of een herkend ingrediënt aanpassen.
  *
  * Wat je hier invult geldt vanaf dat moment voor élk recept waarin dit
  * ingrediënt voorkomt — de sleutel is de naam, niet het recept waar je hem
  * tegenkwam. Vul je "harissa" één keer in, dan tellen alle recepten met
  * harissa er voortaan mee.
  *
+ * Krijgt het formulier `begin` mee, dan is het ingrediënt al herkend en zijn de
+ * huidige waarden voorgevuld. Opslaan zet je eigen regel dan vóór de treffer
+ * uit de basislijst.
+ *
  * De schatknop vult het formulier voor; hij bewaart niets. Je kijkt het na en
  * slaat het daarna zelf op.
  */
 export default function Aanvullen({
-  ingredient, bezig, onOpslaan, onTerug,
+  ingredient, bezig, begin, onOpslaan, onTerug,
 }: {
   ingredient: string;
   bezig: boolean;
+  /** Huidige waarden als dit ingrediënt al herkend werd. */
+  begin?: { weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients };
   onOpslaan: (gegevens: {
     naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients;
   }) => void;
-  onTerug: () => void;
+  /** Weglaten als het scherm al een eigen sluitknop heeft. */
+  onTerug?: () => void;
 }) {
-  const [weergavenaam, setWeergavenaam] = useState(hoofdletter(ingredient));
-  const [eenheid, setEenheid] = useState<"g" | "ml">("g");
-  const [categorie, setCategorie] = useState<Category>("default");
-  const [v, setV] = useState<Velden>(LEEG);
+  const [weergavenaam, setWeergavenaam] = useState(begin?.weergavenaam ?? hoofdletter(ingredient));
+  const [eenheid, setEenheid] = useState<"g" | "ml">(begin?.eenheid ?? "g");
+  const [categorie, setCategorie] = useState<Category>(begin?.per100.category ?? "default");
+  const [v, setV] = useState<Velden>(begin ? naarVelden(begin.per100) : LEEG);
   const [schat, setSchat] = useState(false);
   const [fout, setFout] = useState("");
   const [toelichting, setToelichting] = useState("");
@@ -89,17 +96,28 @@ export default function Aanvullen({
 
   return (
     <>
-      <button style={T.terugKnop} onClick={onTerug}>
-        <ArrowLeft size={15} /> Terug naar het recept
-      </button>
+      {onTerug && (
+        <button style={T.terugKnop} onClick={onTerug}>
+          <ArrowLeft size={15} /> Terug naar het recept
+        </button>
+      )}
 
       {fout && <div style={T.fout}>{fout}</div>}
 
       <div style={T.kaart}>
         <div style={T.productNaam}>{hoofdletter(ingredient)}</div>
         <div style={T.productSub}>
-          Dit ingrediënt staat niet in de productlijst. Vul de waarden per
-          100 {eenheid} in — daarna telt het mee in élk recept waar het in zit.
+          {begin ? (
+            <>
+              Nu geteld als {begin.weergavenaam}. Pas de waarden per 100 {eenheid} aan — wat
+              je hier bewaart gaat vóór de basislijst, in élk recept waar dit in zit.
+            </>
+          ) : (
+            <>
+              Dit ingrediënt staat niet in de productlijst. Vul de waarden per
+              100 {eenheid} in — daarna telt het mee in élk recept waar het in zit.
+            </>
+          )}
         </div>
       </div>
 
@@ -192,6 +210,16 @@ function Getal({ id, label, waarde, onChange }: {
 
 function hoofdletter(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** Voedingswaarden naar bewerkbare velden. Een nul blijft leeg staan. */
+function naarVelden(n: Nutrients): Velden {
+  const t = (x: number) => (x > 0 ? String(rond(x)) : "");
+  return {
+    kcal: t(n.kcal), protein_g: t(n.protein_g), fat_g: t(n.fat_g),
+    satfat_g: t(n.satfat_g), carbs_g: t(n.carbs_g), sugar_g: t(n.sugar_g),
+    fiber_g: t(n.fiber_g),
+  };
 }
 
 function getal(s: string): number {
