@@ -5,7 +5,6 @@ import {
   alleIngredienten, LEGE_BIBLIOTHEEK,
 } from "./ingredienten.ts";
 import { matchIngredient, berekenReceptPunten, receptVingerafdruk } from "./recept.ts";
-import { toonPunten } from "./points.ts";
 import type { Product } from "./types.ts";
 
 function product(naam: string, kcal: number, extra: Partial<Product["per100"]> = {}): Product {
