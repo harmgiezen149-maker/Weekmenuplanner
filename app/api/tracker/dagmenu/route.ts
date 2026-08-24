@@ -3,8 +3,9 @@ import { getRecept } from "@/lib/data";
 import { berekenReceptPunten, receptVingerafdruk } from "@/lib/tracker/recept";
 import {
   addEntry, cacheReceptPunten, entryNaarTemplate, geldigeDatum, getReceptPunten,
-  nieuwId, noteerRecent,
+  nieuwId, noteerRecent
 } from "@/lib/tracker/data";
+import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 import type { Entry, Maaltijd } from "@/lib/tracker/types";
 
@@ -41,6 +42,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Geen gerechten meegegeven" }, { status: 400 });
   }
 
+  // Één keer ophalen voor alle gerechten van de dag.
+  const eigen = await getIngredienten();
+
   const toegevoegd: string[] = [];
   const mislukt: string[] = [];
   let nietHerkend: string[] = [];
@@ -53,18 +57,18 @@ export async function POST(req: NextRequest) {
     const ingredienten = recept.ingredienten.map((i) => ({
       naam: i.naam, hoev: i.hoev, eenheid: i.eenheid,
     }));
-    const hash = receptVingerafdruk(ingredienten, recept.personen);
+    const hash = receptVingerafdruk(ingredienten, recept.personen, eigen.revisie);
 
     let punten = await getReceptPunten<ReceptPunten>(id, hash);
     if (!punten) {
-      punten = berekenReceptPunten(ingredienten, recept.personen);
+      punten = berekenReceptPunten(ingredienten, recept.personen, {}, eigen);
       await cacheReceptPunten(id, hash, punten);
     }
 
     if (punten.componenten.length === 0) { mislukt.push(recept.titel); continue; }
     nietHerkend = [...nietHerkend, ...punten.nietHerkend];
 
-    // Eén portie: de componenten worden door het aantal personen gedeeld.
+    // Één portie: de componenten worden door het aantal personen gedeeld.
     const factor = 1 / punten.personen;
     const componenten = punten.componenten.map((c) => ({
       ...c,

@@ -7,6 +7,7 @@ import {
   uitProductJsonLd, uitVoedingsHtml, lijktOpProduct, naarProduct, schoneUrl,
 } from "@/lib/tracker/productlink";
 import { saveEigenProduct } from "@/lib/tracker/data";
+import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -103,8 +104,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Punten altijd zelf berekenen uit de ingrediënten.
-  const punten = berekenReceptPunten(recept.ingredienten, recept.personen);
+  // Punten altijd zelf berekenen uit de ingrediënten, met je eigen aangevulde
+  // ingrediëntenlijst erbij.
+  const eigen = await getIngredienten();
+  const punten = berekenReceptPunten(recept.ingredienten, recept.personen, {}, eigen);
 
   return NextResponse.json({ soort: "recept", recept, punten, bron, url });
 }

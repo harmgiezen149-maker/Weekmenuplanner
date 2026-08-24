@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getAllRecepten } from "@/lib/data";
 import { berekenReceptPunten, receptVingerafdruk } from "@/lib/tracker/recept";
 import { getReceptPunten, cacheReceptPunten, getProfile } from "@/lib/tracker/data";
+import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,9 @@ export const maxDuration = 30;
  * De punten worden altijd zelf berekend uit de ingrediënten.
  */
 export async function GET() {
-  const [recepten, profiel] = await Promise.all([getAllRecepten(), getProfile()]);
+  const [recepten, profiel, eigen] = await Promise.all([
+    getAllRecepten(), getProfile(), getIngredienten(),
+  ]);
   const schaal = profiel?.points_scale ?? 1;
 
   const punten: Record<string, { punten: number; nietHerkend: number; totaal: number }> = {};
@@ -29,10 +32,10 @@ export async function GET() {
     }));
     if (ingredienten.length === 0) continue;
 
-    const hash = receptVingerafdruk(ingredienten, r.personen);
+    const hash = receptVingerafdruk(ingredienten, r.personen, eigen.revisie);
     let berekend = await getReceptPunten<ReceptPunten>(r.id, hash);
     if (!berekend) {
-      berekend = berekenReceptPunten(ingredienten, r.personen);
+      berekend = berekenReceptPunten(ingredienten, r.personen, {}, eigen);
       await cacheReceptPunten(r.id, hash, berekend);
     }
 

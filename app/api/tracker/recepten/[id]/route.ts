@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecept } from "@/lib/data";
 import { berekenReceptPunten, receptVingerafdruk } from "@/lib/tracker/recept";
 import { getReceptPunten, cacheReceptPunten } from "@/lib/tracker/data";
+import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +24,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const ingredienten = recept.ingredienten.map((i) => ({
     naam: i.naam, hoev: i.hoev, eenheid: i.eenheid,
   }));
-  const hash = receptVingerafdruk(ingredienten, recept.personen);
+  const eigen = await getIngredienten();
+  const hash = receptVingerafdruk(ingredienten, recept.personen, eigen.revisie);
 
   const gecachet = await getReceptPunten<ReceptPunten>(id, hash);
   if (gecachet) {
@@ -34,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     });
   }
 
-  const punten = berekenReceptPunten(ingredienten, recept.personen);
+  const punten = berekenReceptPunten(ingredienten, recept.personen, {}, eigen);
   await cacheReceptPunten(id, hash, punten);
 
   return NextResponse.json({
