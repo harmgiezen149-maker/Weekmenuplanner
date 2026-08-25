@@ -320,6 +320,32 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="droog" titel="Droog of gekookt">
+          <p style={{ margin: "0 0 8px" }}>
+            In een recept schrijf je de zak: <em>300 g rijst</em> is wat je afweegt voor je gaat
+            koken. In je dagboek log je het bord: <em>180 g rijst</em> is wat je opschept. Rijst
+            wordt bij het koken bijna drie keer zo zwaar, dus dat verschil is groot.
+          </p>
+          <p style={{ margin: 0 }}>
+            De app houdt die twee uit elkaar: in een recept rekent hij droog, in je dagboek kies je
+            zelf tussen "droog" en "gekookt". Merk je dat een recept opeens meer punten telt dan
+            eerst — dat klopt: eerder werd rijst en pasta te licht gerekend.
+          </p>
+        </H>
+
+        <H id="onvolledig" titel="Recepten die nog niet kloppen">
+          <p style={{ margin: "0 0 8px" }}>
+            Boven de receptenlijst verschijnt een oranje balkje zodra er recepten zijn waarbij een
+            ingrediënt buiten de puntentelling valt. Klap het open en je ziet per recept wélk
+            ingrediënt het is.
+          </p>
+          <p style={{ margin: 0 }}>
+            Zo'n recept telt te laag — en dat zie je aan het getal niet, want een licht recept ziet
+            er hetzelfde uit. Vul het ingrediënt aan (potlood → Aanvullen) of zet er een maat bij
+            die de app kent, en het klopt weer.
+          </p>
+        </H>
+
         <H id="budget" titel="Je profiel en je dagbudget">
           <p style={{ margin: "0 0 8px" }}>
             Je dagbudget wordt berekend uit je basaal metabolisme (Mifflin-St Jeor), maal je

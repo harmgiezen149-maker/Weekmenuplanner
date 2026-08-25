@@ -24,8 +24,14 @@ export async function GET() {
   ]);
   const schaal = profiel?.points_scale ?? 1;
 
-  const punten: Record<string,
-    { punten: number; nietHerkend: number; maatOnbekend: number; totaal: number }> = {};
+  const punten: Record<string, {
+    punten: number; nietHerkend: number; maatOnbekend: number; totaal: number;
+    /** Welke ingredienten buiten het totaal vallen, bij naam. */
+    gaten: string[];
+  }> = {};
+
+  // Genoeg om te zien wat er mist, kort genoeg om het antwoord klein te houden.
+  const MAX_GATEN = 6;
 
   for (const r of recepten) {
     const ingredienten = r.ingredienten.map((i) => ({
@@ -48,6 +54,7 @@ export async function GET() {
       // het totaal is dan ook onvolledig en de badge hoort dat te laten zien.
       maatOnbekend: (berekend.maatOnbekend ?? []).length,
       totaal: ingredienten.length,
+      gaten: [...berekend.nietHerkend, ...(berekend.maatOnbekend ?? [])].slice(0, MAX_GATEN),
     };
   }
 

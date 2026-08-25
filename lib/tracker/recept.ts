@@ -199,7 +199,8 @@ export function matchIngredient(
   }
 
   const term = schoonIngredient(naam);
-  const treffers = term.length >= 2 ? zoekMetScore(term, 1) : [];
+  // Een recept noteert droog gewogen: "300 g rijst" is de zak, niet het bord.
+  const treffers = term.length >= 2 ? zoekMetScore(term, 1, { voorkeur: "droog" }) : [];
   const beste = treffers[0];
 
   const product = beste?.product ?? null;
@@ -339,7 +340,7 @@ export function berekenReceptPunten(
  * inmiddels fout is. Precies wat er bij de lepelmaten misging: de code klopte,
  * de cache niet.
  */
-export const REKENVERSIE = 2;
+export const REKENVERSIE = 3;
 
 /**
  * Vingerafdruk van een recept. Verandert er iets aan de ingredienten of het

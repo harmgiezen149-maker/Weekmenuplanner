@@ -1221,6 +1221,51 @@ inlog zit is een route waarvan niemand meer weet wat er geldt.
 
 ---
 
+## Droog of gekookt, en welke recepten nog niet kloppen
+
+### De grootste stille fout in de puntentelling
+
+Een recept noteert de zak: "300 g rijst" betekent 300 g uit de zak. Jij logt het
+bord: "180 g rijst" is wat je opschept. Rijst wordt bij het koken bijna drie
+keer zo zwaar, pasta ruim twee keer. De basislijst kende alleen de gekookte
+vorm, dus elk rijst- of pastarecept zat er een factor twee tot drie naast — naar
+beneden, en aan het totaal zie je dat niet.
+
+Nu staan beide vormen in de lijst, met een `vorm`-veld erop, en kiest de
+zoekfunctie op basis van waar hij voor gebruikt wordt: `matchIngredient()` (de
+receptkant) vraagt om `voorkeur: "droog"`, de zoekfunctie in de tracker laat
+beide zien en jij kiest. De voorkeur is een bonus van zes punten op de score:
+genoeg om een gelijkspel te beslechten, te weinig om een duidelijk betere
+naamtreffer te overrulen.
+
+`REKENVERSIE` staat daarom op 3. Die telt mee in de vingerafdruk van een recept,
+dus alle gecachete puntentotalen worden opnieuw berekend.
+
+### De basislijst
+
+Van 52 naar 123 producten. Wat erbij is gekomen is wat een Nederlandse
+thuiskeuken dagelijks gebruikt en wat tot nu toe buiten de telling viel:
+knoflook, prei, champignons, aubergine, tomatenblokjes en tomatenpuree,
+kokosmelk en bouillon, room en crème fraîche, mozzarella, feta, parmezaan,
+tofu en tempeh, spekblokjes en chorizo, sojasaus en ketjap, bloem en suiker,
+cashewnoten en pijnboompitten, wraps en pitabrood.
+
+Waarden zijn per 100 g of 100 ml. Aanvullen blijft één regel werk in
+`lib/tracker/basisproducten.ts`; de zoekfunctie pikt hem vanzelf op.
+
+### Welke recepten nog niet compleet zijn
+
+Boven de receptenlijst staat een paneel dat laat zien bij welke recepten een
+ingrediënt buiten de telling valt — mét de namen erbij, want "er mist iets" is
+geen aanwijzing en "saffraan telt niet mee" wel. Ingeklapt tenzij je hem opent:
+het is een controlemiddel, geen aansporing.
+
+Het recept met de meeste gaten staat bovenaan, want daar valt het meest te
+winnen. Een puntentotaal dat te laag uitvalt omdat er ingrediënten buiten vallen
+ziet er namelijk precies zo uit als een recept dat gewoon licht is.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:

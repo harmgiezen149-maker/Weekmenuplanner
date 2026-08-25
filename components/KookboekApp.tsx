@@ -166,6 +166,8 @@ export interface ReceptPuntenInfo {
   /** Ingredienten met een maat die niet te lezen was. */
   maatOnbekend?: number;
   totaal: number;
+  /** Welke ingredienten buiten het totaal vallen, bij naam. */
+  gaten?: string[];
 }
 
 /**
@@ -752,6 +754,8 @@ function ReceptenLijst({
 
       {anyFilter ? <button onClick={reset} style={S.resetBtn}><X size={13} /> Filters wissen</button> : null}
 
+      <Onvolledig recepten={recepten} receptPunten={receptPunten} onOpen={setOpen} />
+
       <div style={S.receptGrid}>
         {recepten.length === 0 && <p style={S.empty}>Nog geen recepten. Voeg er een toe via het tabblad Toevoegen.</p>}
         {recepten.length > 0 && gefilterd.length === 0 && <p style={S.empty}>Geen recepten gevonden. Pas je filters aan.</p>}
@@ -824,6 +828,70 @@ function NaarLijstDialog({
           <button onClick={() => onBevestig(personen)} style={{ ...S.bevestigJa, background: "var(--accent)" }}>Toevoegen</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Welke recepten nog niet compleet zijn.
+ *
+ * Een puntentotaal dat te laag uitvalt omdat er ingrediënten buiten vallen ziet
+ * er precies zo uit als een recept dat gewoon licht is. Dit paneel maakt het
+ * verschil zichtbaar en zegt erbij welk ingrediënt het is, zodat je weet wat je
+ * moet aanvullen in plaats van alleen dát er iets mist.
+ *
+ * Ingeklapt tenzij je hem opent: het is een controlemiddel, geen aansporing.
+ */
+function Onvolledig({
+  recepten, receptPunten, onOpen,
+}: {
+  recepten: Recept[];
+  receptPunten: ReceptPuntenKaart;
+  onOpen: (r: Recept) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const lijst = useMemo(() => recepten
+    .map((r) => ({ r, info: receptPunten[r.id] }))
+    .filter((x) => x.info && (x.info.nietHerkend + (x.info.maatOnbekend ?? 0)) > 0)
+    // Het recept met de meeste gaten hoort bovenaan: daar valt het meest te winnen.
+    .sort((a, b) =>
+      (b.info!.nietHerkend + (b.info!.maatOnbekend ?? 0)) -
+      (a.info!.nietHerkend + (a.info!.maatOnbekend ?? 0))),
+    [recepten, receptPunten]);
+
+  if (lijst.length === 0) return null;
+
+  return (
+    <div style={S.onvolledigVak}>
+      <button style={S.onvolledigKop} onClick={() => setOpen((o) => !o)}>
+        <ClipboardCheck size={15} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, textAlign: "left" }}>
+          {lijst.length} {lijst.length === 1 ? "recept telt" : "recepten tellen"} nog niet
+          alles mee
+        </span>
+        {open ? <ChevronLeft size={15} style={{ transform: "rotate(90deg)" }} />
+          : <ChevronRight size={15} style={{ transform: "rotate(90deg)" }} />}
+      </button>
+
+      {open && (
+        <div style={{ padding: "0 12px 10px" }}>
+          <p style={S.onvolledigUitleg}>
+            Bij deze recepten valt een ingrediënt buiten de puntentelling, dus het getal is te
+            laag. Vul het ingrediënt aan in het recept — via het potlood, en dan Aanvullen — of
+            pas de maat aan naar iets dat de app kent.
+          </p>
+          {lijst.map(({ r, info }) => (
+            <button key={r.id} style={S.onvolledigRegel} onClick={() => onOpen(r)}>
+              <span style={S.onvolledigNaam}>{r.titel}</span>
+              <span style={S.onvolledigGaten}>
+                {(info!.gaten ?? []).join(", ") ||
+                  `${info!.nietHerkend + (info!.maatOnbekend ?? 0)} van ${info!.totaal}`}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3458,6 +3526,12 @@ const S: Record<string, React.CSSProperties> = {
   voorraadStandBtn: { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", borderRadius: 6, background: "var(--bg)", color: "var(--sub)", cursor: "pointer", padding: 0 },
   voorraadStandTekst: { fontSize: 11.5, color: "var(--sub)", minWidth: 52, textAlign: "center" },
   voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
+  onvolledigVak: { background: "var(--surface)", border: "1px solid var(--gold)", borderRadius: 14, marginBottom: 14, overflow: "hidden" },
+  onvolledigKop: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "11px 12px", background: "none", border: "none", color: "#7a4d09", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  onvolledigUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 10px" },
+  onvolledigRegel: { display: "block", width: "100%", textAlign: "left", background: "var(--bg)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 10px", marginBottom: 6, cursor: "pointer" },
+  onvolledigNaam: { display: "block", fontSize: 13.5, fontWeight: 700, color: "var(--ink)" },
+  onvolledigGaten: { display: "block", fontSize: 12, color: "var(--sub)", marginTop: 2 },
   ramingBalk: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, color: "var(--sub)", marginBottom: 12 },
   bonKnop: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px", background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, fontSize: 14, fontWeight: 700, color: "var(--accent)", cursor: "pointer", marginBottom: 14 },
   nogNietOpgeslagen: { display: "flex", alignItems: "center", gap: 8, background: "#fdf4e3", border: "1px solid var(--gold)", borderRadius: 12, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, color: "#7a4d09", marginBottom: 12 },

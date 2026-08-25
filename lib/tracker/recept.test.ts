@@ -5,6 +5,8 @@ import {
   berekenReceptPunten, receptVingerafdruk, REKENVERSIE,
 } from "./recept.ts";
 import { toonPunten } from "./points.ts";
+import { zoekBasisproducten } from "./basisproducten.ts";
+import { LEGE_BIBLIOTHEEK } from "./ingredienten.ts";
 
 // -- omrekenen ---------------------------------------------------------------
 
@@ -330,4 +332,45 @@ test("een ingredient valt in hooguit één van de twee gatenlijsten", () => {
   // Twee van de drie tellen niet mee, en dat is precies de som van de lijsten.
   assert.equal(r.nietHerkend.length + r.maatOnbekend.length, 2);
   assert.equal(r.componenten.length, 1);
+});
+
+test("een recept rekent rijst en pasta droog gewogen", () => {
+  // Dit was de grootste stille fout in de puntentelling: een recept noteert de
+  // zak ("300 g rijst"), de basislijst kende alleen het bord. Rijst wordt bij
+  // het koken bijna drie keer zo zwaar, dus elk rijstrecept zat er een factor
+  // drie naast — en aan het totaal zie je dat niet.
+  const rijst = matchIngredient("rijst", 300, "g");
+  assert.equal(rijst.product?.name, "Witte rijst, droog");
+  assert.ok(rijst.product!.per100.kcal > 300, "droge rijst hoort ruim 300 kcal per 100 g te zijn");
+
+  const pasta = matchIngredient("spaghetti", 500, "g");
+  assert.match(pasta.product?.name ?? "", /droog/);
+});
+
+test("de gekookte vorm blijft gewoon vindbaar voor het logboek", () => {
+  // Wie in de tracker "rijst" zoekt heeft een bord voor zich; die krijgt beide
+  // vormen te zien en kiest zelf.
+  const namen = zoekBasisproducten("rijst", 8).map((p) => p.name);
+  assert.ok(namen.some((n) => /gekookt/.test(n)), namen.join(" | "));
+  assert.ok(namen.some((n) => /droog/.test(n)), namen.join(" | "));
+});
+
+test("een ingredient zonder vorm verandert niet van match", () => {
+  // De voorkeur voor droog mag alleen gelijkspel beslechten, niet zomaar een
+  // andere match opleveren voor alles wat maar één vorm heeft.
+  assert.equal(matchIngredient("kipfilet", 400, "g").product?.name, "Kipfilet, rauw");
+  assert.equal(matchIngredient("broccoli", 500, "g").product?.name, "Broccoli");
+  assert.equal(matchIngredient("ei", 6, "stuk").product?.name, "Ei");
+});
+
+test("een recept met rijst komt op een geloofwaardig aantal calorieen uit", () => {
+  const r = berekenReceptPunten([
+    { naam: "rijst", hoev: 300, eenheid: "g" },
+    { naam: "kipfilet", hoev: 400, eenheid: "g" },
+    { naam: "broccoli", hoev: 500, eenheid: "g" },
+  ], 4, {}, LEGE_BIBLIOTHEEK);
+  // 300 g droge rijst is ruim 1000 kcal; met kip en broccoli erbij zit een
+  // portie voor vier ergens tussen de 350 en 550.
+  assert.ok(r.perPortieNutrients.kcal > 350, String(r.perPortieNutrients.kcal));
+  assert.ok(r.perPortieNutrients.kcal < 550, String(r.perPortieNutrients.kcal));
 });
