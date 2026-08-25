@@ -179,6 +179,17 @@ function comprimeerAfbeelding(bron: string, kwaliteit = 0.82, maxDim = MAX_DIM):
 /** Punten per portie per recept, uit de tracker. */
 export type ReceptPuntenKaart = Record<string, { punten: number; nietHerkend: number; totaal: number }>;
 
+/**
+ * Of de punten al binnen zijn.
+ *
+ * Bij een koude cache rekent de tracker alle recepten door en dat duurt even.
+ * Zolang dat loopt houdt het kaartje zijn plek met een draaiende cirkel erin,
+ * anders springt de hele metaregel op als de getallen alsnog binnenkomen.
+ * Zonder trackerprofiel komen er nooit punten en hoort er ook geen plek voor
+ * gereserveerd te worden.
+ */
+export type PuntenStatus = "laden" | "klaar" | "geen-profiel";
+
 export default function App() {
   const [recepten, setRecepten] = useState<Recept[]>([]);
   const [week, setWeek] = useState<WeekState>({ startDag: 0, slots: {} });
@@ -189,6 +200,7 @@ export default function App() {
   // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
   // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
   const [receptPunten, setReceptPunten] = useState<ReceptPuntenKaart>({});
+  const [puntenStatus, setPuntenStatus] = useState<PuntenStatus>("laden");
   const router = useRouter();
   const [laden, setLaden] = useState(true);
 
@@ -200,8 +212,15 @@ export default function App() {
       Object.entries(w.slots || {}).forEach(([k, v2]) => { slots[k.includes("|") ? k : slotKey(k, HOOFD_MAALTIJD)] = v2 as any; });
       setRecepten(r); setWeek({ ...w, slots }); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
       api.getReceptPunten()
-        .then((d) => setReceptPunten(d.punten))
-        .catch(() => { /* zonder punten werkt het kookboek gewoon door */ });
+        .then((d) => {
+          setReceptPunten(d.punten);
+          setPuntenStatus(d.profiel ? "klaar" : "geen-profiel");
+        })
+        .catch(() => {
+          // Zonder punten werkt het kookboek gewoon door; dan verdwijnen de
+          // plekhouders in plaats van eeuwig te blijven draaien.
+          setPuntenStatus("geen-profiel");
+        });
     })();
   }, []);
 
@@ -209,6 +228,8 @@ export default function App() {
   // niet meer: die aanvulling telt overal mee. Dus opnieuw ophalen, niet
   // alleen voor het recept dat openstond.
   const ververPunten = useCallback(() => {
+    // Bewust zonder terug naar "laden": de badges staan er al en hoeven niet
+    // opnieuw te gaan draaien voor een verversing op de achtergrond.
     api.getReceptPunten()
       .then((d) => setReceptPunten(d.punten))
       .catch(() => { /* de badges blijven dan even staan zoals ze stonden */ });
@@ -422,7 +443,8 @@ export default function App() {
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onDelete={deleteRecept} onScore={(id, s) => updateRecept(id, { score: s })}
                 onUpdate={updateRecept} onNaarLijst={voegReceptToeAanLijst}
-                receptPunten={receptPunten} onPuntenVeranderd={ververPunten}
+                receptPunten={receptPunten} puntenStatus={puntenStatus}
+                onPuntenVeranderd={ververPunten}
               />
             )}
             {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
@@ -601,13 +623,14 @@ function PlaatsInWeekDialog({
 // ============================================================================
 function ReceptenLijst({
   recepten, week, setWeek, dagen, onDelete, onScore, onUpdate, onNaarLijst, receptPunten,
-  onPuntenVeranderd,
+  puntenStatus, onPuntenVeranderd,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>;
   dagen: readonly string[]; onDelete: (id: string) => void; onScore: (id: string, s: number) => void;
   onUpdate: (id: string, patch: Partial<Recept>) => Promise<void>;
   onNaarLijst: (recept: Recept, personen: number) => void;
   receptPunten: ReceptPuntenKaart;
+  puntenStatus: PuntenStatus;
   onPuntenVeranderd: () => void;
 }) {
   const [zoek, setZoek] = useState("");
@@ -708,14 +731,15 @@ function ReceptenLijst({
         {recepten.length === 0 && <p style={S.empty}>Nog geen recepten. Voeg er een toe via het tabblad Toevoegen.</p>}
         {recepten.length > 0 && gefilterd.length === 0 && <p style={S.empty}>Geen recepten gevonden. Pas je filters aan.</p>}
         {gefilterd.map((r) => (
-          <ReceptKaart key={r.id} r={r} punten={receptPunten[r.id]}
+          <ReceptKaart key={r.id} r={r} punten={receptPunten[r.id]} puntenStatus={puntenStatus}
             onOpen={() => setOpen(r)} onPlaats={() => setPlaats(r)} />
         ))}
       </div>
 
       {huidig && (
         <ReceptModal
-          r={huidig} punten={receptPunten[huidig.id]} onClose={() => setOpen(null)}
+          r={huidig} punten={receptPunten[huidig.id]} puntenStatus={puntenStatus}
+          onClose={() => setOpen(null)}
           onPuntenVeranderd={onPuntenVeranderd}
           onDelete={() => { onDelete(huidig.id); setOpen(null); }}
           onScore={(s) => onScore(huidig.id, s)}
@@ -779,8 +803,9 @@ function NaarLijstDialog({
   );
 }
 
-function ReceptKaart({ r, punten, onOpen, onPlaats }: {
+function ReceptKaart({ r, punten, puntenStatus, onOpen, onPlaats }: {
   r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  puntenStatus: PuntenStatus;
   onOpen: () => void; onPlaats: () => void;
 }) {
   return (
@@ -794,7 +819,7 @@ function ReceptKaart({ r, punten, onOpen, onPlaats }: {
           <Sterren n={r.score} small />
         </div>
         <div style={S.cardMeta}>
-          {punten && <PuntenTag {...punten} />}
+          <PuntenPlek punten={punten} status={puntenStatus} />
           <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
@@ -807,6 +832,34 @@ function ReceptKaart({ r, punten, onOpen, onPlaats }: {
       </button>
     </div>
   );
+}
+
+/**
+ * De plek van de puntenbadge.
+ *
+ * Zolang de tracker rekent staat hier een even groot vakje met een draaiende
+ * cirkel erin. Zonder die plekhouder verschijnt de badge er na een paar
+ * seconden ineens tussen en schuift de hele metaregel opzij.
+ *
+ * Zonder trackerprofiel komen er nooit punten; dan staat hier niets.
+ */
+function PuntenPlek({ punten, status }: {
+  punten?: { punten: number; nietHerkend: number; totaal: number };
+  status: PuntenStatus;
+}) {
+  if (status === "laden") {
+    return (
+      <span style={{ ...S.puntenTag, ...S.puntenTagLaden }}
+        role="status" aria-label="Punten worden berekend">
+        <Loader2 size={11} className="spin" aria-hidden="true" />
+      </span>
+    );
+  }
+  // Zonder profiel is de puntenschaal onbekend en zegt het getal niets; dan
+  // hoort er niets te staan. Klaar maar zonder getal komt ook voor: een recept
+  // zonder ingrediënten valt niet door te rekenen.
+  if (status !== "klaar" || !punten) return null;
+  return <PuntenTag {...punten} />;
 }
 
 /**
@@ -853,10 +906,11 @@ interface VulUitslag {
 }
 
 function ReceptModal({
-  r, punten, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
+  r, punten, puntenStatus, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
   onPuntenVeranderd,
 }: {
   r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  puntenStatus: PuntenStatus;
   onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
   onPuntenVeranderd: () => void;
 }) {
@@ -961,14 +1015,21 @@ function ReceptModal({
         )}
 
         <div style={S.cardMeta}>
-          {punten && <PuntenTag {...punten} />}
+          <PuntenPlek punten={punten} status={puntenStatus} />
           <Tag tone="maaltijd">{r.maaltijd || "Avondeten"}</Tag>
           <Tag>{r.keuken}</Tag><Tag>{r.hoofd}</Tag>
           <span style={S.metaItem}><Clock size={12} /> {r.tijd}m</span>
           <span style={S.metaItem}><ChefHat size={12} /> {r.moeilijkheid}</span>
         </div>
 
-        {punten && (
+        {puntenStatus === "laden" && (
+          <p style={S.puntenUitleg}>
+            <Loader2 size={12} className="spin" style={{ verticalAlign: -2, marginRight: 6 }} />
+            De punten van dit recept worden berekend uit de ingrediënten.
+          </p>
+        )}
+
+        {puntenStatus === "klaar" && punten && (
           <p style={S.puntenUitleg}>
             <strong style={{ color: "var(--ink)" }}>
               {punten.nietHerkend > 0 ? "Ongeveer " : ""}{punten.punten} punten per portie
@@ -1053,11 +1114,26 @@ function ReceptModal({
         <ul style={S.ingList}>
           {r.ingredienten.map((i, k) => {
             const st = status?.[k];
-            // Zonder trackerprofiel of zolang het laadt: de lijst zoals hij was.
             if (!st) {
+              // Er komt nog een statusregel aan: alvast plek houden, anders
+              // groeit elke regel een halve tel later een regel bij.
+              const wacht = heeftPunten && status === null;
               return (
-                <li key={k} style={S.ingLi}>
-                  <span>{i.naam}</span><span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                <li key={k} style={wacht ? S.ingRij : S.ingLi}>
+                  {wacht ? (
+                    <span style={{ ...S.ingKnop, cursor: "default" }}>
+                      <span style={S.ingKop}>
+                        <span>{i.naam}</span>
+                        <span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                      </span>
+                      <span style={S.ingBekend}>&nbsp;</span>
+                    </span>
+                  ) : (
+                    <>
+                      <span>{i.naam}</span>
+                      <span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                    </>
+                  )}
                 </li>
               );
             }
@@ -3056,7 +3132,11 @@ const S: Record<string, React.CSSProperties> = {
   cardMeta: { display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" },
   metaItem: { display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, color: "var(--sub)", fontWeight: 500 },
   puntenUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "10px 0 0" },
-  puntenTag: { fontSize: 11, fontWeight: 800, color: "#fff", background: "var(--accent)", padding: "4px 9px", borderRadius: 999, letterSpacing: "0.01em" },
+  // Alle badges even breed: dan is de plekhouder precies zo groot als het getal
+  // dat erin komt en verschuift er niets als de punten binnenvallen. 58 px is
+  // ruim genoeg voor het breedste geval ("~99 pt").
+  puntenTag: { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 58, minHeight: 21, boxSizing: "border-box", fontSize: 11, fontWeight: 800, color: "#fff", background: "var(--accent)", padding: "4px 9px", borderRadius: 999, letterSpacing: "0.01em" },
+  puntenTagLaden: { background: "var(--line)", color: "var(--sub)" },
   puntenTagOnvolledig: { background: "var(--over)" },
 
   tag: { fontSize: 11, fontWeight: 700, color: "var(--accent)", background: "var(--accent-soft)", padding: "4px 10px", borderRadius: 999 },

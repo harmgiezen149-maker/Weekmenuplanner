@@ -421,8 +421,15 @@ elk ingrediënt worden herkend. Het echte aantal ligt dan hoger; in het recept
 zelf staat om hoeveel ingrediënten het gaat. Vul je die aan in de basislijst,
 dan klopt het getal vanzelf.
 
+Bij een koude cache rekent de tracker alle recepten door en dat duurt een paar
+seconden. Zolang dat loopt houdt de badge zijn plek met een draaiende cirkel
+erin, en staat er in het recept zelf dat de punten nog berekend worden. Alle
+badges zijn even breed, zodat er niets verschuift op het moment dat de getallen
+binnenvallen.
+
 Zonder ingevuld trackerprofiel verschijnen de badges niet en werkt het kookboek
-verder gewoon door.
+verder gewoon door. De puntenschaal is dan onbekend, dus het getal zou niets
+zeggen.
 
 #### Zien en aanpassen waarmee gerekend wordt
 
