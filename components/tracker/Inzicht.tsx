@@ -1,11 +1,13 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { T } from "./stijl";
 import Weekdagbalken from "./Weekdagbalken";
 import Dagverdeling from "./Dagverdeling";
+import Advieskaart from "./Advieskaart";
 import { trackerApi } from "./api";
+import type { AdviesAntwoord } from "./api";
 import { nl, nlKg } from "@/lib/tracker/datum";
 import {
   VLAG_LABEL, GUARDRAIL_VLAGGEN, WEEKDAGEN, VENSTER_WEKEN,
@@ -60,6 +62,14 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
   const [bezig, setBezig] = useState(false);
   const [fout, setFout] = useState("");
 
+  const [advies, setAdvies] = useState<AdviesAntwoord | null>(null);
+  const [adviesBezig, setAdviesBezig] = useState(false);
+  const [adviesFout, setAdviesFout] = useState("");
+  // Het weegmoment mag maar één keer per keer dat dit scherm openstaat worden
+  // aangevraagd. De server bewaakt het ook, maar zonder deze grendel zou de
+  // dubbele render van de ontwikkelmodus meteen twee aanvragen sturen.
+  const gevraagd = useRef(false);
+
   const haal = useCallback(async (ververs: boolean) => {
     if (ververs) setBezig(true);
     setFout("");
@@ -77,6 +87,32 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
 
   useEffect(() => { void haal(false); }, [haal]);
 
+  // Het advies staat los van de cijfers: gaat de modelaanroep mis, dan blijft
+  // het dashboard gewoon staan.
+  useEffect(() => {
+    let afgebroken = false;
+    (async () => {
+      try {
+        const eerst = await trackerApi.getAdvies(peildatum);
+        if (afgebroken) return;
+        setAdvies(eerst);
+
+        // De trigger uit het ontwerp: na de weging op de weegdag, één keer.
+        if (eerst.weegmoment?.open && !gevraagd.current) {
+          gevraagd.current = true;
+          setAdviesBezig(true);
+          const na = await trackerApi.maakAdvies(peildatum);
+          if (!afgebroken) setAdvies(na);
+        }
+      } catch (e) {
+        if (!afgebroken) setAdviesFout(e instanceof Error ? e.message : "Het advies kon niet worden opgehaald");
+      } finally {
+        if (!afgebroken) setAdviesBezig(false);
+      }
+    })();
+    return () => { afgebroken = true; };
+  }, [peildatum]);
+
   if (laden) {
     return <div style={T.center}><Loader2 size={26} className="spin" style={{ color: "var(--accent)" }} /></div>;
   }
@@ -91,6 +127,14 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
 
   return (
     <>
+      <Advieskaart
+        advies={advies?.advies ?? null}
+        weegmoment={advies?.weegmoment ?? null}
+        bezig={adviesBezig}
+        afgekeurd={advies?.afgekeurd ?? null}
+        fout={adviesFout}
+      />
+
       {/* -- dekking van het venster -- */}
       <section style={T.kaart}>
         <div style={S.dekking}>
