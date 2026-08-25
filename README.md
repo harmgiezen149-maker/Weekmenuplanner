@@ -901,6 +901,8 @@ app/
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
+  Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
+                        het kookboek en de tracker
   tracker/
     TrackerApp.tsx      Shell van de tracker: navigatie, laden, opslaan
     Dagoverzicht.tsx    Puntenring, eiwitbalk, regels per maaltijd

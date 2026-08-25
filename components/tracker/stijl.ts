@@ -9,6 +9,7 @@ export const T: Record<string, React.CSSProperties> = {
   titel: { fontSize: 24, fontWeight: 800, margin: 0, letterSpacing: "-0.03em" },
   headerRechts: { marginLeft: "auto", display: "flex", alignItems: "center", gap: 7 },
   headerSub: { fontSize: 12, color: "var(--sub)", fontWeight: 600, background: "var(--surface)", border: "1px solid var(--line)", padding: "5px 12px", borderRadius: 999 },
+  infoKnop: { width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 999, color: "var(--sub)", cursor: "pointer", padding: 0, flexShrink: 0 },
   main: { flex: 1, padding: "16px 18px 104px", overflowY: "auto" },
   inhoud: { width: "100%", maxWidth: 560, margin: "0 auto" },
   center: { display: "flex", justifyContent: "center", paddingTop: 60 },

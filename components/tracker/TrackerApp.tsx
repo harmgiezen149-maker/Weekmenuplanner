@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Activity, BookOpen, CalendarRange, LineChart, ListPlus, Loader2, Scale, Settings,
+  Activity, BookOpen, CalendarRange, Info, LineChart, ListPlus, Loader2, Scale, Settings,
 } from "lucide-react";
 import { T } from "./stijl";
 import Dagoverzicht, { toonDatum } from "./Dagoverzicht";
@@ -13,6 +13,7 @@ import Gewicht from "./Gewicht";
 import type { GewichtGegevens } from "./Gewicht";
 import Weekoverzicht from "./Weekoverzicht";
 import Inzicht from "./Inzicht";
+import Werkinstructie from "../Werkinstructie";
 import Import from "./Import";
 import Portiekiezer from "./Portiekiezer";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
@@ -54,6 +55,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   const [weekDatum, setWeekDatum] = useState(datumSleutel());
   const [herberekend, setHerberekend] = useState(false);
   const [melding, setMelding] = useState<Melding | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
   // Een product uit een geïmporteerde link gaat langs de portiekiezer.
   const [importProduct, setImportProduct] = useState<Product | null>(null);
 
@@ -204,11 +206,16 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
         <Activity size={22} style={{ color: "var(--accent)" }} />
         <h1 style={T.titel}>Tracker</h1>
         <div style={T.headerRechts}>
+          <button onClick={() => setInfoOpen(true)} style={T.infoKnop} aria-label="Werkinstructie">
+            <Info size={15} />
+          </button>
           {profiel && (
             <span style={T.headerSub}>{gebruikt} / {budgetVandaag} pt</span>
           )}
         </div>
       </header>
+
+      {infoOpen && <Werkinstructie onClose={() => setInfoOpen(false)} />}
 
       <main style={T.main}>
         {laden || !dag ? (

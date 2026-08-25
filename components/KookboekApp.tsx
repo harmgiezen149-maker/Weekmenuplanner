@@ -16,6 +16,7 @@ import {
   type Voorraad, type VoorraadArtikel,
 } from "@/lib/types";
 import Aanvullen from "./tracker/Aanvullen";
+import Werkinstructie from "./Werkinstructie";
 import type { Nutrients } from "@/lib/tracker/types";
 import { beschrijfMislukt } from "@/lib/tracker/schatting";
 import type { MislukteSchatting } from "@/lib/tracker/schatting";
@@ -426,12 +427,12 @@ export default function App() {
         <ChefHat size={22} style={{ color: "var(--accent)" }} />
         <h1 style={S.appTitle}>Kookboek</h1>
         <div style={S.headerRechts}>
-          <button onClick={() => setInfoOpen(true)} style={S.infoKnop} aria-label="Over deze app"><Info size={15} /></button>
+          <button onClick={() => setInfoOpen(true)} style={S.infoKnop} aria-label="Werkinstructie"><Info size={15} /></button>
           <span style={S.headerSub}>{recepten.length} recepten</span>
         </div>
       </header>
 
-      {infoOpen && <InfoModal onClose={() => setInfoOpen(false)} />}
+      {infoOpen && <Werkinstructie onClose={() => setInfoOpen(false)} />}
 
       <main style={S.main}>
         {laden ? (
@@ -2975,107 +2976,6 @@ function AfbeeldingZoom({ src, onClose }: { src: string; onClose: () => void }) 
         <button onClick={() => { setSchaal(1); setPos({ x: 0, y: 0 }); }} style={S.zoomKnop} aria-label="Reset"><RefreshCw size={16} /></button>
       </div>
       <button onClick={onClose} style={S.zoomSluit} aria-label="Sluiten"><X size={22} /></button>
-    </div>
-  );
-}
-
-// ============================================================================
-// INFO — uitgebreide beschrijving van de app, bereikbaar via de header
-// ============================================================================
-function InfoModal({ onClose }: { onClose: () => void }) {
-  const Sectie = ({ titel, children }: { titel: string; children: React.ReactNode }) => (
-    <div style={{ marginBottom: 18 }}>
-      <h3 style={S.infoSectieKop}>{titel}</h3>
-      <div style={S.infoTekst}>{children}</div>
-    </div>
-  );
-
-  return (
-    <div style={S.modalBg} onClick={onClose}>
-      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={S.modalHead}>
-          <div>
-            <span style={S.label}>Over deze app</span>
-            <h2 style={S.modalTitle}>Kookboek</h2>
-          </div>
-          <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
-        </div>
-
-        <p style={S.infoIntro}>
-          Kookboek is jullie eigen receptendatabase, weekplanner en slimme boodschappenlijst in één.
-          Alles staat centraal opgeslagen in de cloud: iedereen die de app gebruikt kijkt naar dezelfde
-          recepten, hetzelfde weekmenu en dezelfde lijst — op telefoon, tablet en computer.
-        </p>
-
-        <Sectie titel="Recepten">
-          Alle recepten op één plek, met foto, keuken, hoofdingrediënt, maaltijdtype (ontbijt, lunch,
-          avondeten of toetje), moeilijkheid, bereidingstijd, jouw score en hoe vaak het gerecht al
-          gegeten is. Filter op elk kenmerk of op minimale score, sorteer op naam, score of vaakst
-          gegeten, en zoek op titel. Tik een kaart aan voor het volledige recept; daar pas je de score
-          aan, hoog je de gegeten-teller op, bewerk je het recept (potlood) of zet je het direct in het
-          weekmenu of op de lijst. Tik op een foto om schermvullend in te zoomen.
-        </Sectie>
-
-        <Sectie titel="Toevoegen">
-          Drie manieren om een recept toe te voegen. <strong>Link</strong>: zoek een gerecht op naam
-          (de app zoekt receptsites op internet en toont keuzeopties) of plak zelf een link — het
-          recept wordt automatisch uitgelezen, inclusief een foto van de site. <strong>Foto</strong>:
-          fotografeer een recept uit een tijdschrift of kookboek; staat het op meerdere pagina's, voeg
-          dan alle pagina's toe voordat je laat uitlezen. <strong>Handmatig</strong>: alles zelf
-          invoeren, inclusief winkel en afdeling per ingrediënt. Na elke import volgt een
-          controlescherm; bevat het recept standaard kruiden zoals zout en peper, dan vraagt de app of
-          je die wilt meenemen of weglaten.
-        </Sectie>
-
-        <Sectie titel="Weekmenu">
-          Plan per dag het avondeten, en voeg optioneel een ontbijt, lunch of toetje toe via het
-          plusje onder de dag. De week begint op de dag die jij kiest (pijltjes bovenaan). Per
-          maaltijd stel je het aantal personen in; ingrediënten schalen overal automatisch mee. Tik op
-          een gepland gerecht voor de <strong>kookweergave</strong>: geschaalde, afvinkbare
-          ingrediënten en de bereiding in een groter lettertype. Bij het plaatsen controleert de app
-          of alle ingrediënten een winkel en afdeling hebben; ontbreekt iets, dan vult een korte
-          wizard dat samen met je aan (de afdeling wordt door AI voorgesteld). Druk je op
-          <strong> Leegmaken</strong>, dan volgt eerst een korte evaluatie: per gerecht geef je een
-          score en wordt de gegeten-teller opgehoogd — daarna is de week klaar voor een nieuwe planning.
-        </Sectie>
-
-        <Sectie titel="Lijst">
-          Genereer de boodschappenlijst uit het weekmenu met <strong>Weekmenu verversen</strong>:
-          alle geplande maaltijden worden meegenomen, hoeveelheden opgeteld en stuks-artikelen naar
-          boven afgerond (2,5 courgette wordt 3). Handmatig toegevoegde items blijven bij het
-          verversen gewoon staan. De lijst is gegroepeerd per winkel en daarbinnen per afdeling, in de
-          looproute die je bij Winkels hebt ingesteld. <strong>Lijst opschonen</strong> laat AI
-          dubbele artikelen samenvoegen en receptmaten (theelepels, grammen) omzetten naar volle
-          verpakkingen — twijfelgevallen worden altijd eerst aan jou voorgelegd. De lijst
-          synchroniseert vrijwel live: vinkt de een iets af, dan ziet de ander dat binnen enkele
-          seconden.
-        </Sectie>
-
-        <Sectie titel="Voorraad">
-          Terugkerende artikelen die niet uit een recept komen — wasmiddel, aluminiumfolie, koffie —
-          sla je hier op met winkel en afdeling. De lijst is gesorteerd per afdeling. Stel het aantal
-          in en vink een artikel aan om het in één keer aan de boodschappenlijst toe te voegen; winkel
-          en afdeling gaan automatisch mee.
-        </Sectie>
-
-        <Sectie titel="Winkels">
-          Stel per winkel de volgorde van de afdelingen in, zodat de boodschappenlijst jouw looproute
-          door de winkel volgt. Verplaats afdelingen omhoog of omlaag, of herstel de standaardvolgorde.
-        </Sectie>
-
-        <Sectie titel="Als app op je telefoon">
-          Installeer Kookboek als app: op Android via Chrome → menu → "App installeren", op iPhone via
-          Safari → deelknop → "Zet op beginscherm". Je krijgt een eigen icoon en volledig scherm;
-          updates gaan vanzelf mee.
-        </Sectie>
-
-        <Sectie titel="Goed om te weten">
-          De slimme functies (recepten uitlezen en zoeken, afdelingen bepalen, lijst opschonen)
-          draaien op AI en hebben een werkende API-sleutel met tegoed nodig. De app heeft internet
-          nodig; alle gegevens staan veilig in de cloud en blijven bewaard, ook als je de app
-          verwijdert en opnieuw installeert.
-        </Sectie>
-      </div>
     </div>
   );
 }
