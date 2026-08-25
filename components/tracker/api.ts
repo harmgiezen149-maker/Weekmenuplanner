@@ -2,7 +2,17 @@ import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "@/li
 import type { BudgetResultaat } from "@/lib/tracker/budget";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import type { AdviesDrempel, FactPack } from "@/lib/tracker/feiten";
+import type { Advies, Weegmoment } from "@/lib/tracker/advies";
 import type { GewichtGegevens } from "./Gewicht";
+
+export interface AdviesAntwoord {
+  advies: Advies | null;
+  historie: Advies[];
+  weegmoment: Weegmoment | null;
+  gegenereerd?: boolean;
+  /** Redenen waarom er geen advies kwam; zie de validatielaag. */
+  afgekeurd?: string[];
+}
 
 export interface ProfielAntwoord {
   profiel: Profile | null;
@@ -97,6 +107,18 @@ export const trackerApi = {
   getFeiten: (datum: string, ververs = false) =>
     fetch(`/api/tracker/feiten?datum=${datum}${ververs ? "&ververs=1" : ""}`, { cache: "no-store" })
       .then(lees<{ pakket: FactPack | null; drempel: AdviesDrempel | null; uitCache: boolean }>),
+
+  /** Het lopende advies plus de historie, zonder iets te genereren. */
+  getAdvies: (datum: string) =>
+    fetch(`/api/tracker/advies?datum=${datum}`, { cache: "no-store" }).then(lees<AdviesAntwoord>),
+
+  /**
+   * Vraagt het advies bij het weegmoment aan. De server bepaalt of dat mag; is
+   * het weegmoment al afgehandeld, dan komt hetzelfde antwoord terug zonder
+   * modelaanroep.
+   */
+  maakAdvies: (datum: string) =>
+    fetch(`/api/tracker/advies?datum=${datum}`, { method: "POST" }).then(lees<AdviesAntwoord>),
 
   getWeek: (datum: string) =>
     fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })

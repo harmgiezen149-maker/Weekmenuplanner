@@ -10,6 +10,7 @@ import { datumSleutel, geldigeDatum, isoWeek } from "./datum";
 import {
   buildFactPack, feitenVingerafdruk, vensterDatums, type FactPack,
 } from "./feiten";
+import type { Advies } from "./advies";
 
 export { datumSleutel, geldigeDatum };
 
@@ -25,6 +26,9 @@ export { datumSleutel, geldigeDatum };
 //   wl:food:<barcode>   -> gecachet product uit een externe bron, 90 dagen
 //   wl:eigen:<barcode>  -> zelf ingevoerd product, blijft staan
 //   wl:facts:<YYYY-Www> -> gecachet feitenpakket van de adviesmodule, 8 dagen
+//   wl:advice:<id>      -> een uitgegeven advies; wordt nooit verwijderd
+//   wl:advice:index     -> sorted set met adviezen, score = epoch
+//   wl:advice:active    -> id van het lopende advies
 //
 // De volgende fases voegen hier wl:week:*, wl:weight:* en
 // wl:recipe:points:* aan toe.
@@ -42,6 +46,9 @@ const WEIGHT = (datum: string) => `wl:weight:${datum}`;
 const MEALS_KEY = "wl:meals";
 const RECIPE_POINTS = (id: string) => `wl:recipe:points:${id}`;
 const FACTS = (week: string) => `wl:facts:${week}`;
+const ADVICE = (id: string) => `wl:advice:${id}`;
+const ADVICE_INDEX = "wl:advice:index";
+const ADVICE_ACTIVE = "wl:advice:active";
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -494,4 +501,49 @@ export async function laadFeiten(
   const pakket = buildFactPack({ peildatum, dagen, wegingen, profiel });
   await redis.set(sleutel, { vingerafdruk, pakket }, { ex: FACTS_TTL_SECONDEN });
   return { pakket, uitCache: false };
+}
+
+// -- adviezen ----------------------------------------------------------------
+
+/**
+ * Adviezen worden nooit verwijderd. De historie is het interessantste deel van
+ * de module: pas over meerdere adviezen heen is te zien of er iets beweegt.
+ */
+export async function saveAdvies(advies: Advies): Promise<Advies> {
+  await redis.set(ADVICE(advies.id), advies);
+  await redis.zadd(ADVICE_INDEX, {
+    score: Date.parse(advies.created_at) || Date.now(),
+    member: advies.id,
+  });
+  await redis.set(ADVICE_ACTIVE, advies.id);
+  return advies;
+}
+
+export async function getAdvies(id: string): Promise<Advies | null> {
+  return (await redis.get<Advies>(ADVICE(id))) ?? null;
+}
+
+/** Het lopende advies, of null als er nog geen is. */
+export async function getActiefAdvies(): Promise<Advies | null> {
+  const id = await redis.get<string>(ADVICE_ACTIVE);
+  return id ? getAdvies(id) : null;
+}
+
+/**
+ * De laatste adviezen, nieuwste eerst. Er komen er hooguit een paar per maand
+ * bij, dus de hele index ophalen en achteraan beginnen is goedkoper dan een
+ * omgekeerde bereikopvraging — en werkt op elke Redis-variant hetzelfde.
+ */
+export async function getLaatsteAdviezen(aantal = 3): Promise<Advies[]> {
+  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  const nieuwste = ids.slice(-aantal).reverse();
+  if (nieuwste.length === 0) return [];
+  const rauw = await redis.mget<(Advies | null)[]>(...nieuwste.map(ADVICE));
+  return (rauw ?? []).filter((a): a is Advies => a != null);
+}
+
+/** Het aantal adviezen dat ooit is uitgegeven. */
+export async function telAdviezen(): Promise<number> {
+  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  return ids.length;
 }
