@@ -134,6 +134,19 @@ export const trackerApi = {
   getMelding: (datum: string) =>
     fetch(`/api/tracker/melding?datum=${datum}`, { cache: "no-store" }).then(lees<Melding>),
 
+  /**
+   * Analyse op verzoek. Kent geen limiet en geen dempingsregels: die gelden
+   * voor wat de module uit zichzelf meldt, niet voor wat je zelf komt vragen.
+   */
+  vraagAnalyse: (datum: string) =>
+    fetch(`/api/tracker/advies?datum=${datum}&trigger=verzoek`, { method: "POST" })
+      .then(lees<AdviesAntwoord>),
+
+  /** De volledige adviesgeschiedenis. Kost nooit een modelaanroep. */
+  getAdviesHistorie: () =>
+    fetch("/api/tracker/advies/historie", { cache: "no-store" })
+      .then(lees<{ adviezen: Advies[] }>).then((d) => d.adviezen),
+
   getWeek: (datum: string) =>
     fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })
       .then(lees<{ week: WeekSamenvatting | null; profiel: Profile | null; dagenTeGaan: number }>),

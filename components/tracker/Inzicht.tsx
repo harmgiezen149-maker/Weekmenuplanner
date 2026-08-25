@@ -1,13 +1,15 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { Loader2, RefreshCw, Sparkles, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { T } from "./stijl";
 import Weekdagbalken from "./Weekdagbalken";
 import Dagverdeling from "./Dagverdeling";
 import Advieskaart from "./Advieskaart";
+import Tijdlijn from "./Tijdlijn";
 import { trackerApi } from "./api";
 import type { AdviesAntwoord } from "./api";
+import type { Advies } from "@/lib/tracker/advies";
 import { nl, nlKg } from "@/lib/tracker/datum";
 import {
   VLAG_LABEL, GUARDRAIL_VLAGGEN, WEEKDAGEN, VENSTER_WEKEN,
@@ -65,6 +67,8 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
   const [advies, setAdvies] = useState<AdviesAntwoord | null>(null);
   const [adviesBezig, setAdviesBezig] = useState(false);
   const [adviesFout, setAdviesFout] = useState("");
+  const [historie, setHistorie] = useState<Advies[]>([]);
+  const [analyseBezig, setAnalyseBezig] = useState(false);
   // Het weegmoment mag maar één keer per keer dat dit scherm openstaat worden
   // aangevraagd. De server bewaakt het ook, maar zonder deze grendel zou de
   // dubbele render van de ontwikkelmodus meteen twee aanvragen sturen.
@@ -105,6 +109,8 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
           const na = await trackerApi.maakAdvies(peildatum);
           if (!afgebroken) setAdvies(na);
         }
+        const lijst = await trackerApi.getAdviesHistorie();
+        if (!afgebroken) setHistorie(lijst);
       } catch (e) {
         if (!afgebroken) setAdviesFout(e instanceof Error ? e.message : "Het advies kon niet worden opgehaald");
       } finally {
@@ -112,6 +118,24 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
       }
     })();
     return () => { afgebroken = true; };
+  }, [peildatum]);
+
+  /**
+   * De knop uit het ontwerp: zelf om een analyse vragen, zonder limiet. Het
+   * feitenpakket komt uit de cache zolang er niets nieuws gelogd is, dus het
+   * doorrekenen kost niets — de modelaanroep wel.
+   */
+  const vraagAnalyse = useCallback(async () => {
+    setAnalyseBezig(true);
+    setAdviesFout("");
+    try {
+      setAdvies(await trackerApi.vraagAnalyse(peildatum));
+      setHistorie(await trackerApi.getAdviesHistorie());
+    } catch (e) {
+      setAdviesFout(e instanceof Error ? e.message : "De analyse kon niet worden opgehaald");
+    } finally {
+      setAnalyseBezig(false);
+    }
   }, [peildatum]);
 
   if (laden) {
@@ -136,6 +160,13 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
         afgekeurd={advies?.afgekeurd ?? null}
         fout={adviesFout}
       />
+
+      <button style={{ ...T.secundair, marginTop: 0, marginBottom: 12 }}
+        onClick={() => void vraagAnalyse()} disabled={analyseBezig || adviesBezig}>
+        {analyseBezig
+          ? <><Loader2 size={16} className="spin" /> Bezig met analyseren</>
+          : <><Sparkles size={16} /> Analyseer mijn patroon</>}
+      </button>
 
       {/* -- dekking van het venster -- */}
       <section style={T.kaart}>
@@ -329,6 +360,8 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
           </div>
         </section>
       )}
+
+      <Tijdlijn adviezen={historie} />
 
       {/* -- top-bijdragers -- */}
       {pakket.top_contributors.length > 0 && (
