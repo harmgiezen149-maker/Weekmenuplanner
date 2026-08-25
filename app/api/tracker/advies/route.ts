@@ -94,6 +94,10 @@ export async function POST(req: NextRequest) {
   // heeft opgeleverd voordat het een nieuwe kiest.
   const historie = await Promise.all(opgeslagen.map((a) => werkEvaluatieBij(a, peildatum)));
 
+  // Op verzoek mag altijd: de knop op /tracker/inzicht kent geen limiet en
+  // geen dempingsregels. Die gelden voor wat de module uit zichzelf meldt, niet
+  // voor wat je zelf komt vragen.
+  const opVerzoek = req.nextUrl.searchParams.get("trigger") === "verzoek";
   const nu = new Date();
   const cooldown = await getCooldown();
   const moment = weegmomentOpen(pakket, wegingen, profiel, historie);
@@ -102,8 +106,9 @@ export async function POST(req: NextRequest) {
   // Het weegmoment gaat voor: dat is de vaste afspraak, een afwijking is de
   // uitzondering. Zonder die volgorde zou een afwijking het weegmomentadvies
   // kunnen opeten en daarna zelf door de 48-uursregel geblokkeerd worden.
-  const trigger: AdviesTrigger | null = moment.open ? "weegmoment"
-    : afwijking.open ? "afwijking" : null;
+  const trigger: AdviesTrigger | null = opVerzoek ? "verzoek"
+    : moment.open ? "weegmoment"
+      : afwijking.open ? "afwijking" : null;
 
   if (!trigger) {
     // Geen fout: dit is de normale uitkomst zolang er niets te melden is.
@@ -139,9 +144,9 @@ export async function POST(req: NextRequest) {
     id: nieuwId(),
     created_at: nu.toISOString(),
     trigger,
-    ...(trigger === "weegmoment"
-      ? { weeg_datum: moment.datum ?? undefined }
-      : { aanleiding: afwijking.vlag ?? undefined }),
+    ...(trigger === "weegmoment" ? { weeg_datum: moment.datum ?? undefined }
+      : trigger === "afwijking" ? { aanleiding: afwijking.vlag ?? undefined }
+        : {}),
     payload: uitkomst.payload,
     fact_pack_ref: pakket.meta.reference_date,
     metric_start: leesFeit(pakket, uitkomst.payload.action.metric_key) ?? 0,
@@ -161,7 +166,9 @@ export async function POST(req: NextRequest) {
     weegmoment: trigger === "weegmoment"
       ? { ...moment, open: false, reden: "dit weegmoment heeft al een advies" }
       : moment,
-    afwijking: { ...afwijking, open: false, reden: "hier is zojuist over gemeld" },
+    afwijking: trigger === "afwijking"
+      ? { ...afwijking, open: false, reden: "hier is zojuist over gemeld" }
+      : afwijking,
     gegenereerd: true,
   });
 }

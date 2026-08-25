@@ -550,6 +550,19 @@ export async function getLaatsteAdviezen(aantal = 3): Promise<Advies[]> {
   return (rauw ?? []).filter((a): a is Advies => a != null);
 }
 
+/**
+ * Alle adviezen ooit, nieuwste eerst. Voor de tijdlijn.
+ *
+ * Er wordt nooit iets verwijderd, dus dit groeit — maar met hooguit een paar
+ * per maand blijft het jarenlang een lijst van tientallen.
+ */
+export async function getAlleAdviezen(): Promise<Advies[]> {
+  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  if (ids.length === 0) return [];
+  const rauw = await redis.mget<(Advies | null)[]>(...[...ids].reverse().map(ADVICE));
+  return (rauw ?? []).filter((a): a is Advies => a != null);
+}
+
 /** Het aantal adviezen dat ooit is uitgegeven. */
 export async function telAdviezen(): Promise<number> {
   const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];

@@ -787,3 +787,22 @@ test("een afwijkingsmelding ertussen heropent het weegmoment niet", () => {
   assert.equal(w.open, false);
   assert.ok(w.reden.includes("al een advies"));
 });
+
+test("een analyse op verzoek verbruikt het weegmoment niet", () => {
+  const weegadvies = opgeslagen({ id: "w1", trigger: "weegmoment", weeg_datum: "2026-08-23" });
+  const opVerzoek = opgeslagen({ id: "v1", trigger: "verzoek", created_at: "2026-08-24T09:00:00.000Z" });
+  delete (opVerzoek as { weeg_datum?: string }).weeg_datum;
+
+  // Nog geen weegadvies: het weegmoment staat open, ook al vroeg je net zelf een analyse.
+  assert.equal(weegmomentOpen(pak(), WEGINGEN, profiel(), [opVerzoek]).open, true);
+  // Mét weegadvies eronder blijft het dicht.
+  assert.equal(weegmomentOpen(pak(), WEGINGEN, profiel(), [opVerzoek, weegadvies]).open, false);
+});
+
+test("een analyse op verzoek zet de dempingsregels niet aan het werk", () => {
+  // De cooldown gaat alleen over wat de module uit zichzelf meldt. Een advies
+  // op verzoek staat daar los van en blokkeert een latere melding dus niet.
+  const opVerzoek = opgeslagen({ id: "v1", trigger: "verzoek", created_at: "2026-08-24T09:00:00.000Z" });
+  const a = afwijkingOpen(pakStilgevallen(), [], profiel(), [opVerzoek], LEGE_COOLDOWN, NU_D);
+  assert.equal(a.open, true);
+});
