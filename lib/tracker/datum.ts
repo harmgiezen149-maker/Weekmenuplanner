@@ -12,6 +12,13 @@ export function geldigeDatum(s: unknown): s is string {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 }
 
+/** Hele dagen tussen twee datums. Negatief als `tot` voor `van` ligt. */
+export function dagenTussen(van: string, tot: string): number {
+  return Math.round(
+    (Date.parse(tot + "T00:00:00Z") - Date.parse(van + "T00:00:00Z")) / 86400000
+  );
+}
+
 /** Datum n dagen verder of terug, als YYYY-MM-DD. */
 export function verschuifDatum(datum: string, dagen: number): string {
   const d = new Date(datum + "T12:00:00");

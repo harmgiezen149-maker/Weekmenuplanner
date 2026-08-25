@@ -483,3 +483,27 @@ test("de feitenlaag blijft ruim binnen een halve seconde op twaalf weken data", 
   assert.equal(p.meta.days_logged, 84);
   assert.ok(duur < 500, `feitenlaag duurde ${duur.toFixed(1)} ms`);
 });
+
+// -- instelbaar venster voor de evaluatielus ---------------------------------
+
+test("een korter venster rekent met dezelfde regels over minder dagen", () => {
+  const dagen = vlakkeReeks(35);
+  const kort = buildFactPack({
+    peildatum: PEILDATUM, dagen, wegingen: [], profiel: profiel(),
+    vensterDagen: 14, nu: NU,
+  });
+  assert.equal(kort.meta.days_in_window, 14);
+  assert.equal(kort.meta.days_logged, 14);
+  assert.equal(kort.meta.window_start, "2026-08-12");
+  assert.equal(kort.meta.window_weeks, 2);
+  // Dezelfde rekenregels: het gemiddelde over veertien vlakke dagen is gelijk
+  // aan dat over vierentachtig. Zonder die gelijkheid zou de evaluatielus het
+  // verschil tussen twee formules meten in plaats van tussen twee weken.
+  assert.equal(kort.budget.avg_points_per_day, bouw(dagen).budget.avg_points_per_day);
+});
+
+test("het venster staat standaard op twaalf weken", () => {
+  const p = bouw(vlakkeReeks(35));
+  assert.equal(p.meta.days_in_window, VENSTER_DAGEN);
+  assert.equal(p.meta.window_weeks, 12);
+});

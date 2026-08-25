@@ -1,7 +1,7 @@
 import type { Day, Entry, EntrySource, Profile } from "./types";
 import { effectiveSugar, toonPunten } from "./points.ts";
 import { dagBewegingspunten } from "./activiteit.ts";
-import { verschuifDatum } from "./datum.ts";
+import { dagenTussen, verschuifDatum } from "./datum.ts";
 import { dagIndex, weekStart } from "./week.ts";
 import { metTrend, type Weging } from "./gewicht.ts";
 import { bmr, leeftijd, tdee } from "./budget.ts";
@@ -148,6 +148,13 @@ export interface FeitenInvoer {
   /** Het volledige weeglog; de trend heeft de hele reeks nodig om te kloppen. */
   wegingen: Weging[];
   profiel: Profile;
+  /**
+   * Lengte van het venster in dagen. Standaard twaalf weken; de evaluatielus
+   * gebruikt een korter venster om één meetwaarde over de horizon van een
+   * actie opnieuw te berekenen — met exact dezelfde rekenregels, zodat de
+   * meting bij uitgifte en bij evaluatie niet uiteen kunnen lopen.
+   */
+  vensterDagen?: number;
   /** Alleen om `generated_at` vast te zetten in tests. */
   nu?: Date;
 }
@@ -187,7 +194,7 @@ interface DagFeit {
 export function buildFactPack(invoer: FeitenInvoer): FactPack {
   const { peildatum, profiel } = invoer;
   const schaal = profiel.points_scale;
-  const datums = vensterDatums(peildatum);
+  const datums = vensterDatums(peildatum, invoer.vensterDagen ?? VENSTER_DAGEN);
   const perDatum = new Map(invoer.dagen.map((d) => [d.date, d]));
 
   const dagFeiten: DagFeit[] = datums.map((datum) => {
@@ -249,7 +256,7 @@ function bouwMeta(alle: DagFeit[], gelogd: DagFeit[], peildatum: string, nu?: Da
   return {
     generated_at: (nu ?? new Date()).toISOString(),
     reference_date: peildatum,
-    window_weeks: VENSTER_WEKEN,
+    window_weeks: Math.max(1, Math.round(alle.length / 7)),
     window_start: alle[0].datum,
     days_logged: gelogd.length,
     days_in_window: alle.length,
@@ -670,12 +677,6 @@ function rond(n: number, decimalen = 1): number {
   if (!Number.isFinite(n)) return 0;
   const f = 10 ** decimalen;
   return Math.round(n * f) / f;
-}
-
-function dagenTussen(van: string, tot: string): number {
-  return Math.round(
-    (Date.parse(tot + "T00:00:00Z") - Date.parse(van + "T00:00:00Z")) / 86400000
-  );
 }
 
 /** Gemiddelde punten over een aantal weekdagen, gewogen naar gelogde dagen. */
