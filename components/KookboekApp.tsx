@@ -7,6 +7,7 @@ import Bonscanner from "./Bonscanner";
 import type { BonKeuze } from "./Bonscanner";
 import { euroTekst, raamLijst } from "@/lib/prijzen";
 import { verschuifWeek, weekLabel, weekVan } from "@/lib/weeksleutel";
+import Weekvoorstel from "./Weekvoorstel";
 import type { Prijsboek } from "@/lib/prijzen";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
@@ -1912,6 +1913,7 @@ function Weekmenu({
   weegdag: number | null;
 }) {
   const [kiesDag, setKiesDag] = useState<string | null>(null);
+  const [voorstelOpen, setVoorstelOpen] = useState(false);
   const [verplaatsVan, setVerplaatsVan] = useState<string | null>(null);
   const [kook, setKook] = useState<{ recept: Recept; personen: number } | null>(null);
   // Wizard die ontbrekende winkel/gebied opvraagt voordat een gerecht geplaatst wordt.
@@ -2011,8 +2013,37 @@ function Weekmenu({
 
   const vandaag = new Date().toISOString().slice(0, 10);
 
+  /**
+   * Een voorgesteld weekmenu overnemen.
+   *
+   * Alleen de avondslots gaan eraan: een geplande lunch of een toetje heeft met
+   * dit voorstel niets te maken en hoort niet stilletjes te verdwijnen. Het
+   * aantal personen komt uit het recept zelf.
+   */
+  const neemVoorstelOver = (keuze: { dag: string; recipeId: string }[]) => {
+    setWeek((p) => {
+      const slots = { ...p.slots };
+      for (const d of dagen) delete slots[slotKey(d, HOOFD_MAALTIJD)];
+      for (const k of keuze) {
+        const r = recepten.find((x) => x.id === k.recipeId);
+        if (!r) continue;
+        slots[slotKey(k.dag, HOOFD_MAALTIJD)] = { recipeId: r.id, personen: r.personen || 4 };
+      }
+      return { ...p, slots };
+    });
+    setVoorstelOpen(false);
+  };
+
   return (
     <div>
+      {voorstelOpen && (
+        <Weekvoorstel
+          dagen={dagen}
+          onOvernemen={neemVoorstelOver}
+          onSluiten={() => setVoorstelOpen(false)}
+        />
+      )}
+
       <div style={S.weekKiezer}>
         <button onClick={() => onWisselWeek(verschuifWeek(weekSleutel, -1))}
           style={S.iconBtnSm} aria-label="Vorige week" disabled={weekLaadt}>
@@ -2041,9 +2072,14 @@ function Weekmenu({
             </button>
           )}
         </div>
-        {aantalGepland > 0 && (
-          <button onClick={startLeegmaken} style={S.leegBtn}><Trash2 size={14} /> Leegmaken</button>
-        )}
+        <div style={S.weekKnoppen}>
+          <button onClick={() => setVoorstelOpen(true)} style={S.voorstelBtn}>
+            <Sparkles size={14} /> Stel een week voor
+          </button>
+          {aantalGepland > 0 && (
+            <button onClick={startLeegmaken} style={S.leegBtn}><Trash2 size={14} /> Leegmaken</button>
+          )}
+        </div>
       </div>
 
       {verplaatsVan && (
@@ -3598,7 +3634,7 @@ const S: Record<string, React.CSSProperties> = {
   infoBar: { display: "flex", alignItems: "center", gap: 7, background: "var(--accent-soft)", color: "var(--accent)", padding: "10px 13px", borderRadius: 10, fontSize: 13, fontWeight: 600, marginBottom: 14, flexWrap: "wrap" },
   linkBtn: { marginLeft: "auto", background: "none", border: "none", color: "var(--accent)", fontWeight: 700, fontSize: 13, cursor: "pointer", textDecoration: "underline" },
 
-  weekHead: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", marginBottom: 14, gap: 10 },
+  weekHead: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", marginBottom: 14, gap: 10 },
   dayStepper: { display: "flex", alignItems: "center", gap: 10, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, padding: "4px 6px" },
   dayStepperLabel: { fontSize: 14, fontWeight: 700, minWidth: 78, textAlign: "center" },
   leegBtn: { display: "inline-flex", alignItems: "center", gap: 5, background: "var(--surface)", border: "1px solid var(--line)", color: "var(--red)", padding: "8px 12px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" },
@@ -3657,6 +3693,8 @@ const S: Record<string, React.CSSProperties> = {
   voorraadStandTekst: { fontSize: 11.5, color: "var(--sub)", minWidth: 52, textAlign: "center" },
   voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
   boodWeek: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 10px" },
+  weekKnoppen: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginLeft: "auto" },
+  voorstelBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderRadius: 999, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
   weekGelijk: { display: "block", marginTop: 6, background: "none", border: "none", padding: 0, fontSize: 11.5, lineHeight: 1.4, color: "var(--accent)", textAlign: "left", cursor: "pointer", textDecoration: "underline" },
   weekKiezer: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "6px 8px", marginBottom: 12 },
   weekKiezerLabel: { flex: 1, textAlign: "center", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 22 },

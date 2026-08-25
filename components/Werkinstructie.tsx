@@ -249,6 +249,25 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="voorstel" titel="Een week laten voorstellen">
+          <p style={{ margin: "0 0 8px" }}>
+            Op het weekmenu staat "Stel een week voor". De app zet zeven avonden voor je klaar uit
+            je eigen recepten, met per dag waarom: hoe lang het duurt, wat je ervan vond, en dat er
+            niet twee avonden achter elkaar hetzelfde op tafel komt. Doordeweeks kiest hij snelle
+            gerechten, in het weekend mag het langer duren.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Bovenaan staat wat de week gemiddeld aan punten kost en, als je kassabonnen hebt
+            gescand, wat de ingrediënten ongeveer kosten. Staat er een duidelijk goedkoper gerecht
+            met hetzelfde hoofdingrediënt, dan noemt hij dat erbij.
+          </p>
+          <p style={{ margin: 0 }}>
+            Er verandert niets tot je op overnemen drukt. Bevalt het voorstel niet, dan geeft "stel
+            iets anders voor" een andere week met dezelfde regels. Daarna pas je nog steeds per dag
+            aan wat je wilt — het is een startpunt, geen voorschrift.
+          </p>
+        </H>
+
         <H id="weken" titel="Meerdere weken plannen">
           <p style={{ margin: "0 0 8px" }}>
             Boven het weekmenu staan pijltjes. Daarmee blader je naar volgende week — of terug naar

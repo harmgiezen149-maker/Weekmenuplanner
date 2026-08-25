@@ -1321,6 +1321,63 @@ verandert er niets aan de afdruk van het scherm.
 
 ---
 
+## Een weekmenu laten voorstellen
+
+### Zonder model
+
+Een weekmenu samenstellen is een keuzeprobleem met harde regels — niet twee
+avonden achter elkaar pasta, doordeweeks niets van anderhalf uur — en dat soort
+regels laten zich beter opschrijven dan uitleggen. Het rekenwerk staat in
+`lib/weekvoorstel.ts`: het is meteen klaar, kost niets, werkt zonder API-sleutel
+en is te testen. Achttien tests leggen de regels vast.
+
+De aanpak is dag voor dag: voor elke dag krijgt elk overgebleven recept een
+score en de beste wint. Niet één keer alles doorrekenen en dan de zeven beste
+pakken — dan krijg je zeven keer hetzelfde soort avondeten, want wat één keer
+goed scoort scoort altijd goed.
+
+Wat meeweegt:
+
+- **Twee avonden achter elkaar hetzelfde hoofdingrediënt** is de zwaarste straf.
+  Dat is het enige waar vrijwel iedereen over valt.
+- **Doordeweeks telt de klok**: boven 35 minuten gaat er af, in het weekend juist
+  een beetje bij.
+- **Je eigen waardering.** Een recept zonder score telt als gemiddeld, niet als
+  afgekeurd — anders verdwijnt alles wat je nog niet hebt beoordeeld voorgoed uit
+  je weekmenu.
+- **Drie keer Italiaans in een week** voelt als geen keuze gemaakt hebben, dus de
+  derde van dezelfde keuken krijgt aftrek.
+- **Het puntendoel**, mild: een avondmaal is grofweg de helft van je dagbudget, en
+  een zware avond mag zolang de week klopt.
+
+De getallen zijn met opzet grof. Fijnafstelling suggereert een nauwkeurigheid
+die er niet is: het verschil tussen een 71 en een 68 zegt niets over welke avond
+leuker wordt.
+
+"Stel iets anders voor" schuift een variatieteller op. Die kiest uit de top in
+plaats van altijd de allerhoogste — anders levert die knop precies dezelfde week
+op, en willekeurig kiezen zou het voorstel waardeloos maken.
+
+### Goedkoper alternatief
+
+Bij elke dag wordt gekeken of er een goedkoper gerecht is met hetzelfde
+hoofdingrediënt dat ook op die avond past. Hetzelfde hoofdingrediënt, want
+anders is het geen alternatief maar een ander gerecht; en een goedkoop recept
+van anderhalf uur op een woensdag is geen besparing maar een probleem.
+
+Het verschil moet minstens € 1,50 zijn. "Bespaar 30 cent" is geen advies maar
+ruis, en zou de suggestie op elke dag laten verschijnen.
+
+### Het voorstel verandert niets
+
+Tot je op overnemen drukt gebeurt er niets. Dat is het verschil tussen een
+hulpmiddel en een app die het beter denkt te weten: je ziet eerst wat er zou
+komen te staan, inclusief de reden per dag, en beslist dan zelf. Overnemen
+vervangt alleen de avondslots — een geplande lunch of een toetje heeft met dit
+voorstel niets te maken.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1380,7 +1437,8 @@ app/
     cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
     recipes/route.ts        GET alle / POST nieuw recept
     recipes/[id]/route.ts   PUT / DELETE per recept
-    week/route.ts           GET / PUT weekplanning
+    week/route.ts           GET / PUT weekplanning per week
+    week/voorstel/route.ts  POST een voorgesteld weekmenu
     import/route.ts         Foto- en link-import via Anthropic API
     tracker/profiel/route.ts      GET / PUT profiel + berekend budget
     tracker/dag/[datum]/route.ts  GET dag, POST / PATCH / DELETE een regel
@@ -1404,6 +1462,7 @@ app/
 components/
   Login.tsx             Het loginscherm (staat los van de rest van de app)
   Bonscanner.tsx        Kassabon of productfoto omzetten in voorraadartikelen
+  Weekvoorstel.tsx      Het voorgestelde weekmenu, met per dag waarom
   ServiceWorker.tsx     Registreert public/sw.js; toont zelf niets
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
@@ -1449,6 +1508,7 @@ lib/
   backup.ts             Back-up maken en terugzetten (Redis)
   push.ts               VAPID-sleutelpaar, abonnementen en versturen
   weeksleutel.ts        ISO-weken aanduiden en erdoorheen bladeren (puur)
+  weekvoorstel.ts       Een weekmenu samenstellen uit je eigen recepten (puur)
   afbeelding.ts         Foto's schalen en comprimeren (browser)
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
