@@ -599,7 +599,7 @@ De opzet is vijf lagen diep, en alleen de derde is AI:
 [2] trigger         wanneer er advies mag komen
 [3] adviesgeneratie het model leest het feitenpakket en interpreteert vrij
 [4] validatie       elk getal herleidbaar naar het pakket
-[5] evaluatielus    werkte het advies van vorige keer (nog te bouwen)
+[5] evaluatielus    werkte het advies van vorige keer
 ```
 
 **De bewijslast.** Geen advies onder de veertien dagen historie of acht gelogde
@@ -636,11 +636,50 @@ meer: een derde kost geld en levert zelden iets anders op.
 maand. Zonder `ANTHROPIC_API_KEY` werkt het advies niet en blijven de cijfers op
 Inzicht gewoon staan.
 
-Wat er nog niet is: de evaluatielus die meet of een advies iets heeft opgeleverd
-(fase C), de afwijkingstriggers met hun dempingsregels (fase D), en de knop om
-zelf een analyse te vragen plus de adviesgeschiedenis (fase E). Het datamodel
-houdt daar al rekening mee: een advies heeft een veld voor zijn evaluatie, en de
-waarde van `metric_key` op het moment van uitgifte wordt meteen vastgelegd.
+### Werkte het advies van vorige keer
+
+Elk advies heeft een meetwaarde, een richting, een doelwaarde en een horizon.
+Daarmee is het te evalueren, en dat gebeurt ook — anders is een advies
+entertainment.
+
+De meting loopt vanaf de dag van uitgifte tot en met de horizon, of tot vandaag
+als die nog loopt. Nadrukkelijk niet terug vanaf vandaag: een advies van acht
+weken geleden meten over de laatste twee weken zegt niets over wat dat advies
+heeft gedaan.
+
+De uitslag komt uit dezelfde `buildFactPack` als het pakket bij uitgifte, alleen
+over een korter venster. Dat is geen detail. Zou de meting bij uitgifte anders
+werken dan bij evaluatie, dan meet je het verschil tussen twee formules in plaats
+van tussen twee weken.
+
+| Uitkomst | Wanneer |
+|---|---|
+| verbeterd | minstens de helft van de weg naar de doelwaarde afgelegd |
+| deels | tussen een tiende en de helft |
+| ongewijzigd | minder dan een tiende, in welke richting dan ook |
+| tegengesteld | de andere kant op bewogen |
+| onvoldoende | minder dan 60% van de dagen in die periode gelogd |
+
+Een kleine schommeling telt als *ongewijzigd*, niet als *tegengesteld*: een halve
+procent de verkeerde kant op is ruis, geen richting. En *onvoldoende* is een
+uitkomst, geen storing — het betekent dat er te weinig gelogd is om iets te
+beweren.
+
+De uitslag staat altijd in beeld, ook als die *tegengesteld* is. Dat is
+informatie, geen oordeel. Zolang de horizon loopt schuift hij mee; zodra die om
+is ligt hij vast en wordt er niet opnieuw gemeten.
+
+**Twee keer stilstand verandert de volgende ronde.** Zijn de laatste twee gemeten
+adviezen *ongewijzigd* of *tegengesteld*, dan krijgt het model de instructie om
+niet hetzelfde te herhalen, mét de meetwaarden die al geprobeerd zijn. En net als
+bij de guardrail staat dat niet alleen in de prompt: de validatielaag weigert
+dezelfde meetwaarde met dezelfde of een grotere stap. Een merkbaar kleinere stap
+mag wel — het ontwerp noemt "een andere invalshoek óf een kleinere actie", en dat
+zijn twee geldige uitwegen.
+
+Wat er nog niet is: de afwijkingstriggers met hun dempingsregels (fase D), en de
+knop om zelf een analyse te vragen plus de adviesgeschiedenis met een tijdlijn
+(fase E).
 
 ### Opslag
 
@@ -703,7 +742,9 @@ De adviesmodule staat er ook in, zonder dat er een API-sleutel aan te pas komt:
 het uitlezen van een antwoord met markdown-fences eromheen, elk verboden woord
 apart, de guardrail die een actie omlaag weigert maar dezelfde actie omhoog
 toelaat, een getal dat nergens op terug te voeren is, en een geforceerde
-prompt-injectie in een productnaam.
+prompt-injectie in een productnaam. De evaluatielus komt er met alle vijf
+de uitkomsten in, plus de regel dat een vastgelopen invalshoek niet herhaald mag
+worden zonder kleinere stap.
 
 ### Over de grafieken
 
