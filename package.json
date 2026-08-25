@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --test lib/tracker/*.test.ts"
+    "test": "node --test lib/*.test.ts lib/tracker/*.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

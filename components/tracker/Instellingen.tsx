@@ -9,6 +9,7 @@ import {
 } from "@/lib/tracker/types";
 import type { Geslacht, Profile } from "@/lib/tracker/types";
 import { nl } from "@/lib/tracker/datum";
+import Account from "./Account";
 
 export default function Instellingen({
   profiel, bezig, fout, opgeslagen, onOpslaan,
@@ -217,6 +218,8 @@ export default function Instellingen({
           ? <><Loader2 size={16} className="spin" /> Opslaan...</>
           : <><Check size={16} /> {opgeslagen ? "Opgeslagen" : "Opslaan"}</>}
       </button>
+
+      <Account />
     </>
   );
 }

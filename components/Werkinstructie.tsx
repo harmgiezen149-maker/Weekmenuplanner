@@ -466,6 +466,27 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="account" titel="Inloggen, personen en back-up">
+          <p style={{ margin: "0 0 8px" }}>
+            De app zit achter een inlog. Iedereen heeft een eigen gebruikersnaam en wachtwoord; je
+            blijft daarna negentig dagen ingelogd, dus in de praktijk zie je het loginscherm zelden.
+            Er is geen "wachtwoord vergeten"-mail — bewaar het in de wachtwoordkluis van je telefoon.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Onder <span style={S.route}>Instellingen → Wie kunnen er inloggen</span> voeg je een
+            huisgenoot toe. Wat je dan deelt en wat niet: recepten, weekmenu, boodschappenlijst,
+            voorraad én het eetdagboek zijn van het huishouden. Je profiel en je weeglijst zijn van
+            jou alleen — met de adviezen die daaruit volgen. Twee mensen op één app zien dus hetzelfde
+            kookboek en hetzelfde logboek, maar ieder de eigen weegcijfers.
+          </p>
+          <p style={{ margin: 0 }}>
+            Onder <span style={S.route}>Instellingen → Back-up</span> haal je alles in één
+            JSON-bestand op: recepten, weekmenu, boodschappen, voorraad, eetdagboek, je profiel en je
+            weeglijst. Datzelfde bestand kun je terugzetten, en dan <em>vervangt</em> het wat er staat
+            — wat niet in het bestand zit, verdwijnt. Bewaar het ergens anders dan in de app zelf.
+          </p>
+        </H>
+
         <H id="installeren" titel="Als app op je telefoon">
           <p style={{ margin: 0 }}>
             Installeer Kookboek als app: op Android via Chrome → menu → "App installeren", op iPhone via
@@ -487,7 +508,8 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
           <p style={{ margin: 0 }}>
             De app heeft internet nodig. Alle gegevens staan in de cloud en blijven bewaard, ook als je
-            de app verwijdert en opnieuw installeert.
+            de app verwijdert en opnieuw installeert — maar één database is één punt van falen, dus
+            haal af en toe een back-up op.
           </p>
         </H>
       </div>

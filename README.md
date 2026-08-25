@@ -903,6 +903,93 @@ drie bestaande aanroepen in het kookboek.
 
 ---
 
+## Inloggen, personen en back-up
+
+### Het slot op de deur
+
+Alles gaat langs `middleware.ts`. Dat is één plek waar wordt bepaald of iemand
+binnen mag — pagina's én API-routes — in plaats van dertig routes die het elk
+apart moeten onthouden. Vergeet je er daar één, dan staat je gewicht open op het
+internet; hier kán dat niet gebeuren.
+
+Open zonder inlog zijn alleen: `/login`, `/api/auth/login`, `/api/auth/logout`,
+`/api/auth/status`, `/api/auth/inrichten`, het manifest en de app-iconen. Ook
+`/api/tracker/import` komt erlangs zodra er een geldige `x-tracker-token`
+meekomt, want de iOS-Shortcut werkt buiten de browsersessie om.
+
+Wie er is ingelogd gaat als header `x-kb-persoon` mee naar beneden. Die header
+wordt eerst weggegooid en dan pas gezet, zodat een browser hem niet zelf kan
+meesturen en zich zo voor iemand anders kan uitgeven.
+
+### Wachtwoorden en sessies
+
+Wachtwoorden staan als scrypt-regel in Redis (`lib/auth.ts`): met opzet traag en
+geheugenzwaar, met een eigen zout per regel, en met de rekenkosten in de regel
+zelf zodat ze later omhoog kunnen zonder bestaande wachtwoorden onleesbaar te
+maken. Vergelijken gebeurt tijdsonafhankelijk. Bij een onbekende gebruikersnaam
+wordt tóch een wachtwoord doorgerekend, anders is aan de reactietijd af te lezen
+welke namen bestaan.
+
+Een sessie is een ondoorzichtige willekeurige sleutel van 32 bytes in
+`auth:sessie:<token>`, negentig dagen houdbaar, in een `httpOnly`-cookie. In de
+sleutel zit geen informatie; wie erbij hoort staat in Redis. Daardoor is
+uitloggen echt uitloggen: de rij verdwijnt en de sleutel is meteen waardeloos.
+
+`lib/sessie.ts` staat los van `lib/auth.ts` omdat het ook in de Edge-omgeving van
+middleware draait en daar niets uit `node:crypto` mag gebruiken.
+
+### Wat is gedeeld en wat is persoonlijk
+
+- **Gedeeld** (van het huishouden): recepten, weekmenu, boodschappenlijst,
+  voorraad, het eetdagboek, favorieten, samengestelde maaltijden, de
+  ingrediëntenlijst en de productcaches. Samen koken werkt alleen met één
+  kookboek.
+- **Persoonlijk** (van één mens, onder `wl:p:<persoon>:`): het profiel, de
+  weeglijst, het feitenpakket van Inzicht en de adviezen. Dit gaat over één
+  lichaam; een gedeelde weeglijst zou onzin opleveren.
+
+Het eetdagboek is een bewuste keuze en de discutabele van de twee: bij twee
+gebruikers komen beider regels op dezelfde dag terecht, terwijl het dagbudget
+persoonlijk is. Verplaatsen is één regel werk — haal `DAY` en `DAY_INDEX` in
+`lib/tracker/data.ts` naar het persoonlijke blok en ze lopen automatisch mee met
+de ingelogde persoon.
+
+Persoonlijke sleutels lopen via `persoonlijk()` in `lib/persoon.ts`, dat het id
+uit de header haalt. Daardoor hoefde geen enkele aanroeper te veranderen:
+`getProfile()` bleef `getProfile()`.
+
+### Het eerste account en de verhuizing
+
+Is er nog geen account, dan stuurt elke pagina je naar `/login` met een
+inrichtscherm. Bij dat allereerste account verhuizen de gegevens mee die er al
+stonden — profiel, weeglijst, adviezen — van `wl:...` naar `wl:p:<id>:...`
+(`lib/migratie.ts`). Er wordt gekopieerd, niet verplaatst: de oude sleutels
+blijven als vangnet staan. Daarna weigert `/api/auth/inrichten`; nieuwe personen
+lopen via `/api/auth/gebruikers` en dus langs een inlog.
+
+### Back-up
+
+`GET /api/backup` levert één JSON-bestand met alles wat je zelf hebt ingevoerd.
+Het bestand is beschrijvend, niet letterlijk: er staan recepten, dagen en
+wegingen in, geen Redis-sleutels en geen scores. Dat maakt het leesbaar, bestand
+tegen een wijziging in de sleutelindeling, en terugzetten een kwestie van
+opnieuw opbouwen.
+
+Er gaan geen caches in (productcache, doorgerekende recepten, feitenpakket) en
+geen accounts of wachtwoorden — een wachtwoordregel hoort niet in een bestand dat
+in je downloadmap belandt.
+
+`POST /api/backup` zet terug, vervangend en niet aanvullend: wat in de app staat
+en niet in het bestand, verdwijnt. Een half samengevoegde toestand is erger dan
+de toestand waar je vandaan kwam, want dan weet je van geen enkel recept meer of
+het de nieuwe of de oude versie is. De route eist `bevestigd: true` — dit is de
+enige route in de app die met één aanroep alles kan wissen.
+
+De pure kant (welke velden erin horen, wat een geldig bestand is) staat in
+`lib/backup-formaat.ts` met tests ernaast; `lib/backup.ts` doet het Redis-werk.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -910,20 +997,37 @@ In Upstash Redis:
 - `recipe:<id>` — één recept als JSON.
 - `recipes:index` — een set met alle recept-id's.
 - `week:current` — de weekplanning (startdag + gekozen gerechten per dag).
-- `wl:*` — alles van de tracker (zie het hoofdstuk hierboven). Bewust een eigen
-  prefix, zodat kookboek en tracker elkaars data nooit kunnen raken.
+- `boodschappen:current`, `gebiedvolgorde:current`, `voorraad:current` — de
+  boodschappenlijst, de looproute per winkel en de vaste voorraadartikelen.
+- `wl:*` — het gedeelde deel van de tracker (zie het hoofdstuk hierboven).
+  Bewust een eigen prefix, zodat kookboek en tracker elkaars data nooit kunnen
+  raken.
+- `wl:p:<persoon>:*` — het persoonlijke deel: profiel, weeglijst, feitenpakket
+  en adviezen.
+- `auth:*` — accounts en sessies. Buiten `wl:` gehouden: dit gaat over toegang
+  tot de hele app, niet over voeding.
 
-Één database = één huishouden. Wil je later meerdere gezinnen of gebruikers, dan zet
-je een `userId:`-prefix voor de keys in `lib/data.ts`. De rest van de app blijft gelijk.
+Eén database = één huishouden, met meerdere personen erin. Wil je later echt
+gescheiden huishoudens, dan is de weg dezelfde als bij `wl:p:` — een tussenstuk
+in de sleutel, met één plek die hem invult.
 
 ## Projectstructuur
 
 ```
+middleware.ts           Het slot: elke pagina en elke API-route gaat hierlangs
 app/
   page.tsx              Hoofdpagina
+  login/page.tsx        Inloggen, of het allereerste account aanmaken
   layout.tsx            App-shell
   globals.css           Stijl + kleurpalet (CSS-variabelen)
   api/
+    auth/login/route.ts     POST inloggen (zet de sessiecookie)
+    auth/logout/route.ts    POST uitloggen (wist de sessie in Redis)
+    auth/status/route.ts    GET wie ben ik / is de app al ingericht
+    auth/inrichten/route.ts POST het allereerste account, met verhuizing
+    auth/gebruikers/route.ts GET lijst / POST persoon erbij / DELETE inlog weg
+    auth/wachtwoord/route.ts POST eigen wachtwoord wijzigen
+    backup/route.ts         GET back-up downloaden / POST terugzetten
     recipes/route.ts        GET alle / POST nieuw recept
     recipes/[id]/route.ts   PUT / DELETE per recept
     week/route.ts           GET / PUT weekplanning
@@ -948,6 +1052,7 @@ app/
     tracker/import/route.ts       Receptlink ophalen en doorrekenen
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
+  Login.tsx             Het loginscherm (staat los van de rest van de app)
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
                         het kookboek en de tracker
@@ -972,6 +1077,7 @@ components/
     Foto.tsx            Foto-schatting als bewerkbaar concept
     Import.tsx          Gedeelde receptlink doorrekenen
     Instellingen.tsx    Profiel met live budgetberekening
+    Account.tsx         Account, personen en back-up onder Instellingen
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
     api.ts              Fetch-helpers voor de tracker-endpoints
@@ -979,6 +1085,14 @@ lib/
   redis.ts              Upstash-client
   types.ts              Types en vaste keuzelijsten
   data.ts               Alle databasebewerkingen op één plek
+  auth.ts               Wachtwoorden hashen en controleren (scrypt, server-only)
+  sessie.ts             Sessies; Edge-veilig, want middleware gebruikt dit
+  cookie.ts             De sessiecookie zetten en wissen
+  gebruikers.ts         Accounts aanmaken, opzoeken en verwijderen
+  persoon.ts            Wie is ingelogd, en welke sleutels zijn van die persoon
+  migratie.ts           Eenmalige verhuizing naar het eerste account
+  backup-formaat.ts     Vorm van een back-upbestand + inlezen (puur, getest)
+  backup.ts             Back-up maken en terugzetten (Redis)
   tracker/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule

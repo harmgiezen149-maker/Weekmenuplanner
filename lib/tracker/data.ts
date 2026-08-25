@@ -1,4 +1,5 @@
 import { redis } from "../redis";
+import { persoonlijk } from "../persoon";
 import type { Activity, Day, Entry, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./types";
 import {
   STANDAARD_POINTS_SCALE, STANDAARD_WEEKBUFFER, EIWIT_PER_KG_STREEFGEWICHT, RECENT_MAX,
@@ -22,41 +23,60 @@ export { datumSleutel, geldigeDatum };
 // Redis key-indeling van de tracker. Alles onder de prefix `wl:`, gescheiden
 // van de kookboek-keys (recipe:*, week:current, boodschappen:current, ...).
 //
-//   wl:profile          -> JSON van het profiel
+// De sleutels vallen in twee groepen, en dat onderscheid is de kern van de
+// scheiding tussen huisgenoten:
+//
+// GEDEELD — van het huishouden. Samen koken werkt alleen met één kookboek, één
+// weekmenu en één boodschappenlijst, en het eetdagboek hoort daar in deze opzet
+// bij.
 //   wl:day:<YYYY-MM-DD> -> JSON van één dag (regels + totalen)
 //   wl:day:index        -> sorted set met gelogde datums, score = epoch
 //   wl:favorites        -> JSON-lijst met bewaarde sjablonen
 //   wl:recent           -> JSON-lijst met de laatst gelogde items
+//   wl:meals            -> samengestelde maaltijden
 //   wl:food:<barcode>   -> gecachet product uit een externe bron, 90 dagen
 //   wl:eigen:<barcode>  -> zelf ingevoerd product, blijft staan
-//   wl:facts:<YYYY-Www> -> gecachet feitenpakket van de adviesmodule, 8 dagen
-//   wl:advice:<id>      -> een uitgegeven advies; wordt nooit verwijderd
-//   wl:advice:index     -> sorted set met adviezen, score = epoch
-//   wl:advice:active    -> id van het lopende advies
-//   wl:advice:cooldown  -> wanneer er voor het laatst gemeld is, en waarover
-//   wl:advice:seen      -> id van het advies dat je al gezien hebt
+//   wl:recipe:points:<id> -> doorgerekend recept
 //
-// De volgende fases voegen hier wl:week:*, wl:weight:* en
-// wl:recipe:points:* aan toe.
+// PERSOONLIJK — van één mens, onder `wl:p:<persoon>:`. Dit gaat over één
+// lichaam: een gedeeld profiel of een gedeelde weeglijst zou onzin opleveren.
+//   wl:p:<id>:profile          -> JSON van het profiel
+//   wl:p:<id>:weight:log       -> sorted set met wegingen, score = epoch
+//   wl:p:<id>:weight:<datum>   -> notitie bij één weging
+//   wl:p:<id>:facts:<YYYY-Www> -> gecachet feitenpakket, 8 dagen
+//   wl:p:<id>:advice:<id>      -> een uitgegeven advies; wordt nooit verwijderd
+//   wl:p:<id>:advice:index     -> sorted set met adviezen, score = epoch
+//   wl:p:<id>:advice:active    -> id van het lopende advies
+//   wl:p:<id>:advice:cooldown  -> wanneer er voor het laatst gemeld is, en waarover
+//   wl:p:<id>:advice:seen      -> id van het advies dat je al gezien hebt
+//
+// De persoonlijke sleutels lopen via `persoonlijk()`, dat het id van de
+// ingelogde persoon uit de header haalt die middleware.ts zet. Daardoor hoeft
+// geen enkele aanroeper te weten wie er is ingelogd — en een sleutel van
+// gedeeld naar persoonlijk verplaatsen is: de regel naar het onderste blok
+// halen.
 // ---------------------------------------------------------------------------
 
-const PROFILE_KEY = "wl:profile";
+// -- gedeeld -----------------------------------------------------------------
 const DAY = (datum: string) => `wl:day:${datum}`;
 const DAY_INDEX = "wl:day:index";
 const FAVORITES_KEY = "wl:favorites";
 const RECENT_KEY = "wl:recent";
 const FOOD = (barcode: string) => `wl:food:${barcode}`;
 const EIGEN = (barcode: string) => `wl:eigen:${barcode}`;
-const WEIGHT_LOG = "wl:weight:log";
-const WEIGHT = (datum: string) => `wl:weight:${datum}`;
 const MEALS_KEY = "wl:meals";
 const RECIPE_POINTS = (id: string) => `wl:recipe:points:${id}`;
-const FACTS = (week: string) => `wl:facts:${week}`;
-const ADVICE = (id: string) => `wl:advice:${id}`;
-const ADVICE_INDEX = "wl:advice:index";
-const ADVICE_ACTIVE = "wl:advice:active";
-const ADVICE_COOLDOWN = "wl:advice:cooldown";
-const ADVICE_SEEN = "wl:advice:seen";
+
+// -- persoonlijk -------------------------------------------------------------
+const kProfiel = () => persoonlijk("profile");
+const kWeegLog = () => persoonlijk("weight:log");
+const kWeging = (datum: string) => persoonlijk(`weight:${datum}`);
+const kFeiten = (week: string) => persoonlijk(`facts:${week}`);
+const kAdvies = (id: string) => persoonlijk(`advice:${id}`);
+const kAdviesIndex = () => persoonlijk("advice:index");
+const kAdviesActief = () => persoonlijk("advice:active");
+const kAdviesCooldown = () => persoonlijk("advice:cooldown");
+const kAdviesGezien = () => persoonlijk("advice:seen");
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -70,7 +90,7 @@ export function nieuwId(): string {
 // -- profiel -----------------------------------------------------------------
 
 export async function getProfile(): Promise<Profile | null> {
-  const p = await redis.get<Profile>(PROFILE_KEY);
+  const p = await redis.get<Profile>(await kProfiel());
   return p ? normaliseerProfiel(p) : null;
 }
 
@@ -115,7 +135,7 @@ export async function saveProfile(invoer: Partial<Profile>): Promise<Profile> {
     daily_budget: budget.dagbudgetPunten,
     budget_basis_weight_kg: p.current_weight_kg,
   };
-  await redis.set(PROFILE_KEY, compleet);
+  await redis.set(await kProfiel(), compleet);
   return compleet;
 }
 
@@ -294,7 +314,7 @@ function kiloTekst(kg: number): string {
 }
 
 export async function getWegingen(): Promise<Weging[]> {
-  const leden = (await redis.zrange<string[]>(WEIGHT_LOG, 0, -1)) ?? [];
+  const leden = (await redis.zrange<string[]>(await kWeegLog(), 0, -1)) ?? [];
   const wegingen: Weging[] = [];
   for (const lid of leden) {
     const scheiding = lid.lastIndexOf(":");
@@ -314,13 +334,13 @@ export async function getWegingen(): Promise<Weging[]> {
 export async function saveWeging(datum: string, kg: number, note?: string): Promise<Weging[]> {
   const bestaand = await getWegingen();
   const oud = bestaand.find((w) => w.date === datum);
-  if (oud) await redis.zrem(WEIGHT_LOG, `${datum}:${kiloTekst(oud.kg)}`);
+  if (oud) await redis.zrem(await kWeegLog(), `${datum}:${kiloTekst(oud.kg)}`);
 
-  await redis.zadd(WEIGHT_LOG, {
+  await redis.zadd(await kWeegLog(), {
     score: Date.parse(datum + "T00:00:00Z"),
     member: `${datum}:${kiloTekst(kg)}`,
   });
-  await redis.set(WEIGHT(datum), { kg, ...(note ? { note } : {}) });
+  await redis.set(await kWeging(datum), { kg, ...(note ? { note } : {}) });
 
   return getWegingen();
 }
@@ -328,13 +348,13 @@ export async function saveWeging(datum: string, kg: number, note?: string): Prom
 export async function deleteWeging(datum: string): Promise<Weging[]> {
   const bestaand = await getWegingen();
   const oud = bestaand.find((w) => w.date === datum);
-  if (oud) await redis.zrem(WEIGHT_LOG, `${datum}:${kiloTekst(oud.kg)}`);
-  await redis.del(WEIGHT(datum));
+  if (oud) await redis.zrem(await kWeegLog(), `${datum}:${kiloTekst(oud.kg)}`);
+  await redis.del(await kWeging(datum));
   return getWegingen();
 }
 
 export async function getWegingNotitie(datum: string): Promise<string | undefined> {
-  const w = await redis.get<{ kg: number; note?: string }>(WEIGHT(datum));
+  const w = await redis.get<{ kg: number; note?: string }>(await kWeging(datum));
   return w?.note;
 }
 
@@ -357,7 +377,7 @@ export async function verwerkWeging(trendKg: number): Promise<{
   const bijgewerkt: Profile = { ...huidig, current_weight_kg: trendKg };
 
   if (!herberekend) {
-    await redis.set(PROFILE_KEY, bijgewerkt);
+    await redis.set(await kProfiel(), bijgewerkt);
     return { profiel: bijgewerkt, herberekend: false };
   }
 
@@ -367,7 +387,7 @@ export async function verwerkWeging(trendKg: number): Promise<{
     daily_budget: budget.dagbudgetPunten,
     budget_basis_weight_kg: trendKg,
   };
-  await redis.set(PROFILE_KEY, nieuw);
+  await redis.set(await kProfiel(), nieuw);
   return { profiel: nieuw, herberekend: true };
 }
 
@@ -497,7 +517,7 @@ export async function laadFeiten(
   ]);
 
   const vingerafdruk = feitenVingerafdruk({ peildatum, dagen, wegingen, profiel });
-  const sleutel = FACTS(isoWeek(peildatum));
+  const sleutel = await kFeiten(isoWeek(peildatum));
 
   if (!opties.ververs) {
     const gecachet = await redis.get<FeitenCache>(sleutel);
@@ -518,22 +538,22 @@ export async function laadFeiten(
  * de module: pas over meerdere adviezen heen is te zien of er iets beweegt.
  */
 export async function saveAdvies(advies: Advies): Promise<Advies> {
-  await redis.set(ADVICE(advies.id), advies);
-  await redis.zadd(ADVICE_INDEX, {
+  await redis.set(await kAdvies(advies.id), advies);
+  await redis.zadd(await kAdviesIndex(), {
     score: Date.parse(advies.created_at) || Date.now(),
     member: advies.id,
   });
-  await redis.set(ADVICE_ACTIVE, advies.id);
+  await redis.set(await kAdviesActief(), advies.id);
   return advies;
 }
 
 export async function getAdvies(id: string): Promise<Advies | null> {
-  return (await redis.get<Advies>(ADVICE(id))) ?? null;
+  return (await redis.get<Advies>(await kAdvies(id))) ?? null;
 }
 
 /** Het lopende advies, of null als er nog geen is. */
 export async function getActiefAdvies(): Promise<Advies | null> {
-  const id = await redis.get<string>(ADVICE_ACTIVE);
+  const id = await redis.get<string>(await kAdviesActief());
   return id ? getAdvies(id) : null;
 }
 
@@ -543,10 +563,10 @@ export async function getActiefAdvies(): Promise<Advies | null> {
  * omgekeerde bereikopvraging — en werkt op elke Redis-variant hetzelfde.
  */
 export async function getLaatsteAdviezen(aantal = 3): Promise<Advies[]> {
-  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  const ids = (await redis.zrange<string[]>(await kAdviesIndex(), 0, -1)) ?? [];
   const nieuwste = ids.slice(-aantal).reverse();
   if (nieuwste.length === 0) return [];
-  const rauw = await redis.mget<(Advies | null)[]>(...nieuwste.map(ADVICE));
+  const rauw = await redis.mget<(Advies | null)[]>(...(await Promise.all(nieuwste.map(kAdvies))));
   return (rauw ?? []).filter((a): a is Advies => a != null);
 }
 
@@ -557,15 +577,17 @@ export async function getLaatsteAdviezen(aantal = 3): Promise<Advies[]> {
  * per maand blijft het jarenlang een lijst van tientallen.
  */
 export async function getAlleAdviezen(): Promise<Advies[]> {
-  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  const ids = (await redis.zrange<string[]>(await kAdviesIndex(), 0, -1)) ?? [];
   if (ids.length === 0) return [];
-  const rauw = await redis.mget<(Advies | null)[]>(...[...ids].reverse().map(ADVICE));
+  const rauw = await redis.mget<(Advies | null)[]>(
+    ...(await Promise.all([...ids].reverse().map(kAdvies)))
+  );
   return (rauw ?? []).filter((a): a is Advies => a != null);
 }
 
 /** Het aantal adviezen dat ooit is uitgegeven. */
 export async function telAdviezen(): Promise<number> {
-  const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
+  const ids = (await redis.zrange<string[]>(await kAdviesIndex(), 0, -1)) ?? [];
   return ids.length;
 }
 
@@ -618,7 +640,7 @@ export async function werkEvaluatieBij(advies: Advies, vandaag: string): Promise
 
   const bijgewerkt: Advies = { ...advies, evaluation };
   // Alleen de regel zelf bijwerken: de index en het lopende advies veranderen niet.
-  await redis.set(ADVICE(advies.id), bijgewerkt);
+  await redis.set(await kAdvies(advies.id), bijgewerkt);
   return bijgewerkt;
 }
 
@@ -627,21 +649,21 @@ export async function werkEvaluatieBij(advies: Advies, vandaag: string): Promise
  * Zonder dit geheugen zou de module op elke overschrijding reageren.
  */
 export async function getCooldown(): Promise<Cooldown> {
-  const c = await redis.get<Cooldown>(ADVICE_COOLDOWN);
+  const c = await redis.get<Cooldown>(await kAdviesCooldown());
   return c
     ? { last_push_at: c.last_push_at ?? null, flags_seen: c.flags_seen ?? {} }
     : LEGE_COOLDOWN;
 }
 
 export async function saveCooldown(cooldown: Cooldown): Promise<void> {
-  await redis.set(ADVICE_COOLDOWN, cooldown);
+  await redis.set(await kAdviesCooldown(), cooldown);
 }
 
 /** Het id van het advies dat al bekeken is; bepaalt of de melding nog staat. */
 export async function getGezienAdvies(): Promise<string | null> {
-  return (await redis.get<string>(ADVICE_SEEN)) ?? null;
+  return (await redis.get<string>(await kAdviesGezien())) ?? null;
 }
 
 export async function setGezienAdvies(id: string): Promise<void> {
-  await redis.set(ADVICE_SEEN, id);
+  await redis.set(await kAdviesGezien(), id);
 }
