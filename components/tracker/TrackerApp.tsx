@@ -2,7 +2,9 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Activity, BookOpen, CalendarRange, ListPlus, Loader2, Scale, Settings } from "lucide-react";
+import {
+  Activity, BookOpen, CalendarRange, LineChart, ListPlus, Loader2, Scale, Settings,
+} from "lucide-react";
 import { T } from "./stijl";
 import Dagoverzicht, { toonDatum } from "./Dagoverzicht";
 import Toevoegen from "./Toevoegen";
@@ -10,6 +12,7 @@ import Instellingen from "./Instellingen";
 import Gewicht from "./Gewicht";
 import type { GewichtGegevens } from "./Gewicht";
 import Weekoverzicht from "./Weekoverzicht";
+import Inzicht from "./Inzicht";
 import Import from "./Import";
 import Portiekiezer from "./Portiekiezer";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
@@ -20,12 +23,14 @@ import { dagBewegingspunten } from "@/lib/tracker/activiteit";
 import type { Day, Maaltijd, Product, Profile } from "@/lib/tracker/types";
 import { MAALTIJDEN_TRACKER } from "@/lib/tracker/types";
 
-export type Pagina = "dag" | "toevoegen" | "week" | "gewicht" | "instellingen" | "import";
+export type Pagina =
+  | "dag" | "toevoegen" | "week" | "inzicht" | "gewicht" | "instellingen" | "import";
 
 const PAGINAS: { id: Pagina; pad: string; label: string; icon: typeof Activity }[] = [
   { id: "dag", pad: "/tracker", label: "Vandaag", icon: Activity },
   { id: "toevoegen", pad: "/tracker/toevoegen", label: "Toevoegen", icon: ListPlus },
   { id: "week", pad: "/tracker/week", label: "Week", icon: CalendarRange },
+  { id: "inzicht", pad: "/tracker/inzicht", label: "Inzicht", icon: LineChart },
   { id: "gewicht", pad: "/tracker/gewicht", label: "Gewicht", icon: Scale },
   { id: "instellingen", pad: "/tracker/instellingen", label: "Instellingen", icon: Settings },
 ];
@@ -89,6 +94,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   // De weekgegevens zijn zowel voor het weekoverzicht als voor de bufferbalk
   // op het dagoverzicht nodig; ze volgen de gekozen week.
   useEffect(() => {
+    if (pagina === "inzicht") return;
     let afgebroken = false;
     trackerApi.getWeek(pagina === "week" ? weekDatum : datum)
       .then((w) => { if (!afgebroken) setWeek({ week: w.week, dagenTeGaan: w.dagenTeGaan }); })
@@ -228,6 +234,8 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
                 peildatum={weekDatum} vandaag={vandaag} onPeildatum={setWeekDatum}
               />
             )}
+
+            {pagina === "inzicht" && <Inzicht peildatum={vandaag} />}
 
             {pagina === "gewicht" && gewicht && (
               <Gewicht
