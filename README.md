@@ -715,8 +715,42 @@ wat je zou moeten doen — en verdwijnt zodra je Inzicht hebt geopend.
 De melding-route rekent zelf niets uit en kost dus nooit een modelaanroep; het
 advies wordt pas gemaakt als je Inzicht opent.
 
-Wat er nog niet is: de knop om zelf een analyse te vragen plus de
-adviesgeschiedenis met een tijdlijn (fase E).
+### Zelf om een analyse vragen
+
+Onder het advies staat **Analyseer mijn patroon**. Die knop kent geen limiet en
+geen dempingsregels: die gelden voor wat de module uit zichzelf meldt, niet voor
+wat je zelf komt vragen. Wel kost elke druk een modelaanroep, dus er zit geen
+automatische herhaling op.
+
+Het feitenpakket komt uit de cache zolang er sinds de vorige analyse niets nieuws
+gelogd is — het doorrekenen van twaalf weken kost dan niets meer.
+
+Een advies op verzoek verbruikt je weegmoment niet en zet de cooldown niet aan
+het werk. Die twee staan er los van.
+
+### De adviesgeschiedenis
+
+Onderaan Inzicht staat de tijdlijn: elk advies dat ooit is uitgegeven, nieuwste
+eerst, met waar het vandaan kwam, welke actie eraan hing en wat de meting
+opleverde. Vijf tegelijk, met een knop om alles te tonen.
+
+Adviezen worden nooit gewist. Dat is precies waarom deze lijst er is: pas over
+meerdere adviezen heen is te zien of er iets beweegt, of dat dezelfde invalshoek
+steeds opnieuw langskomt.
+
+Elke uitkomst staat er zoals hij gemeten is, ook "de andere kant op". Geen rood,
+geen kruisje, geen toon — het is informatie, geen oordeel.
+
+### Wat er niet in zit
+
+Drie keuzes uit het ontwerp staan nog open:
+
+- De energiebalans staat alleen op Inzicht, niet op het dagoverzicht.
+- Er is geen export van de adviesgeschiedenis.
+- Recepten uit je kookboek mogen wél onderdeel van een actie zijn — de
+  systeeminstructie noemt ze als een van de dingen die binnen de app uitvoerbaar
+  zijn — maar de module stelt geen concreet recept voor. Dat zou een tweede
+  opzoekstap in de aanroep vragen.
 
 ### Opslag
 
@@ -751,6 +785,9 @@ kookboek-keys:
   waarover. Zonder dit geheugen zou de module op elke overschrijding reageren.
 - `wl:advice:seen` — het id van het advies dat je al bekeken hebt; bepaalt of de
   melding op `/tracker` nog staat.
+
+De adviesgeschiedenis wordt nooit opgeschoond. Met hooguit een paar adviezen per
+maand blijft dat jarenlang een lijst van tientallen.
 
 Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
 
