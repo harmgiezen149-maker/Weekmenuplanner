@@ -72,3 +72,36 @@ function nummer(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? Math.min(n, 1000) : 0;
 }
+
+/** Een schatting die niet gelukt is, met het waarom. */
+export interface MislukteSchatting {
+  naam: string;
+  reden: string;
+}
+
+/**
+ * Zet de mislukte schattingen om in een leesbare zin.
+ *
+ * Namen met dezelfde reden worden samengenomen, maar verschillende redenen
+ * blijven uit elkaar: "even te druk" probeer je zo nog eens, "niet herkend"
+ * niet. Ze op een hoop gooien zou de gebruiker verkeerd voorlichten.
+ */
+export function beschrijfMislukt(mislukt: MislukteSchatting[]): string {
+  const perReden = new Map<string, string[]>();
+  for (const m of mislukt) {
+    const namen = perReden.get(m.reden) ?? [];
+    namen.push(m.naam);
+    perReden.set(m.reden, namen);
+  }
+
+  return [...perReden.entries()]
+    .map(([reden, namen]) =>
+      `${opsomming(namen)} ${namen.length === 1 ? "lukte" : "lukten"} niet (${reden})`)
+    .join("; ");
+}
+
+/** "a", "a en b", of "a, b en c". */
+function opsomming(namen: string[]): string {
+  if (namen.length <= 1) return namen[0] ?? "";
+  return `${namen.slice(0, -1).join(", ")} en ${namen[namen.length - 1]}`;
+}

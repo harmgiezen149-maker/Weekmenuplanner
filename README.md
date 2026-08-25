@@ -307,6 +307,31 @@ Je eigen lijst gaat vóór de ingebouwde basislijst. Vind je de standaardwaarde 
 iets niet kloppen, dan overschrijf je hem simpelweg door dat ingrediënt aan te
 vullen.
 
+#### Alles in één keer laten schatten
+
+Staat er meer dan één onbekend ingrediënt in een recept, dan staat er een knop
+**Laat alle N in één keer schatten**. Die haalt de waarden voor alle onbekende
+ingrediënten tegelijk op en **bewaart ze meteen** — dat is de hele winst, anders
+klik je alsnog N formulieren door.
+
+Omdat er niets tussen zit dat je eerst nakijkt, is dat zichtbaar gemaakt:
+
+- Zo ingevulde ingrediënten krijgen bron `schatting` en staan in de lijst met
+  een oranje label **geschat** erbij. Dat blijft staan tot je ze zelf bijstelt.
+- Achteraf staat er hoeveel er zijn ingevuld, en welke niet lukten — met de
+  reden erbij. "Even te druk" is iets anders dan "niet herkend door het model":
+  het eerste kun je zo nog eens proberen, het tweede niet.
+- Elke regel blijft aantikbaar om na te kijken.
+
+Wat het model niet kent blijft onbekend; daar wordt niet naar geraden. Er lopen
+vier aanvragen tegelijk en er gaan er maximaal 25 per druk op de knop; een recept
+met meer ingrediënten doe je in twee rondes. De schattingen worden in één keer
+weggeschreven, niet per stuk — de lijst wordt als geheel bewaard, dus tussentijds
+opslaan zou betekenen dat gelijktijdige schrijfacties elkaar overschrijven.
+
+Zonder `ANTHROPIC_API_KEY` verschijnt de knop wel maar meldt hij netjes dat
+schatten niet werkt; zelf invullen blijft gewoon werken.
+
 Het resultaat wordt gecachet met een vingerafdruk van de ingrediënten en het
 aantal personen. Pas je het recept aan in het kookboek, dan klopt die
 vingerafdruk niet meer en wordt er automatisch opnieuw gerekend. Hetzelfde geldt
@@ -608,6 +633,7 @@ app/
     tracker/recepten/punten/route.ts Punten van alle recepten in één keer
     tracker/ingredienten/route.ts    Eigen ingrediëntenlijst beheren
     tracker/ingredienten/schat/route.ts  Voedingswaarden laten schatten
+    tracker/ingredienten/schat-alles/route.ts  Een heel recept in een keer
     tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
     tracker/beweging/route.ts     Bewegingsactiviteiten en hun punten
     tracker/foto/route.ts         Foto-schatting via de Anthropic API
@@ -660,7 +686,8 @@ lib/
     productlink.ts      Een product uit een webshoppagina halen
     ingredienten.ts     Eigen ingrediëntenlijst, op genormaliseerde naam
     ingredienten-opslag.ts  Die lijst bewaren onder wl:ingredienten
-    schatting.ts        Een geschat ingrediënt uitlezen
+    schatting.ts        Een geschat ingrediënt uitlezen en melden
+    schat-model.ts      De modelaanroep achter het schatten
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

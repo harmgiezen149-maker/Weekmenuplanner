@@ -14,6 +14,7 @@ const BRON_LABEL: Record<Product["bron"], string> = {
   bewaard: "Eerder gelogd",
   winkel: "Van de supermarkt",
   eigen: "Zelf ingevoerd",
+  schatting: "Geschat, niet nagekeken",
 };
 
 /** Voedingswaarden per 100 omrekenen naar een hoeveelheid. */

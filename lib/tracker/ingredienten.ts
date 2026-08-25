@@ -103,3 +103,35 @@ export function alleIngredienten(
     .map(([sleutel, product]) => ({ sleutel, product }))
     .sort((a, b) => a.product.name.localeCompare(b.product.name));
 }
+
+/**
+ * Welke namen uit een recept nog een schatting nodig hebben.
+ *
+ * Haalt eruit wat de eigen lijst al kent, gooit dubbelen weg (twee recepten
+ * schrijven "verse spinazie" en "spinazie", dat is één schatting waard) en
+ * begrenst het aantal, zodat één druk op de knop nooit een onbeperkt aantal
+ * modelaanroepen wordt.
+ *
+ * De eerste van een groep dubbelen wint, want dat is hoe hij in het recept
+ * staat en dus wat de gebruiker terugziet.
+ */
+export function teSchatten(
+  bib: IngredientBibliotheek,
+  namen: string[],
+  max = 25
+): string[] {
+  const uit: string[] = [];
+  const gezien = new Set<string>();
+
+  for (const ruw of namen) {
+    const naam = String(ruw ?? "").trim();
+    const sleutel = ingredientSleutel(naam);
+    if (sleutel === "" || gezien.has(sleutel)) continue;
+    gezien.add(sleutel);
+    if (zoekEigenIngredient(bib, naam)) continue;
+    uit.push(naam);
+    if (uit.length >= max) break;
+  }
+
+  return uit;
+}

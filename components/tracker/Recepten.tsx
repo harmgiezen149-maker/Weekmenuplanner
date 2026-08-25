@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, ArrowLeft, Check, ChefHat, Loader2, Plus, Search } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ChefHat, Loader2, Plus, Search, Sparkles } from "lucide-react";
 import { T } from "./stijl";
 import { toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
@@ -10,8 +10,23 @@ import type { Maaltijd } from "@/lib/tracker/types";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 import Aanvullen from "./Aanvullen";
 import type { Nutrients } from "@/lib/tracker/types";
+import { beschrijfMislukt } from "@/lib/tracker/schatting";
+import type { MislukteSchatting } from "@/lib/tracker/schatting";
 
 /** Alleen hier gebruikt, dus niet in het gedeelde stijlblad. */
+const GESCHAT: React.CSSProperties = {
+  marginLeft: 6, fontSize: 11, fontWeight: 800, color: "var(--over)",
+  background: "#fff2e2", padding: "1px 6px", borderRadius: 999,
+};
+
+/** Een regel uit "Zo is het gerekend": ziet eruit als tekst, maar is een knop. */
+const REGEL_KNOP: React.CSSProperties = {
+  display: "flex", alignItems: "center", gap: 10, width: "100%",
+  background: "none", border: "none", borderBottom: "1px solid var(--line)",
+  font: "inherit", color: "inherit", textAlign: "left", cursor: "pointer",
+  padding: "11px 15px",
+};
+
 const AANVUL_KNOP: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 800,
   color: "var(--accent)", background: "var(--accent-soft)", borderRadius: 999,
@@ -58,6 +73,8 @@ export default function Recepten({
   // Welk ontbrekend ingredient wordt op dit moment aangevuld.
   const [aanvullen, setAanvullen] = useState<string | null>(null);
   const [bewaart, setBewaart] = useState(false);
+  const [vultAlles, setVultAlles] = useState(false);
+  const [vulUitslag, setVulUitslag] = useState<{ gelukt: number; mislukt: MislukteSchatting[] } | null>(null);
 
   useEffect(() => {
     fetch("/api/tracker/recepten", { cache: "no-store" })
@@ -91,6 +108,29 @@ export default function Recepten({
     } finally { setBewaart(false); }
   };
 
+  /**
+   * Laat alle onbekende ingredienten van dit recept in een keer schatten en
+   * bewaren. De waarden gaan meteen de lijst in; ze staan daarna als
+   * "geschat" in de uitleg, en blijven aantikbaar om na te kijken.
+   */
+  const vulAllesAan = async () => {
+    const namen = gekozen?.punten.nietHerkend ?? [];
+    if (namen.length === 0) return;
+    setVultAlles(true); setLaadFout(""); setVulUitslag(null);
+    try {
+      const res = await fetch("/api/tracker/ingredienten/schat-alles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ namen }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Aanvullen mislukt");
+      setVulUitslag({ gelukt: d.gelukt?.length ?? 0, mislukt: d.mislukt ?? [] });
+      if (gekozen) await kies(gekozen.recept.id);
+    } catch (e) {
+      setLaadFout(e instanceof Error ? e.message : "Aanvullen mislukt");
+    } finally { setVultAlles(false); }
+  };
+
   const kies = async (id: string) => {
     setLaadt(true); setLaadFout("");
     try {
@@ -116,7 +156,8 @@ export default function Recepten({
     return (
       <Portie gekozen={gekozen} maaltijd={maaltijd} datumLabel={datumLabel} schaal={schaal}
         bezig={bezig} fout={fout} onLog={onLog} onTerug={() => setGekozen(null)}
-        onAanvullen={setAanvullen} />
+        onAanvullen={setAanvullen} onVulAlles={vulAllesAan} vultAlles={vultAlles}
+        vulUitslag={vulUitslag} />
     );
   }
 
@@ -150,7 +191,7 @@ export default function Recepten({
       {zichtbaar.length > 0 && (
         <div style={T.kaartStrak}>
           {zichtbaar.map((r) => (
-            <button key={r.id} style={T.resultaat} onClick={() => kies(r.id)}>
+            <button key={r.id} style={T.resultaat} onClick={() => { setVulUitslag(null); kies(r.id); }}>
               <span style={T.resultaatTekst}>
                 <span style={T.resultaatNaam}>{r.titel}</span>
                 <span style={T.resultaatSub}>
@@ -169,6 +210,7 @@ export default function Recepten({
 
 function Portie({
   gekozen, maaltijd, datumLabel, schaal, bezig, fout, onLog, onTerug, onAanvullen,
+  onVulAlles, vultAlles, vulUitslag,
 }: {
   gekozen: Doorgerekend;
   maaltijd: Maaltijd;
@@ -179,6 +221,9 @@ function Portie({
   onLog: (payload: Record<string, unknown>) => void;
   onTerug: () => void;
   onAanvullen: (ingredient: string) => void;
+  onVulAlles: () => void;
+  vultAlles: boolean;
+  vulUitslag: { gelukt: number; mislukt: MislukteSchatting[] } | null;
 }) {
   const { recept, punten } = gekozen;
   const [porties, setPorties] = useState("1");
@@ -235,6 +280,22 @@ function Portie({
         </span>
       </div>
 
+      {/* Buiten het blok hieronder, want na een geslaagde ronde is er niets
+          meer niet-herkend en zou de uitslag meteen weer verdwijnen. */}
+      {vulUitslag && (
+        <p style={T.hint}>
+          {vulUitslag.gelukt > 0 && (
+            <>
+              <strong>{vulUitslag.gelukt} {vulUitslag.gelukt === 1 ? "ingrediënt" : "ingrediënten"} ingevuld</strong>{" "}
+              en meteen bewaard. Het zijn schattingen — kijk ze na bij Zo is het gerekend.{" "}
+            </>
+          )}
+          {vulUitslag.mislukt.length > 0 && (
+            <>{beschrijfMislukt(vulUitslag.mislukt)}; die vul je zelf in.</>
+          )}
+        </p>
+      )}
+
       {punten.nietHerkend.length > 0 && (
         <>
           <div style={T.waarschuwing}>
@@ -251,6 +312,13 @@ function Portie({
             waar {punten.nietHerkend.length === 1 ? "hij" : "ze"} in{" "}
             {punten.nietHerkend.length === 1 ? "zit" : "zitten"}.
           </div>
+
+          <button style={{ ...T.secundair, marginTop: 0, marginBottom: 12 }}
+            onClick={onVulAlles} disabled={vultAlles}>
+            {vultAlles
+              ? <><Loader2 size={16} className="spin" /> Bezig met {punten.nietHerkend.length} {punten.nietHerkend.length === 1 ? "ingrediënt" : "ingrediënten"}...</>
+              : <><Sparkles size={16} /> {punten.nietHerkend.length === 1 ? "Laat dit ingrediënt schatten" : `Laat alle ${punten.nietHerkend.length} in één keer schatten`}</>}
+          </button>
 
           <div style={T.kaartStrak}>
             {punten.nietHerkend.map((naam) => (
@@ -297,7 +365,9 @@ function Portie({
       <h2 style={T.lijstKop}>Zo is het gerekend</h2>
       <div style={T.kaartStrak}>
         {punten.matches.map((m, i) => (
-          <div key={`${m.ingredient}-${i}`} style={T.regel}>
+          <button key={`${m.ingredient}-${i}`} style={REGEL_KNOP}
+            onClick={() => onAanvullen(m.ingredient)}
+            aria-label={m.overgeslagen ? `${m.ingredient} aanvullen` : `${m.ingredient} aanpassen`}>
             <div style={T.regelTekst}>
               <div style={{
                 ...T.regelNaam,
@@ -307,21 +377,24 @@ function Portie({
                 {m.ingredient}
               </div>
               <div style={T.regelSub}>
-                {m.overgeslagen
-                  ? "niet herkend, telt niet mee"
-                  : `${m.product!.name} · ${m.omrekening.aanname}`}
+                {m.overgeslagen ? "niet herkend, telt niet mee" : (
+                  <>
+                    {m.product!.name} · {m.omrekening.aanname}
+                    {m.product!.bron === "schatting" && <>{" "}<span style={GESCHAT}>geschat</span></>}
+                  </>
+                )}
               </div>
             </div>
             {!m.overgeslagen && (m.score < 50 || m.omrekening.onzeker) && (
               <AlertTriangle size={14} style={{ color: "var(--gold)", flexShrink: 0 }} />
             )}
-          </div>
+          </button>
         ))}
       </div>
 
       <p style={T.hint}>
-        De punten komen altijd uit de eigen formule, nooit van de bron van het
-        recept. Elk ingrediënt houdt zijn eigen soort, dus groente en magere
+        Tik op een regel om een ingrediënt aan te vullen of bij te stellen. De punten
+        komen altijd uit de eigen formule, nooit van de bron van het recept. Elk ingrediënt houdt zijn eigen soort, dus groente en magere
         eiwitbronnen tellen ook hier zacht mee.
       </p>
 

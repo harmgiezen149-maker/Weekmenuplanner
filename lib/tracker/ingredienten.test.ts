@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ingredientSleutel, zoekEigenIngredient, metIngredient, zonderIngredient,
-  alleIngredienten, LEGE_BIBLIOTHEEK,
+  alleIngredienten, teSchatten, LEGE_BIBLIOTHEEK,
 } from "./ingredienten.ts";
 import { matchIngredient, berekenReceptPunten, receptVingerafdruk } from "./recept.ts";
 import type { Product } from "./types.ts";
@@ -156,4 +156,33 @@ test("zonder wijziging blijft de vingerafdruk gelijk", () => {
 
 test("de oude aanroep zonder revisie blijft werken", () => {
   assert.equal(receptVingerafdruk(RECEPT, 4), receptVingerafdruk(RECEPT, 4, 0));
+});
+
+// -- wat er in een keer geschat moet worden ----------------------------------
+
+test("alleen wat de eigen lijst nog niet kent wordt geschat", () => {
+  const namen = ["harissa", "tahin", "sumak", "ras el hanout"];
+  assert.deepEqual(teSchatten(BIB, namen), ["sumak", "ras el hanout"]);
+});
+
+test("dubbele schrijfwijzen leveren een schatting op", () => {
+  // "verse spinazie" en "spinazie" zijn dezelfde sleutel; twee keer schatten
+  // is twee keer betalen voor hetzelfde antwoord.
+  const uit = teSchatten(LEGE_BIBLIOTHEEK, ["verse spinazie", "Spinazie", "spinazie, gewassen"]);
+  assert.deepEqual(uit, ["verse spinazie"], "de eerste schrijfwijze hoort te winnen");
+});
+
+test("lege en onbruikbare namen vallen af", () => {
+  assert.deepEqual(teSchatten(LEGE_BIBLIOTHEEK, ["", "   ", ",,,", "sumak"]), ["sumak"]);
+});
+
+test("het aantal is begrensd", () => {
+  const veel = Array.from({ length: 40 }, (_, i) => `kruid ${i}`);
+  assert.equal(teSchatten(LEGE_BIBLIOTHEEK, veel).length, 25);
+  assert.equal(teSchatten(LEGE_BIBLIOTHEEK, veel, 3).length, 3);
+});
+
+test("een recept waarvan alles al bekend is levert niets op", () => {
+  assert.deepEqual(teSchatten(BIB, ["harissa", "tahin"]), []);
+  assert.deepEqual(teSchatten(LEGE_BIBLIOTHEEK, []), []);
 });

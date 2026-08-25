@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { leesSchatting } from "./schatting.ts";
+import { leesSchatting, beschrijfMislukt } from "./schatting.ts";
 
 const GOED = JSON.stringify({
   naam: "Harissa",
@@ -74,4 +74,41 @@ test("een vloeistof houdt milliliter", () => {
     naam: "Sojasaus", eenheid: "ml", per100: { kcal: 53 },
   }));
   assert.equal(s?.eenheid, "ml");
+});
+
+// -- melden wat er niet gelukt is --------------------------------------------
+
+test("namen met dezelfde reden worden samengenomen", () => {
+  assert.equal(
+    beschrijfMislukt([
+      { naam: "sumak", reden: "niet herkend door het model" },
+      { naam: "ras el hanout", reden: "niet herkend door het model" },
+    ]),
+    "sumak en ras el hanout lukten niet (niet herkend door het model)"
+  );
+});
+
+test("verschillende redenen blijven uit elkaar", () => {
+  // "even te druk" probeer je zo nog eens, "niet herkend" niet; die op een
+  // hoop gooien zou de gebruiker verkeerd voorlichten.
+  assert.equal(
+    beschrijfMislukt([
+      { naam: "sumak", reden: "niet herkend door het model" },
+      { naam: "ras el hanout", reden: "even te druk" },
+    ]),
+    "sumak lukte niet (niet herkend door het model); ras el hanout lukte niet (even te druk)"
+  );
+});
+
+test("drie namen krijgen komma's en een en", () => {
+  assert.equal(
+    beschrijfMislukt([
+      { naam: "a", reden: "x" }, { naam: "b", reden: "x" }, { naam: "c", reden: "x" },
+    ]),
+    "a, b en c lukten niet (x)"
+  );
+});
+
+test("niets mislukt levert een lege zin", () => {
+  assert.equal(beschrijfMislukt([]), "");
 });

@@ -17,6 +17,8 @@ import {
 } from "@/lib/types";
 import Aanvullen from "./tracker/Aanvullen";
 import type { Nutrients } from "@/lib/tracker/types";
+import { beschrijfMislukt } from "@/lib/tracker/schatting";
+import type { MislukteSchatting } from "@/lib/tracker/schatting";
 
 // ============================================================================
 // API helpers
@@ -838,10 +840,16 @@ function PuntenTag({ punten, nietHerkend, totaal }: {
  */
 interface IngredientStatus {
   ingredient: string;
-  product: { name: string; eenheid: "g" | "ml"; per100: Nutrients } | null;
+  product: { name: string; eenheid: "g" | "ml"; per100: Nutrients; bron: string } | null;
   score: number;
   omrekening: { aanname: string; onzeker: boolean };
   overgeslagen: boolean;
+}
+
+/** Uitkomst van "vul alles in één keer aan". */
+interface VulUitslag {
+  gelukt: number;
+  mislukt: MislukteSchatting[];
 }
 
 function ReceptModal({
@@ -859,6 +867,8 @@ function ReceptModal({
   const [aanvullen, setAanvullen] = useState<number | null>(null);
   const [bewaart, setBewaart] = useState(false);
   const [statusFout, setStatusFout] = useState("");
+  const [vultAlles, setVultAlles] = useState(false);
+  const [vulUitslag, setVulUitslag] = useState<VulUitslag | null>(null);
 
   const laadStatus = useCallback(async () => {
     try {
@@ -900,6 +910,32 @@ function ReceptModal({
     } catch (e) {
       setStatusFout(e instanceof Error ? e.message : "Opslaan mislukt");
     } finally { setBewaart(false); }
+  };
+
+  /**
+   * Laat alle onbekende ingrediënten in één keer schatten en bewaren.
+   *
+   * De waarden gaan hier meteen de lijst in, zonder tussenscherm — dat is de
+   * winst van deze knop. Daarom staat er achteraf bij wát er is ingevuld, blijft
+   * elke regel aantikbaar en krijgen de geschatte regels het label "geschat".
+   */
+  const vulAllesAan = async () => {
+    const namen = (status ?? []).filter((s) => s.overgeslagen).map((s) => s.ingredient);
+    if (namen.length === 0) return;
+    setVultAlles(true); setStatusFout(""); setVulUitslag(null);
+    try {
+      const res = await fetch("/api/tracker/ingredienten/schat-alles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ namen }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || "Aanvullen mislukt");
+      setVulUitslag({ gelukt: d.gelukt?.length ?? 0, mislukt: d.mislukt ?? [] });
+      await laadStatus();
+      onPuntenVeranderd();
+    } catch (e) {
+      setStatusFout(e instanceof Error ? e.message : "Aanvullen mislukt");
+    } finally { setVultAlles(false); }
   };
 
   const onbekend = status?.filter((s) => s.overgeslagen).length ?? 0;
@@ -987,6 +1023,31 @@ function ReceptModal({
             recept waar het in zit.
           </p>
         )}
+        {onbekend > 0 && (
+          <button style={S.vulAllesBtn} onClick={vulAllesAan} disabled={vultAlles}>
+            {vultAlles
+              ? <><Loader2 size={15} className="spin" /> Bezig met {onbekend} {onbekend === 1 ? "ingrediënt" : "ingrediënten"}...</>
+              : <><Sparkles size={15} /> {onbekend === 1 ? "Laat dit ingrediënt schatten" : `Laat alle ${onbekend} in één keer schatten`}</>}
+          </button>
+        )}
+
+        {vulUitslag && (
+          <p style={S.ingUitslag}>
+            {vulUitslag.gelukt > 0 && (
+              <>
+                <strong style={{ color: "var(--ink)" }}>
+                  {vulUitslag.gelukt} {vulUitslag.gelukt === 1 ? "ingrediënt" : "ingrediënten"} ingevuld
+                </strong>{" "}
+                en meteen bewaard. Het zijn schattingen, dus ze staan hieronder met{" "}
+                <em>geschat</em> erbij — tik erop om ze na te kijken.{" "}
+              </>
+            )}
+            {vulUitslag.mislukt.length > 0 && (
+              <>{beschrijfMislukt(vulUitslag.mislukt)}; die vul je zelf in.</>
+            )}
+          </p>
+        )}
+
         {statusFout && <p style={S.ingFout}>{statusFout}</p>}
 
         <ul style={S.ingList}>
@@ -1000,7 +1061,9 @@ function ReceptModal({
                 </li>
               );
             }
-            const geschat = !st.overgeslagen && (st.score < 50 || st.omrekening.onzeker);
+            // De hoeveelheid is geraden ("1 stuk" of een onbekende maat), los van de
+            // vraag of de voedingswaarden geschat zijn.
+            const hoeveelheidGeschat = !st.overgeslagen && (st.score < 50 || st.omrekening.onzeker);
             return (
               <li key={k} style={S.ingRij}>
                 <button style={S.ingKnop} onClick={() => setAanvullen(k)}
@@ -1015,8 +1078,9 @@ function ReceptModal({
                     </span>
                   ) : (
                     <span style={S.ingBekend}>
-                      {geschat && <Info size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}
+                      {hoeveelheidGeschat && <Info size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}
                       {st.product!.name} · {st.omrekening.aanname}
+                      {st.product!.bron === "schatting" && <>{" "}<span style={S.ingGeschat}>geschat</span></>}
                     </span>
                   )}
                 </button>
@@ -3063,6 +3127,9 @@ const S: Record<string, React.CSSProperties> = {
   ingKop: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 },
   ingBekend: { fontSize: 12, color: "var(--sub)" },
   ingOnbekend: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--over)" },
+  ingGeschat: { marginLeft: 6, fontSize: 11, fontWeight: 800, color: "var(--over)", background: "#fff2e2", padding: "1px 6px", borderRadius: 999 },
+  ingUitslag: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 8px" },
+  vulAllesBtn: { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", background: "var(--surface)", color: "var(--accent)", border: "1px solid var(--accent)", padding: "11px 16px", borderRadius: 999, fontSize: 14, fontWeight: 700, cursor: "pointer", margin: "0 0 10px" },
   bereiding: { fontSize: 14, lineHeight: 1.65, color: "#3a3f52", margin: 0, whiteSpace: "pre-wrap" },
   kookSchaalHint: { fontWeight: 500, textTransform: "none", letterSpacing: 0, color: "var(--sub)" },
   kookIngList: { listStyle: "none", padding: 0, margin: 0 },
