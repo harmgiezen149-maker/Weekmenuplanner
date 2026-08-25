@@ -18,7 +18,8 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
 - **Tracker** (`/tracker`) — een puntengebaseerde voedingstracker met een dagbudget
   dat wordt afgeleid van je lichaamsgegevens. Zie het hoofdstuk hieronder.
 - **Inzicht** (`/tracker/inzicht`) — je eetpatroon over twaalf weken, teruggerekend
-  tot cijfers: weekdagen, dagdelen, energiebalans en waar de punten heen gaan.
+  tot cijfers: weekdagen, dagdelen, energiebalans en waar de punten heen gaan. Bij
+  je weging op de weegdag komt daar één onderbouwd advies bij.
 
 ---
 
@@ -584,9 +585,62 @@ weegdag op zondag is maandag de tweede dag van de week. Daarom staat de plaats
 binnen de trackerweek er als `avg_exhaustion_position` naast, en rust het signaal
 op die tweede waarde.
 
-De volgende fases bouwen hierop verder: advies bij het weegmoment, een
-validatielaag die elk genoemd getal terugvoert op het feitenpakket, en een
-evaluatielus die meet of een advies iets heeft opgeleverd.
+### Advies bij het weegmoment
+
+Bovenaan Inzicht staat één advies. Het komt er niet elke dag bij: de trigger is
+je **weging op de weegdag**, en per weging wordt er precies één gegenereerd. Die
+grens ligt op de server, niet in het scherm — anders zou herladen elke keer een
+modelaanroep kosten.
+
+De opzet is vijf lagen diep, en alleen de derde is AI:
+
+```
+[1] feitenlaag      deterministisch, altijd waar
+[2] trigger         wanneer er advies mag komen
+[3] adviesgeneratie het model leest het feitenpakket en interpreteert vrij
+[4] validatie       elk getal herleidbaar naar het pakket
+[5] evaluatielus    werkte het advies van vorige keer (nog te bouwen)
+```
+
+**De bewijslast.** Geen advies onder de veertien dagen historie of acht gelogde
+dagen in de laatste twee weken. Het scherm zegt dan wat er nog nodig is.
+
+**Wat het model terugkrijgt.** Het volledige feitenpakket, je profiel zonder je
+naam, de laatste drie adviezen met hun uitkomst, en welke trigger dit was. Het
+mag vrij interpreteren, maar niet vrij rekenen: alleen getallen die letterlijk in
+het pakket staan, elk met de sleutel waar het vandaan komt.
+
+**De validatielaag** loopt daarna alles na, server-side, vóór opslaan:
+
+1. Elke sleutel in `facts_used` moet in het feitenpakket bestaan.
+2. `metric_key` moet bestaan en een getal zijn — zonder meetbare actie is het
+   advies niet te evalueren en hoort het er niet te zijn.
+3. Verboden taal wordt geweigerd. Woorden die van eten of van jou een morele
+   categorie maken: zondigen, cheatmeal, verdienen, slecht, braaf, falen,
+   discipline, wilskracht. Op stam gematcht, want de vervoeging doet er niet toe.
+   `slechts` is uitgezonderd; dat is een telwoord.
+4. **De guardrail staat in code, niet alleen in de prompt.** Ligt je inname
+   structureel onder je budget, of gaat de afname sneller dan bedoeld, dan wordt
+   een actie die de inname omlaag stuurt geweigerd — ook als het model hem
+   voorstelt. Een guardrail die alleen in een instructie staat is geen guardrail.
+5. Getallen uit de tekst die nergens op terug te voeren zijn maken het advies
+   **ongeverifieerd**. Het wordt dan wél getoond, met die markering en de
+   betreffende getallen erbij. Stilzwijgend accepteren is geen optie, en
+   weggooien om één getal ook niet.
+
+Een afgekeurd antwoord gaat één keer terug het gesprek in, mét de reden. Lukt het
+dan nog niet, dan komt er geen advies en staat er waarom. Twee pogingen, niet
+meer: een derde kost geld en levert zelden iets anders op.
+
+**Kosten.** Eén tot twee modelaanroepen per weegmoment, dus vier tot acht per
+maand. Zonder `ANTHROPIC_API_KEY` werkt het advies niet en blijven de cijfers op
+Inzicht gewoon staan.
+
+Wat er nog niet is: de evaluatielus die meet of een advies iets heeft opgeleverd
+(fase C), de afwijkingstriggers met hun dempingsregels (fase D), en de knop om
+zelf een analyse te vragen plus de adviesgeschiedenis (fase E). Het datamodel
+houdt daar al rekening mee: een advies heeft een veld voor zijn evaluatie, en de
+waarde van `metric_key` op het moment van uitgifte wordt meteen vastgelegd.
 
 ### Opslag
 
@@ -613,6 +667,10 @@ kookboek-keys:
   vingerafdruk waarmee de cache vervalt.
 - `wl:facts:<YYYY-Www>` — het gecachete feitenpakket van Inzicht, acht dagen
   houdbaar, met de vingerafdruk waarmee het vervalt zodra je iets logt.
+- `wl:advice:<id>` — een uitgegeven advies, met de validatie-uitslag erbij.
+  Wordt nooit verwijderd: de historie is het interessantste deel van de module.
+- `wl:advice:index` — sorted set met alle adviezen, score is het tijdstip.
+- `wl:advice:active` — het id van het lopende advies.
 
 Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
 
@@ -640,6 +698,12 @@ De feitenlaag van Inzicht staat er met geseede data in: de zes scenario's uit he
 ontwerp (weekendpatroon, verborgen gat, plateau, te weinig, te snel, te weinig
 data) hebben elk hun eigen test, plus een test die vastlegt dat de laag puur is
 en een die de twaalf weken binnen een halve seconde doorrekent.
+
+De adviesmodule staat er ook in, zonder dat er een API-sleutel aan te pas komt:
+het uitlezen van een antwoord met markdown-fences eromheen, elk verboden woord
+apart, de guardrail die een actie omlaag weigert maar dezelfde actie omhoog
+toelaat, een getal dat nergens op terug te voeren is, en een geforceerde
+prompt-injectie in een productnaam.
 
 ### Over de grafieken
 
