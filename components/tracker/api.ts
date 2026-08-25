@@ -1,6 +1,7 @@
 import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "@/lib/tracker/types";
 import type { BudgetResultaat } from "@/lib/tracker/budget";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
+import type { AdviesDrempel, FactPack } from "@/lib/tracker/feiten";
 import type { GewichtGegevens } from "./Gewicht";
 
 export interface ProfielAntwoord {
@@ -88,6 +89,14 @@ export const trackerApi = {
   wisWeging: (datum: string) =>
     fetch(`/api/tracker/gewicht?datum=${encodeURIComponent(datum)}`, { method: "DELETE" })
       .then(lees<GewichtGegevens>),
+
+  /**
+   * Het feitenpakket van Inzicht. Zonder `ververs` komt het uit de cache
+   * zolang er niets nieuws gelogd is; de knop op het scherm zet hem aan.
+   */
+  getFeiten: (datum: string, ververs = false) =>
+    fetch(`/api/tracker/feiten?datum=${datum}${ververs ? "&ververs=1" : ""}`, { cache: "no-store" })
+      .then(lees<{ pakket: FactPack | null; drempel: AdviesDrempel | null; uitCache: boolean }>),
 
   getWeek: (datum: string) =>
     fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })

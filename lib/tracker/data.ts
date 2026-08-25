@@ -6,7 +6,10 @@ import {
 import { berekenBudget, eiwitDoelGram } from "./budget";
 import type { Weging } from "./gewicht";
 import { berekenTotalen } from "./points";
-import { datumSleutel, geldigeDatum } from "./datum";
+import { datumSleutel, geldigeDatum, isoWeek } from "./datum";
+import {
+  buildFactPack, feitenVingerafdruk, vensterDatums, type FactPack,
+} from "./feiten";
 
 export { datumSleutel, geldigeDatum };
 
@@ -21,6 +24,7 @@ export { datumSleutel, geldigeDatum };
 //   wl:recent           -> JSON-lijst met de laatst gelogde items
 //   wl:food:<barcode>   -> gecachet product uit een externe bron, 90 dagen
 //   wl:eigen:<barcode>  -> zelf ingevoerd product, blijft staan
+//   wl:facts:<YYYY-Www> -> gecachet feitenpakket van de adviesmodule, 8 dagen
 //
 // De volgende fases voegen hier wl:week:*, wl:weight:* en
 // wl:recipe:points:* aan toe.
@@ -37,6 +41,7 @@ const WEIGHT_LOG = "wl:weight:log";
 const WEIGHT = (datum: string) => `wl:weight:${datum}`;
 const MEALS_KEY = "wl:meals";
 const RECIPE_POINTS = (id: string) => `wl:recipe:points:${id}`;
+const FACTS = (week: string) => `wl:facts:${week}`;
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -437,4 +442,56 @@ export async function saveEigenProduct(barcode: string, p: Product): Promise<voi
 
 export async function deleteEigenProduct(barcode: string): Promise<void> {
   await redis.del(EIGEN(barcode));
+}
+
+// -- feitenpakket van de adviesmodule ----------------------------------------
+
+// Het pakket beslaat twaalf weken en wordt per ISO-week gecachet. Acht dagen
+// houdbaar: net langer dan een week, zodat de cache van de vorige week nog
+// staat op het moment dat de nieuwe wordt opgebouwd.
+const FACTS_TTL_SECONDEN = 8 * 24 * 60 * 60;
+
+interface FeitenCache {
+  /** Vingerafdruk van de gelogde data toen dit pakket werd gebouwd. */
+  vingerafdruk: string;
+  pakket: FactPack;
+}
+
+/**
+ * Het feitenpakket voor een peildatum.
+ *
+ * Het pakket wordt hergebruikt zolang er niets nieuws gelogd is — dat is wat
+ * de knop "Analyseer mijn patroon" nodig heeft om niet elke keer opnieuw de
+ * hele twaalf weken door te rekenen. Verandert er wel iets aan het logboek,
+ * de wegingen of het budget, dan verschilt de vingerafdruk en wordt er
+ * opnieuw gerekend.
+ *
+ * Het lezen van de dagen gebeurt met één mget over het hele venster; de
+ * berekening zelf staat in lib/tracker/feiten.ts en raakt geen database aan.
+ */
+export async function laadFeiten(
+  peildatum: string = datumSleutel(),
+  opties: { ververs?: boolean } = {}
+): Promise<{ pakket: FactPack; uitCache: boolean } | { pakket: null; uitCache: false }> {
+  const profiel = await getProfile();
+  if (!profiel) return { pakket: null, uitCache: false };
+
+  const [dagen, wegingen] = await Promise.all([
+    getDays(vensterDatums(peildatum)),
+    getWegingen(),
+  ]);
+
+  const vingerafdruk = feitenVingerafdruk({ peildatum, dagen, wegingen, profiel });
+  const sleutel = FACTS(isoWeek(peildatum));
+
+  if (!opties.ververs) {
+    const gecachet = await redis.get<FeitenCache>(sleutel);
+    if (gecachet && gecachet.vingerafdruk === vingerafdruk) {
+      return { pakket: gecachet.pakket, uitCache: true };
+    }
+  }
+
+  const pakket = buildFactPack({ peildatum, dagen, wegingen, profiel });
+  await redis.set(sleutel, { vingerafdruk, pakket }, { ex: FACTS_TTL_SECONDEN });
+  return { pakket, uitCache: false };
 }
