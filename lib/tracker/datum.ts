@@ -28,3 +28,21 @@ export function nl(n: number, decimalen = 1): string {
 export function nlKg(n: number): string {
   return n.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
+
+/**
+ * ISO-weeknummer als `YYYY-Www`. De donderdag bepaalt bij welk jaar een week
+ * hoort, zodat een week rond de jaarwisseling niet in tweeën valt.
+ */
+export function isoWeek(datum: string): string {
+  const d = new Date(datum + "T00:00:00Z");
+  // Naar de donderdag van dezelfde week: die ligt altijd in het ISO-jaar.
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7) + 3);
+  const jaar = d.getUTCFullYear();
+
+  // 4 januari valt per definitie in week 1; van die week de donderdag pakken.
+  const week1 = new Date(Date.UTC(jaar, 0, 4));
+  week1.setUTCDate(week1.getUTCDate() - ((week1.getUTCDay() + 6) % 7) + 3);
+
+  const nummer = 1 + Math.round((d.getTime() - week1.getTime()) / (7 * 86400000));
+  return `${jaar}-W${String(nummer).padStart(2, "0")}`;
+}
