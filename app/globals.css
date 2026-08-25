@@ -170,3 +170,67 @@ button {
 .dubbelSlider input[type="range"]::-moz-range-track {
   background: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Afdrukken.
+
+   Een recept afdrukken hoort een recept op te leveren, geen schermafdruk van
+   de app. Alles wat niet in het geopende receptvenster staat verdwijnt, het
+   venster zelf wordt een gewone pagina, en knoppen gaan eruit — die zijn op
+   papier alleen maar ruis.
+
+   Werkt alleen als er een recept openstaat; drukt iemand af zonder open
+   recept, dan blijft het gewone scherm staan.
+--------------------------------------------------------------------------- */
+@media print {
+  body:has([data-print="recept"]) > * {
+    display: none !important;
+  }
+
+  body:has([data-print="recept"]) [data-print="recept"] {
+    display: block !important;
+    position: static !important;
+    max-width: none !important;
+    max-height: none !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* De ouders van het venster moeten zichtbaar blijven, anders verdwijnt het
+     kind mee. */
+  body:has([data-print="recept"]) :has([data-print="recept"]) {
+    display: block !important;
+    position: static !important;
+    background: none !important;
+    inset: auto !important;
+    padding: 0 !important;
+  }
+
+  [data-print-verbergen],
+  button {
+    display: none !important;
+  }
+
+  /* Een recept dat over twee pagina's breekt midden in de ingrediëntenlijst
+     is onbruikbaar in de keuken. */
+  li, h2, h3 {
+    break-inside: avoid;
+  }
+
+  img {
+    max-width: 60mm !important;
+    height: auto !important;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 11pt;
+  }
+}

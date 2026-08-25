@@ -58,5 +58,11 @@ export async function GET() {
     };
   }
 
-  return NextResponse.json({ punten, profiel: profiel != null });
+  return NextResponse.json({
+    punten,
+    profiel: profiel != null,
+    // Het kookboek gebruikt dit om te kunnen zeggen wanneer zijn weekmenu op
+    // een andere dag begint dan de trackerweek.
+    weegdag: profiel?.weigh_day ?? null,
+  });
 }

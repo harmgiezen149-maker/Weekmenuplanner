@@ -1266,13 +1266,70 @@ ziet er namelijk precies zo uit als een recept dat gewoon licht is.
 
 ---
 
+## Meerdere weken, delen en afdrukken
+
+### Elke week zijn eigen sleutel
+
+Het weekmenu stond onder `week:current` en was altijd déze week: volgende week
+plannen kon pas als die begon. Nu heeft elke week een sleutel in ISO-notatie
+(`week:2026-W35`) — dezelfde notatie die de adviesmodule al gebruikt.
+
+ISO en niet "de week die op zondag begint": een ISO-week is eenduidig, ook rond
+de jaarwisseling, en het nummer klopt met wat je agenda zegt. Het rekenwerk
+staat in `lib/weeksleutel.ts`, met tests. `verschuifWeek()` rekent via de
+maandag en niet via het weeknummer, want 2026 heeft 53 weken en `2026-W52 + 1`
+is niet `2026-W53` in elk jaar.
+
+De oude sleutel verhuist mee: bij de eerste keer dat de huidige week wordt
+opgevraagd wordt `week:current` overgenomen. Alleen bij de huidige week — anders
+zou het menu van deze week ook bij volgende week verschijnen en plan je twee
+keer hetzelfde.
+
+Bladeren in de app haalt eerst de nieuwe inhoud op en zet dan pas beide dingen
+tegelijk. Zou de opslag afgaan met de nieuwe inhoud onder de oude sleutel, dan
+overschrijft de ene week de andere.
+
+De boodschappenlijst volgt dezelfde keuze en zegt erbij uit welke week hij komt:
+je plant een week en maakt daarna de lijst ervoor.
+
+### Twee weekbegrippen
+
+Het weekmenu heeft een startdag; de trackerweek loopt van weegdag tot weegdag.
+Die twee hoeven niet gelijk te zijn, maar het is verwarrend als je niet weet dát
+ze verschillen. Staat er een trackerprofiel en wijkt de startdag af, dan staat
+er onder de startdagkiezer één regel met de weegdag erin en een knop om ze
+gelijk te zetten. Niet automatisch: dat zou je weekplanning ongevraagd
+verschuiven.
+
+### Zoeken in de bereiding
+
+De zoekbalk kijkt nu ook in de bereidingstekst. "Oven", "marineren" en "wok"
+staan zelden in de titel of de ingrediëntenlijst, maar dat is wel waar je op
+zoekt als je weet wat voor avond het is.
+
+### Delen en afdrukken
+
+Delen levert platte tekst op — titel, aantal personen, ingrediënten, bereiding —
+via het deelmenu van de telefoon, en anders via het klembord. Geen link: een
+link naar deze app is voor de ontvanger een loginscherm, en wie een recept deelt
+wil dat de ander het kan lezen.
+
+Afdrukken gebruikt een `@media print`-blok in `app/globals.css` dat alles
+verbergt behalve het geopende receptvenster, dat venster tot een gewone pagina
+maakt en de knoppen eruit haalt. Het leunt op `:has()`, dus zonder open recept
+verandert er niets aan de afdruk van het scherm.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
 
 - `recipe:<id>` — één recept als JSON.
 - `recipes:index` — een set met alle recept-id's.
-- `week:current` — de weekplanning (startdag + gekozen gerechten per dag).
+- `week:<YYYY-Www>` — de weekplanning per week (startdag + gerechten per dag).
+  `week:current` is de oude sleutel van voor het plannen van meerdere weken; die
+  verhuist bij de eerste opvraging mee.
 - `boodschappen:current`, `gebiedvolgorde:current`, `voorraad:current` — de
   boodschappenlijst, de looproute per winkel en de vaste voorraadartikelen.
 - `prijzen:boek` — de laatst betaalde prijs per product, uit je kassabonnen.
@@ -1391,6 +1448,7 @@ lib/
   backup-formaat.ts     Vorm van een back-upbestand + inlezen (puur, getest)
   backup.ts             Back-up maken en terugzetten (Redis)
   push.ts               VAPID-sleutelpaar, abonnementen en versturen
+  weeksleutel.ts        ISO-weken aanduiden en erdoorheen bladeren (puur)
   afbeelding.ts         Foto's schalen en comprimeren (browser)
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)

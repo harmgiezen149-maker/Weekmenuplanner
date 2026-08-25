@@ -25,7 +25,10 @@ export interface BackupBestand {
   persoon: { id: string; naam: string };
   gedeeld: {
     recepten: Recept[];
+    /** Het weekmenu uit back-ups van voor het plannen van meerdere weken. */
     week: WeekState | null;
+    /** Alle weekmenu's, op ISO-weeksleutel. */
+    weken: Record<string, WeekState> | null;
     boodschappen: Boodschappen | null;
     gebiedvolgorde: GebiedVolgorde | null;
     voorraad: Voorraad | null;
@@ -96,6 +99,7 @@ export function leesBackup(ruw: unknown): { bestand: BackupBestand } | { fout: s
       gedeeld: {
         recepten: lijst(g.recepten),
         week: g.week ?? null,
+        weken: g.weken && typeof g.weken === "object" ? g.weken : null,
         boodschappen: g.boodschappen ?? null,
         gebiedvolgorde: g.gebiedvolgorde ?? null,
         voorraad: g.voorraad ?? null,

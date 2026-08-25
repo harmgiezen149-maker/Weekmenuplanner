@@ -13,7 +13,12 @@ import type { Recept, WeekState, Boodschappen, GebiedVolgorde, Voorraad } from "
 
 const RECIPE = (id: string) => `recipe:${id}`;
 const RECIPE_INDEX = "recipes:index";
-const WEEK_KEY = "week:current";
+// Vóór het plannen van meerdere weken stond er één weekmenu onder
+// `week:current`. Dat blijft de sleutel van waar het vandaan komt: bij de
+// eerste keer dat de huidige week wordt opgevraagd verhuist hij mee, en daarna
+// heeft elke week zijn eigen sleutel.
+const WEEK_OUD = "week:current";
+const WEEK = (sleutel: string) => `week:${sleutel}`;
 const BOODSCHAPPEN_KEY = "boodschappen:current";
 const GEBIEDVOLGORDE_KEY = "gebiedvolgorde:current";
 const VOORRAAD_KEY = "voorraad:current";
@@ -43,12 +48,30 @@ export async function deleteRecept(id: string): Promise<void> {
   await redis.srem(RECIPE_INDEX, id);
 }
 
-export async function getWeek(): Promise<WeekState> {
-  return (await redis.get<WeekState>(WEEK_KEY)) ?? { startDag: 0, slots: {} };
+export const LEGE_WEEK: WeekState = { startDag: 0, slots: {} };
+
+/**
+ * Het weekmenu van één week.
+ *
+ * `huidig` zegt of dit de week is waar we nu in zitten. Alleen dán wordt het
+ * oude `week:current` overgenomen — anders zou het weekmenu van deze week ook
+ * bij volgende week verschijnen, en dan plan je twee keer hetzelfde.
+ */
+export async function getWeek(sleutel: string, huidig = false): Promise<WeekState> {
+  const week = await redis.get<WeekState>(WEEK(sleutel));
+  if (week) return week;
+  if (huidig) {
+    const oud = await redis.get<WeekState>(WEEK_OUD);
+    if (oud) {
+      await redis.set(WEEK(sleutel), oud);
+      return oud;
+    }
+  }
+  return LEGE_WEEK;
 }
 
-export async function saveWeek(week: WeekState): Promise<WeekState> {
-  await redis.set(WEEK_KEY, week);
+export async function saveWeek(sleutel: string, week: WeekState): Promise<WeekState> {
+  await redis.set(WEEK(sleutel), week);
   return week;
 }
 

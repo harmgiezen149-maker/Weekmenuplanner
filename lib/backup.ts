@@ -76,10 +76,12 @@ async function leesGedeeld(): Promise<BackupBestand["gedeeld"]> {
       redis.get<IngredientBibliotheek>("wl:ingredienten"),
     ]);
   const prijsboek = await redis.get<Prijsboek>("prijzen:boek");
+  const weken = await leesWeken();
 
   return {
     recepten,
     week: week ?? null,
+    weken,
     boodschappen: boodschappen ?? null,
     gebiedvolgorde: gebiedvolgorde ?? null,
     voorraad: voorraad ?? null,
@@ -98,6 +100,32 @@ async function leesGedeeld(): Promise<BackupBestand["gedeeld"]> {
  * Ze worden daarom opgezocht met scan. Dat is de enige plek in de app waar dat
  * nodig is, en het gebeurt alleen bij het maken van een back-up.
  */
+/**
+ * Alle weekmenu's. Net als de eigen producten hebben die geen index, dus ze
+ * worden opgezocht met scan — alleen bij het maken van een back-up.
+ */
+async function leesWeken(): Promise<Record<string, WeekState>> {
+  const uit: Record<string, WeekState> = {};
+  const sleutels: string[] = [];
+  let cursor = "0";
+  do {
+    const [volgende, gevonden] = await redis.scan(cursor, { match: "week:*", count: 200 });
+    cursor = String(volgende);
+    sleutels.push(...(gevonden as string[]));
+  } while (cursor !== "0" && sleutels.length < 2000);
+
+  // `week:current` is de oude sleutel en zit al in het veld `week`.
+  const weeksleutels = sleutels.filter((k) => /^week:\d{4}-W\d{2}$/.test(k));
+  if (weeksleutels.length === 0) return uit;
+
+  const rauw = (await redis.mget<(WeekState | null)[]>(...weeksleutels)) ?? [];
+  weeksleutels.forEach((k, i) => {
+    const w = rauw[i];
+    if (w) uit[k.slice("week:".length)] = w;
+  });
+  return uit;
+}
+
 async function leesEigenProducten(): Promise<{ barcode: string; product: Product }[]> {
   const sleutels: string[] = [];
   let cursor = "0";
@@ -215,6 +243,9 @@ async function herstelGedeeld(g: BackupBestand["gedeeld"]): Promise<void> {
   }
 
   await zetOfWis("week:current", g.week);
+  for (const [sleutel, w] of Object.entries(g.weken ?? {})) {
+    if (/^\d{4}-W\d{2}$/.test(sleutel) && w) await redis.set(`week:${sleutel}`, w);
+  }
   await zetOfWis("boodschappen:current", g.boodschappen);
   await zetOfWis("gebiedvolgorde:current", g.gebiedvolgorde);
   await zetOfWis("voorraad:current", g.voorraad);

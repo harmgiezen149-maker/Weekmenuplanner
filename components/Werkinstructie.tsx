@@ -249,6 +249,18 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="weken" titel="Meerdere weken plannen">
+          <p style={{ margin: "0 0 8px" }}>
+            Boven het weekmenu staan pijltjes. Daarmee blader je naar volgende week — of terug naar
+            vorige week om te zien wat je toen at. Elke week heeft zijn eigen planning; wat je in de
+            ene week zet raakt de andere niet.
+          </p>
+          <p style={{ margin: 0 }}>
+            De boodschappenlijst hoort bij de week die je aan het bekijken bent. Wil je de lijst voor
+            volgende week, blader dan eerst naar volgende week en genereer hem daarna.
+          </p>
+        </H>
+
         <H id="lijst" titel="Lijst">
           <p style={{ margin: "0 0 8px" }}>
             <strong>Weekmenu verversen</strong> genereert de lijst uit je planning: hoeveelheden
@@ -317,6 +329,15 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             <strong>Puntenschaal</strong> — de enige knop om het niveau te verschuiven. Op 1,0 kom je
             rond de 40 à 50 punten per dag uit, op 0,75 rond de 30. De schaal werkt met terugwerkende
             kracht op je hele logboek.
+          </p>
+        </H>
+
+        <H id="delen" titel="Delen en afdrukken">
+          <p style={{ margin: 0 }}>
+            In een geopend recept staan bovenaan twee knoppen erbij: delen en afdrukken. Delen zet
+            het recept als gewone tekst in je deelmenu of op je klembord — geen link, want die is
+            voor de ander alleen maar een loginscherm. Afdrukken geeft een schone pagina met alleen
+            het recept erop, zonder knoppen en zonder menubalk.
           </p>
         </H>
 

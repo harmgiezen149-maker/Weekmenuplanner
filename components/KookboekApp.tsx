@@ -6,13 +6,14 @@ import { comprimeerAfbeelding, fileNaarDataUrl } from "@/lib/afbeelding";
 import Bonscanner from "./Bonscanner";
 import type { BonKeuze } from "./Bonscanner";
 import { euroTekst, raamLijst } from "@/lib/prijzen";
+import { verschuifWeek, weekLabel, weekVan } from "@/lib/weeksleutel";
 import type { Prijsboek } from "@/lib/prijzen";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
-  Activity, ClipboardCheck, WifiOff, Receipt, Euro,
+  Activity, ClipboardCheck, WifiOff, Receipt, Euro, Share2, Printer,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -43,11 +44,12 @@ const api = {
   async deleteRecept(id: string): Promise<void> {
     await fetch(`/api/recipes/${id}`, { method: "DELETE" });
   },
-  async getWeek(): Promise<WeekState> {
-    const r = await fetch("/api/week", { cache: "no-store" }); return r.json();
+  async getWeek(sleutel?: string): Promise<WeekState & { week: string }> {
+    const q = sleutel ? `?week=${encodeURIComponent(sleutel)}` : "";
+    const r = await fetch(`/api/week${q}`, { cache: "no-store" }); return r.json();
   },
-  async saveWeek(w: WeekState): Promise<WeekState> {
-    const res = await fetch("/api/week", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(w) }); return res.json();
+  async saveWeek(sleutel: string, w: WeekState): Promise<WeekState> {
+    const res = await fetch(`/api/week?week=${encodeURIComponent(sleutel)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(w) }); return res.json();
   },
   async getBoodschappen(): Promise<Boodschappen> {
     const r = await fetch("/api/boodschappen", { cache: "no-store" }); return r.json();
@@ -97,9 +99,11 @@ const api = {
   async getReceptPunten(): Promise<{
     punten: ReceptPuntenKaart;
     profiel: boolean;
+    /** De weegdag uit het trackerprofiel; null zonder profiel. */
+    weegdag: number | null;
   }> {
     const r = await fetch("/api/tracker/recepten/punten", { cache: "no-store" });
-    if (!r.ok) return { punten: {}, profiel: false };
+    if (!r.ok) return { punten: {}, profiel: false, weegdag: null };
     return r.json();
   },
   async dagmenuNaarLogboek(datum: string, gerechten: { id: string; maaltijd: string }[]): Promise<{
@@ -136,6 +140,13 @@ const rondLijstAantal = (hoev: number, eenheid: string): number =>
 const HOOFD_MAALTIJD = "Avondeten";
 const EXTRA_MAALTIJDEN = ["Ontbijt", "Lunch", "Toetje"] as const;
 const slotKey = (dag: string, maaltijd: string) => `${dag}|${maaltijd}`;
+
+/** Een hoeveelheid zoals je hem opschrijft: 2, 2,5 — geen 2.5 en geen 2,50. */
+function getalTekst(n: number): string {
+  const getal = Number(n);
+  if (!Number.isFinite(getal) || getal === 0) return "";
+  return String(Math.round(getal * 100) / 100).replace(".", ",");
+}
 
 // Herkent standaard kruiden/smaakmakers die vrijwel iedereen in huis heeft
 // (zout, peper en varianten). Gebruikt bij de controlevraag na het importeren.
@@ -184,10 +195,15 @@ export type PuntenStatus = "laden" | "klaar" | "geen-profiel";
 export default function App() {
   const [recepten, setRecepten] = useState<Recept[]>([]);
   const [week, setWeek] = useState<WeekState>({ startDag: 0, slots: {} });
+  // Welke week je aan het plannen bent. Het weekmenu en de boodschappenlijst
+  // volgen dezelfde keuze: je plant een week en maakt daarna de lijst ervoor.
+  const [weekSleutel, setWeekSleutel] = useState(() => weekVan(new Date().toISOString().slice(0, 10)));
   const [boodschappen, setBoodschappen] = useState<Boodschappen>({ items: [] });
   const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
   const [voorraad, setVoorraad] = useState<Voorraad>({ items: [] });
   const [prijsboek, setPrijsboek] = useState<Prijsboek>({});
+  // De weegdag uit de tracker: daar begint de trackerweek. Null zonder profiel.
+  const [weegdag, setWeegdag] = useState<number | null>(null);
   const [tab, setTab] = useState("recepten");
   // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
   // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
@@ -198,7 +214,7 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const [r, w, b, g, v, pb] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad(),
+      const [r, w, b, g, v, pb] = await Promise.all([api.getRecepten(), api.getWeek(weekSleutel), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad(),
         // Het prijsboek is een extra: gaat het ophalen mis, dan verdwijnt
         // alleen de raming en werkt de lijst gewoon door.
         api.getPrijsboek().catch(() => ({ boek: {} as Prijsboek }))]);
@@ -209,6 +225,7 @@ export default function App() {
       api.getReceptPunten()
         .then((d) => {
           setReceptPunten(d.punten);
+          setWeegdag(d.weegdag);
           setPuntenStatus(d.profiel ? "klaar" : "geen-profiel");
         })
         .catch(() => {
@@ -234,8 +251,30 @@ export default function App() {
   useEffect(() => {
     if (laden) return;
     if (eersteWeek.current) { eersteWeek.current = false; return; }
-    api.saveWeek(week);
-  }, [week, laden]);
+    api.saveWeek(weekSleutel, week);
+  }, [week, weekSleutel, laden]);
+
+  /**
+   * Naar een andere week bladeren.
+   *
+   * Het opslaan hierboven mag niet meteen afgaan met de nieuwe inhoud onder de
+   * oude sleutel — dan zou de ene week de andere overschrijven. Daarom eerst de
+   * inhoud ophalen en pas daarna beide tegelijk zetten, met de opslag een keer
+   * overgeslagen.
+   */
+  const [weekLaadt, setWeekLaadt] = useState(false);
+  const wisselWeek = useCallback(async (nieuw: string) => {
+    if (nieuw === weekSleutel || weekLaadt) return;
+    setWeekLaadt(true);
+    try {
+      const w = await api.getWeek(nieuw);
+      eersteWeek.current = true;
+      setWeekSleutel(nieuw);
+      setWeek({ startDag: Number(w.startDag) || 0, slots: w.slots || {} });
+    } catch {
+      /* dan blijf je gewoon in de week waar je zat */
+    } finally { setWeekLaadt(false); }
+  }, [weekSleutel, weekLaadt]);
 
   // --- Boodschappenlijst: opslaan + near-realtime synchronisatie -------------
   // Meerdere personen kunnen tegelijk in de lijst werken. We pollen de server
@@ -478,6 +517,8 @@ export default function App() {
               <Weekmenu
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onUpdateRecept={updateRecept}
+                weekSleutel={weekSleutel} onWisselWeek={wisselWeek} weekLaadt={weekLaadt}
+                weegdag={weegdag}
               />
             )}
             {tab === "boodschappen" && (
@@ -485,7 +526,7 @@ export default function App() {
                 recepten={recepten} week={week} dagen={dagenInVolgorde}
                 boodschappen={boodschappen} setBoodschappen={setBoodschappen}
                 gebiedVolgorde={gebiedVolgorde} openstaand={boodOpenstaand}
-                prijsboek={prijsboek}
+                prijsboek={prijsboek} weekSleutel={weekSleutel}
               />
             )}
             {tab === "voorraad" && (
@@ -681,7 +722,11 @@ function ReceptenLijst({
       const z = zoek.toLowerCase();
       const inTitel = r.titel.toLowerCase().includes(z);
       const inIngredient = r.ingredienten.some((i) => (i.naam || "").toLowerCase().includes(z));
-      if (!inTitel && !inIngredient) return false;
+      // Ook in de bereiding: "oven", "marineren" en "wok" staan zelden in de
+      // titel of de ingredientenlijst, maar dat is wel waar je op zoekt als je
+      // weet wat voor avond het is.
+      const inBereiding = (r.bereiding || "").toLowerCase().includes(z);
+      if (!inTitel && !inIngredient && !inBereiding) return false;
     }
     if (fKeuken && r.keuken !== fKeuken) return false;
     if (fHoofd && r.hoofd !== fHoofd) return false;
@@ -705,7 +750,7 @@ function ReceptenLijst({
     <div>
       <div style={S.searchWrap}>
         <Search size={18} style={{ color: "var(--sub)" }} />
-        <input style={S.searchInput} placeholder="Zoek op naam of ingrediënt..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
+        <input style={S.searchInput} placeholder="Zoek op naam, ingrediënt of bereiding..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
       </div>
 
       <div style={S.filterRow}><Chips opts={MAALTIJDEN} val={fMaaltijd} set={setFMaaltijd} /></div>
@@ -1023,6 +1068,7 @@ function ReceptModal({
   const [statusFout, setStatusFout] = useState("");
   const [vultAlles, setVultAlles] = useState(false);
   const [vulUitslag, setVulUitslag] = useState<VulUitslag | null>(null);
+  const [gedeeld, setGedeeld] = useState("");
 
   const laadStatus = useCallback(async () => {
     try {
@@ -1106,16 +1152,64 @@ function ReceptModal({
   const bezigItem = aanvullen != null ? r.ingredienten[aanvullen] : null;
   const bezigStatus = aanvullen != null ? status?.[aanvullen] : null;
 
+  /**
+   * Het recept als platte tekst, om te delen of te plakken.
+   *
+   * Geen link: een link naar deze app is voor de ontvanger een loginscherm.
+   * Wie een recept deelt wil dat de ander het kan lezen, niet dat hij een
+   * account moet maken.
+   */
+  const alsTekst = () => {
+    const regels = [
+      r.titel,
+      "",
+      `Voor ${r.personen} ${r.personen === 1 ? "persoon" : "personen"} · ${r.tijd} minuten · ${r.moeilijkheid}`,
+      "",
+      "Ingrediënten:",
+      ...r.ingredienten
+        .filter((i) => (i.naam || "").trim())
+        .map((i) => `- ${getalTekst(i.hoev)} ${i.eenheid || ""} ${i.naam}`.replace(/\s+/g, " ").trim()),
+    ];
+    if ((r.bereiding || "").trim()) regels.push("", "Bereiding:", r.bereiding.trim());
+    return regels.join("\n");
+  };
+
+  const deel = async () => {
+    const tekst = alsTekst();
+    // Het deelmenu van de telefoon als het er is; anders het klembord, want
+    // een knop die niets doet is erger dan een knop die iets anders doet.
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({ title: r.titel, text: tekst });
+        return;
+      } catch {
+        // Geannuleerd of geweigerd: dan alsnog het klembord proberen.
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(tekst);
+      setGedeeld("Recept naar het klembord gekopieerd.");
+      setTimeout(() => setGedeeld(""), 2500);
+    } catch {
+      setGedeeld("Delen lukte niet op dit apparaat.");
+      setTimeout(() => setGedeeld(""), 2500);
+    }
+  };
+
   return (
     <div style={S.modalBg} onClick={onClose}>
-      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()} data-print="recept">
         <div style={S.modalHead}>
           <h2 style={S.modalTitle}>{r.titel}</h2>
-          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 2, flexShrink: 0 }} data-print-verbergen>
+            <button onClick={deel} style={S.iconBtn} aria-label="Delen of kopiëren"><Share2 size={18} /></button>
+            <button onClick={() => window.print()} style={S.iconBtn} aria-label="Afdrukken"><Printer size={18} /></button>
             <button onClick={onBewerk} style={S.iconBtn} aria-label="Bewerken"><PencilLine size={19} /></button>
             <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
           </div>
         </div>
+
+        {gedeeld && <div style={S.deelMelding}>{gedeeld}</div>}
 
         {r.afbeelding && (
           <button onClick={() => setZoom(true)} style={S.detailAfbWrap}>
@@ -1807,10 +1901,15 @@ function normaliseer(p: any): Partial<Recept> {
 // WEEKMENU
 // ============================================================================
 function Weekmenu({
-  recepten, week, setWeek, dagen, onUpdateRecept,
+  recepten, week, setWeek, dagen, onUpdateRecept, weekSleutel, onWisselWeek, weekLaadt, weegdag,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>; dagen: readonly string[];
   onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
+  weekSleutel: string;
+  onWisselWeek: (sleutel: string) => void;
+  weekLaadt: boolean;
+  /** Op welke dag de trackerweek begint. Null zonder trackerprofiel. */
+  weegdag: number | null;
 }) {
   const [kiesDag, setKiesDag] = useState<string | null>(null);
   const [verplaatsVan, setVerplaatsVan] = useState<string | null>(null);
@@ -1910,8 +2009,24 @@ function Weekmenu({
 
   const aantalGepland = Object.keys(week.slots).length;
 
+  const vandaag = new Date().toISOString().slice(0, 10);
+
   return (
     <div>
+      <div style={S.weekKiezer}>
+        <button onClick={() => onWisselWeek(verschuifWeek(weekSleutel, -1))}
+          style={S.iconBtnSm} aria-label="Vorige week" disabled={weekLaadt}>
+          <ChevronLeft size={16} />
+        </button>
+        <span style={S.weekKiezerLabel}>
+          {weekLaadt ? <Loader2 size={14} className="spin" /> : weekLabel(weekSleutel, vandaag)}
+        </span>
+        <button onClick={() => onWisselWeek(verschuifWeek(weekSleutel, 1))}
+          style={S.iconBtnSm} aria-label="Volgende week" disabled={weekLaadt}>
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
       <div style={S.weekHead}>
         <div>
           <span style={S.label}>Startdag</span>
@@ -1920,6 +2035,11 @@ function Weekmenu({
             <span style={S.dayStepperLabel}>{DAGEN[week.startDag]}</span>
             <button onClick={() => setStartDag(week.startDag + 1)} style={S.iconBtnSm} aria-label="Volgende dag"><ChevronRight size={16} /></button>
           </div>
+          {weegdag != null && weegdag !== week.startDag && (
+            <button style={S.weekGelijk} onClick={() => setStartDag(weegdag)}>
+              Je trackerweek begint op {DAGEN[weegdag].toLowerCase()} · gelijkzetten
+            </button>
+          )}
         </div>
         {aantalGepland > 0 && (
           <button onClick={startLeegmaken} style={S.leegBtn}><Trash2 size={14} /> Leegmaken</button>
@@ -2400,7 +2520,9 @@ function KiesGerechtModal({
   const gefilterd = recepten.filter((r) => {
     if (!zoek) return true;
     const z = zoek.toLowerCase();
-    return r.titel.toLowerCase().includes(z) || r.ingredienten.some((i) => (i.naam || "").toLowerCase().includes(z));
+    return r.titel.toLowerCase().includes(z)
+      || r.ingredienten.some((i) => (i.naam || "").toLowerCase().includes(z))
+      || (r.bereiding || "").toLowerCase().includes(z);
   });
   return (
     <div style={S.modalBg} onClick={onClose}>
@@ -2415,7 +2537,7 @@ function KiesGerechtModal({
           <>
             <div style={{ ...S.searchWrap, marginTop: 4 }}>
               <Search size={18} style={{ color: "var(--sub)" }} />
-              <input style={S.searchInput} placeholder="Zoek op naam of ingrediënt..." value={zoek} onChange={(e) => setZoek(e.target.value)} autoFocus />
+              <input style={S.searchInput} placeholder="Zoek op naam, ingrediënt of bereiding..." value={zoek} onChange={(e) => setZoek(e.target.value)} autoFocus />
             </div>
             {gefilterd.length === 0 && <p style={S.empty}>Geen recept gevonden voor "{zoek}".</p>}
             {gefilterd.map((r) => (
@@ -2477,6 +2599,7 @@ function Voorraadstand({
 // ============================================================================
 function BoodschappenPagina({
   recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde, openstaand, prijsboek,
+  weekSleutel,
 }: {
   recepten: Recept[]; week: WeekState; dagen: readonly string[];
   boodschappen: Boodschappen; setBoodschappen: React.Dispatch<React.SetStateAction<Boodschappen>>;
@@ -2485,6 +2608,8 @@ function BoodschappenPagina({
   openstaand: boolean;
   /** Laatst betaalde prijzen, voor de raming onder aan de lijst. */
   prijsboek: Prijsboek;
+  /** Welke week het weekmenu op dit moment toont. */
+  weekSleutel: string;
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
@@ -2674,6 +2799,11 @@ function BoodschappenPagina({
           </span>
         </div>
       )}
+
+      <p style={S.boodWeek}>
+        Uit het weekmenu van <strong>{weekLabel(weekSleutel, new Date().toISOString().slice(0, 10)).toLowerCase()}</strong>.
+        Blader op het tabblad Weekmenu naar een andere week om die lijst te maken.
+      </p>
 
       <div style={S.boodTopBar}>
         <button
@@ -3526,6 +3656,11 @@ const S: Record<string, React.CSSProperties> = {
   voorraadStandBtn: { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", borderRadius: 6, background: "var(--bg)", color: "var(--sub)", cursor: "pointer", padding: 0 },
   voorraadStandTekst: { fontSize: 11.5, color: "var(--sub)", minWidth: 52, textAlign: "center" },
   voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
+  boodWeek: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 10px" },
+  weekGelijk: { display: "block", marginTop: 6, background: "none", border: "none", padding: 0, fontSize: 11.5, lineHeight: 1.4, color: "var(--accent)", textAlign: "left", cursor: "pointer", textDecoration: "underline" },
+  weekKiezer: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "6px 8px", marginBottom: 12 },
+  weekKiezerLabel: { flex: 1, textAlign: "center", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 22 },
+  deelMelding: { background: "var(--accent-soft)", color: "var(--accent)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, margin: "0 0 10px" },
   onvolledigVak: { background: "var(--surface)", border: "1px solid var(--gold)", borderRadius: 14, marginBottom: 14, overflow: "hidden" },
   onvolledigKop: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "11px 12px", background: "none", border: "none", color: "#7a4d09", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   onvolledigUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 10px" },
