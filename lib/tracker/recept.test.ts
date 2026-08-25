@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   ingredientNaarGram, schoonIngredient, matchIngredient, matchNaarComponent,
-  berekenReceptPunten, receptVingerafdruk,
+  berekenReceptPunten, receptVingerafdruk, REKENVERSIE,
 } from "./recept.ts";
 import { toonPunten } from "./points.ts";
 
@@ -38,10 +38,54 @@ test("zonder bekende portiegrootte valt een stuk terug op 100 g, en dat is onzek
   assert.equal(r.onzeker, true);
 });
 
-test("een onbekende maat wordt gemeld in plaats van stilzwijgend geraden", () => {
+test("een onbekende maat telt niet mee in plaats van stilzwijgend geraden", () => {
   const r = ingredientNaarGram(1, "vleugje");
-  assert.equal(r.onzeker, true);
-  assert.match(r.aanname, /onbekende maat/);
+  assert.equal(r.onbekend, true);
+  assert.equal(r.grams, 0);
+  assert.match(r.aanname, /niet herkend/);
+});
+
+test("lepelmaten worden herkend, ook in het meervoud en met punten", () => {
+  // De aanleiding: "2 koffielepel" viel eerst terug op 100 g per stuk, en dat
+  // maakte van een scheutje olie het zwaarste ingredient van het recept.
+  assert.equal(ingredientNaarGram(2, "koffielepel").grams, 10);
+  assert.equal(ingredientNaarGram(2, "koffielepel").onbekend, false);
+  assert.equal(ingredientNaarGram(1, "kl").grams, 5);
+
+  assert.equal(ingredientNaarGram(2, "eetlepels").grams, 30);
+  assert.equal(ingredientNaarGram(2, "E.L.").grams, 30);
+  assert.equal(ingredientNaarGram(2, "  El ").grams, 30);
+  assert.equal(ingredientNaarGram(3, "theelepels").grams, 15);
+  assert.equal(ingredientNaarGram(1, "TL.").grams, 5);
+});
+
+test("Nederlandse gewichtsmaten en verpakkingen worden herkend", () => {
+  assert.equal(ingredientNaarGram(1, "ons").grams, 100);
+  assert.equal(ingredientNaarGram(1, "pond").grams, 500);
+  assert.equal(ingredientNaarGram(2, "blikjes").grams, 800);
+  assert.equal(ingredientNaarGram(1, "snufje").grams, 1);
+  assert.equal(ingredientNaarGram(3, "takjes").grams, 9);
+});
+
+test('"portie" gebruikt de portiegrootte van het product', () => {
+  const brood = { grams: 35, label: "1 snee" };
+  const product = {
+    id: "b", name: "Brood", bron: "basis" as const, eenheid: "g" as const,
+    per100: {
+      kcal: 236, protein_g: 9, fat_g: 3.2, satfat_g: 0.7,
+      carbs_g: 38, sugar_g: 3, fiber_g: 6.5, category: "default" as const,
+    },
+    portie: brood,
+  };
+  assert.equal(ingredientNaarGram(2, "portie", product).grams, 70);
+  assert.equal(ingredientNaarGram(2, "porties", product).grams, 70);
+});
+
+test("twee koffielepels olie leveren ongeveer een punt op, geen twintig", () => {
+  const uit = berekenReceptPunten([{ naam: "olijfolie", hoev: 2, eenheid: "koffielepel" }], 2);
+  assert.equal(uit.maatOnbekend.length, 0);
+  assert.ok(uit.perPortiePunten > 0);
+  assert.ok(uit.perPortiePunten < 2, `kreeg ${uit.perPortiePunten} punten per portie`);
 });
 
 // -- namen opschonen ---------------------------------------------------------
@@ -131,13 +175,36 @@ test("een leeg recept geeft nul zonder te klappen", () => {
   assert.deepEqual(r.nietHerkend, []);
 });
 
-test("onzekere aannames worden apart gemeld", () => {
+test("een onleesbare maat wordt apart gemeld en telt niet mee", () => {
   const r = berekenReceptPunten([
     { naam: "kipfilet", hoev: 500, eenheid: "g" },
     { naam: "ui", hoev: 2, eenheid: "vleugje" },
   ], 2);
-  assert.ok(r.onzeker.includes("ui"), "onbekende maat hoort gemeld te worden");
-  assert.ok(!r.onzeker.includes("kipfilet"));
+  assert.ok(r.maatOnbekend.includes("ui"), "onleesbare maat hoort gemeld te worden");
+  // Niet ook nog als "onzeker": dat zou dezelfde regel twee keer melden.
+  assert.ok(!r.onzeker.includes("ui"));
+  assert.ok(!r.maatOnbekend.includes("kipfilet"));
+
+  // Alleen de kip telt mee; de ui levert geen punten en ook geen 100 g aanname.
+  const alleen = berekenReceptPunten([{ naam: "kipfilet", hoev: 500, eenheid: "g" }], 2);
+  assert.equal(r.perPortiePunten, alleen.perPortiePunten);
+});
+
+test("een stuk zonder bekende portiegrootte blijft op 100 g staan", () => {
+  // Anders dan bij een lepel is 100 g voor een stuk groente een verdedigbare
+  // aanname: die zit binnen een factor drie. Bij een lepel zat hij er twintig
+  // keer naast, en daar is de aanname daarom weg.
+  const r = ingredientNaarGram(1, "stuk");
+  assert.equal(r.grams, 100);
+  assert.equal(r.onbekend, false);
+  assert.equal(r.onzeker, true);
+});
+
+test("de rekenversie zit in de vingerafdruk", () => {
+  // Zonder dit zouden al doorgerekende recepten hun oude uitkomst houden, ook
+  // nadat de omrekening is verbeterd.
+  assert.ok(receptVingerafdruk(KIP_BROCCOLI, 4).length > 0);
+  assert.notEqual(REKENVERSIE, 1);
 });
 
 // -- cache-invalidatie -------------------------------------------------------
@@ -231,7 +298,7 @@ test("een bijdrage onder nul wordt niet afgekapt", () => {
       },
     },
     score: 100,
-    omrekening: { grams: 100, aanname: "100 g", onzeker: false },
+    omrekening: { grams: 100, aanname: "100 g", onzeker: false, onbekend: false },
     overgeslagen: false,
   });
 
@@ -247,4 +314,20 @@ test("kipfilet levert een positieve maar lage bijdrage", () => {
   const uit = berekenReceptPunten([{ naam: "kipfilet", hoev: 400, eenheid: "g" }], 4);
   const bijdrage = bijdragePerPortie(uit.matches, uit.personen)[0] as number;
   assert.ok(bijdrage > 0.5 && bijdrage < 1.5, `kreeg ${bijdrage}`);
+});
+
+test("een ingredient valt in hooguit één van de twee gatenlijsten", () => {
+  // Saffraan is noch als product bekend, noch met een leesbare maat. Zou het in
+  // beide lijsten staan, dan telt het scherm het dubbel als "telt niet mee".
+  const r = berekenReceptPunten([
+    { naam: "kipfilet", hoev: 400, eenheid: "g" },
+    { naam: "saffraan", hoev: 1, eenheid: "vleugje" },
+    { naam: "ui", hoev: 2, eenheid: "vleugje" },
+  ], 2);
+
+  assert.deepEqual(r.nietHerkend, ["saffraan"]);
+  assert.deepEqual(r.maatOnbekend, ["ui"]);
+  // Twee van de drie tellen niet mee, en dat is precies de som van de lijsten.
+  assert.equal(r.nietHerkend.length + r.maatOnbekend.length, 2);
+  assert.equal(r.componenten.length, 1);
 });

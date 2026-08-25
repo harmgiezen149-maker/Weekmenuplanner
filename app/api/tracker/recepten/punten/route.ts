@@ -24,7 +24,8 @@ export async function GET() {
   ]);
   const schaal = profiel?.points_scale ?? 1;
 
-  const punten: Record<string, { punten: number; nietHerkend: number; totaal: number }> = {};
+  const punten: Record<string,
+    { punten: number; nietHerkend: number; maatOnbekend: number; totaal: number }> = {};
 
   for (const r of recepten) {
     const ingredienten = r.ingredienten.map((i) => ({
@@ -43,6 +44,9 @@ export async function GET() {
       // Afronden gebeurt hier, want dit is puur voor weergave.
       punten: Math.max(0, Math.round(berekend.perPortiePunten * schaal)),
       nietHerkend: berekend.nietHerkend.length,
+      // Een onleesbare maat telt net zo goed niet mee als een onbekend product;
+      // het totaal is dan ook onvolledig en de badge hoort dat te laten zien.
+      maatOnbekend: (berekend.maatOnbekend ?? []).length,
       totaal: ingredienten.length,
     };
   }

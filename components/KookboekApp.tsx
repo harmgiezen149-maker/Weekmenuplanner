@@ -17,6 +17,7 @@ import {
 } from "@/lib/types";
 import Aanvullen from "./tracker/Aanvullen";
 import Werkinstructie from "./Werkinstructie";
+import { STANDAARD_MATEN } from "@/lib/tracker/recept";
 import type { Nutrients } from "@/lib/tracker/types";
 import { beschrijfMislukt } from "@/lib/tracker/schatting";
 import type { MislukteSchatting } from "@/lib/tracker/schatting";
@@ -81,7 +82,7 @@ const api = {
     return res.json();
   },
   async getReceptPunten(): Promise<{
-    punten: Record<string, { punten: number; nietHerkend: number; totaal: number }>;
+    punten: ReceptPuntenKaart;
     profiel: boolean;
   }> {
     const r = await fetch("/api/tracker/recepten/punten", { cache: "no-store" });
@@ -178,7 +179,16 @@ function comprimeerAfbeelding(bron: string, kwaliteit = 0.82, maxDim = MAX_DIM):
 // APP
 // ============================================================================
 /** Punten per portie per recept, uit de tracker. */
-export type ReceptPuntenKaart = Record<string, { punten: number; nietHerkend: number; totaal: number }>;
+export type ReceptPuntenKaart = Record<string, ReceptPuntenInfo>;
+
+export interface ReceptPuntenInfo {
+  punten: number;
+  /** Ingredienten zonder bekend product. */
+  nietHerkend: number;
+  /** Ingredienten met een maat die niet te lezen was. */
+  maatOnbekend?: number;
+  totaal: number;
+}
 
 /**
  * Of de punten al binnen zijn.
@@ -423,6 +433,12 @@ export default function App() {
 
   return (
     <div style={S.app}>
+      {/* Voorstellen, geen dwang: een import levert vrije tekst en die moet
+          gewoon door kunnen. De omrekening normaliseert wat er binnenkomt. */}
+      <datalist id="standaard-maten">
+        {STANDAARD_MATEN.map((m) => <option key={m} value={m} />)}
+      </datalist>
+
       <header style={S.header}>
         <ChefHat size={22} style={{ color: "var(--accent)" }} />
         <h1 style={S.appTitle}>Kookboek</h1>
@@ -805,7 +821,7 @@ function NaarLijstDialog({
 }
 
 function ReceptKaart({ r, punten, puntenStatus, onOpen, onPlaats }: {
-  r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  r: Recept; punten?: ReceptPuntenInfo;
   puntenStatus: PuntenStatus;
   onOpen: () => void; onPlaats: () => void;
 }) {
@@ -845,7 +861,7 @@ function ReceptKaart({ r, punten, puntenStatus, onOpen, onPlaats }: {
  * Zonder trackerprofiel komen er nooit punten; dan staat hier niets.
  */
 function PuntenPlek({ punten, status }: {
-  punten?: { punten: number; nietHerkend: number; totaal: number };
+  punten?: ReceptPuntenInfo;
   status: PuntenStatus;
 }) {
   if (status === "laden") {
@@ -869,12 +885,12 @@ function PuntenPlek({ punten, status }: {
  * Kon niet elk ingrediënt worden herkend, dan staat er een tilde voor: het
  * getal is dan aan de lage kant en dat hoort zichtbaar te zijn.
  */
-function PuntenTag({ punten, nietHerkend, totaal }: {
-  punten: number; nietHerkend: number; totaal: number;
+function PuntenTag({ punten, nietHerkend, maatOnbekend = 0, totaal }: {
+  punten: number; nietHerkend: number; maatOnbekend?: number; totaal: number;
 }) {
-  const onvolledig = nietHerkend > 0;
+  const onvolledig = nietHerkend + maatOnbekend > 0;
   const uitleg = onvolledig
-    ? `${punten} punten per portie. ${nietHerkend} van de ${totaal} ingrediënten werden niet herkend, dus dit is aan de lage kant.`
+    ? `${punten} punten per portie. ${nietHerkend + maatOnbekend} van de ${totaal} ingrediënten tellen niet mee, dus dit is aan de lage kant.`
     : `${punten} punten per portie`;
 
   return (
@@ -894,9 +910,12 @@ function PuntenTag({ punten, nietHerkend, totaal }: {
  */
 interface IngredientStatus {
   ingredient: string;
-  product: { name: string; eenheid: "g" | "ml"; per100: Nutrients; bron: string } | null;
+  product: {
+    name: string; eenheid: "g" | "ml"; per100: Nutrients; bron: string;
+    portie?: { grams: number; label: string };
+  } | null;
   score: number;
-  omrekening: { aanname: string; onzeker: boolean };
+  omrekening: { aanname: string; onzeker: boolean; onbekend?: boolean };
   overgeslagen: boolean;
 }
 
@@ -910,7 +929,7 @@ function ReceptModal({
   r, punten, puntenStatus, onClose, onDelete, onScore, onPlaats, onBewerk, onNaarLijst, onGegeten,
   onPuntenVeranderd,
 }: {
-  r: Recept; punten?: { punten: number; nietHerkend: number; totaal: number };
+  r: Recept; punten?: ReceptPuntenInfo;
   puntenStatus: PuntenStatus;
   onClose: () => void; onDelete: () => void; onScore: (s: number) => void; onPlaats: () => void; onBewerk: () => void; onNaarLijst: () => void; onGegeten: (n: number) => void;
   onPuntenVeranderd: () => void;
@@ -954,7 +973,7 @@ function ReceptModal({
    * elk recept niet meer, dus de badges worden ook opnieuw opgehaald.
    */
   const bewaarIngredient = async (gegevens: {
-    naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients;
+    naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients; portie?: number;
   }) => {
     setBewaart(true); setStatusFout("");
     try {
@@ -1001,6 +1020,7 @@ function ReceptModal({
   };
 
   const onbekend = status?.filter((s) => s.overgeslagen).length ?? 0;
+  const puntenOnvolledig = punten ? punten.nietHerkend + (punten.maatOnbekend ?? 0) : 0;
   // Optelling van wat er getoond wordt. Hoort na afronden gelijk te zijn aan de
   // badge bovenaan; wijkt het af, dan zit het verschil in een ingredient dat
   // niet meetelt.
@@ -1046,17 +1066,29 @@ function ReceptModal({
         {puntenStatus === "klaar" && punten && (
           <p style={S.puntenUitleg}>
             <strong style={{ color: "var(--ink)" }}>
-              {punten.nietHerkend > 0 ? "Ongeveer " : ""}{punten.punten} punten per portie
+              {puntenOnvolledig > 0 ? "Ongeveer " : ""}{punten.punten} punten per portie
             </strong>{" "}
             bij {r.personen} {r.personen === 1 ? "persoon" : "personen"}, berekend uit de
             ingrediënten.
-            {punten.nietHerkend > 0 && (
+            {puntenOnvolledig > 0 && (
               <>
-                {" "}{punten.nietHerkend} van de {punten.totaal} ingrediënten{" "}
-                {punten.nietHerkend === 1 ? "staat" : "staan"} niet in de productlijst en{" "}
-                {punten.nietHerkend === 1 ? "telt" : "tellen"} niet mee, dus het echte aantal
-                ligt hoger. Hieronder zie je welke, en kun je{" "}
-                {punten.nietHerkend === 1 ? "hem" : "ze"} aanvullen.
+                {" "}{puntenOnvolledig} van de {punten.totaal} ingrediënten{" "}
+                {puntenOnvolledig === 1 ? "telt" : "tellen"} niet mee, dus het echte aantal ligt
+                hoger.
+                {punten.nietHerkend > 0 && (
+                  <>
+                    {" "}
+                    {punten.nietHerkend === 1 ? "Eén staat" : `${punten.nietHerkend} staan`} niet
+                    in de productlijst; die vul je hieronder aan.
+                  </>
+                )}
+                {(punten.maatOnbekend ?? 0) > 0 && (
+                  <>
+                    {" "}
+                    {punten.maatOnbekend === 1 ? "Bij één" : `Bij ${punten.maatOnbekend}`} is de
+                    maat niet te lezen; pas die aan met het potlood bovenaan.
+                  </>
+                )}
               </>
             )}
           </p>
@@ -1151,8 +1183,27 @@ function ReceptModal({
                 </li>
               );
             }
-            // De hoeveelheid is geraden ("1 stuk" of een onbekende maat), los van de
-            // vraag of de voedingswaarden geschat zijn.
+            // De maat zegt niets bruikbaars. Dan valt dit ingredient buiten de
+            // telling, en is de knop naar het productformulier de verkeerde
+            // uitweg: het recept zelf moet aangepast worden.
+            if (!st.overgeslagen && st.omrekening.onbekend) {
+              return (
+                <li key={k} style={S.ingRij}>
+                  <span style={{ ...S.ingKnop, cursor: "default" }}>
+                    <span style={S.ingKop}>
+                      <span>{i.naam}</span>
+                      <span style={S.ingAmt}>{i.hoev} {i.eenheid}</span>
+                    </span>
+                    <span style={S.ingOnbekend}>
+                      <Info size={12} /> {st.omrekening.aanname} — telt niet mee, pas de maat aan
+                      met het potlood
+                    </span>
+                  </span>
+                </li>
+              );
+            }
+            // De hoeveelheid is geraden ("1 stuk" zonder bekend gewicht), los van
+            // de vraag of de voedingswaarden geschat zijn.
             const hoeveelheidGeschat = !st.overgeslagen && (st.score < 50 || st.omrekening.onzeker);
             return (
               <li key={k} style={S.ingRij}>
@@ -1216,6 +1267,7 @@ function ReceptModal({
                   weergavenaam: bezigStatus.product.name,
                   eenheid: bezigStatus.product.eenheid,
                   per100: bezigStatus.product.per100,
+                  ...(bezigStatus.product.portie ? { portie: bezigStatus.product.portie.grams } : {}),
                 } : undefined}
                 onOpslaan={bewaarIngredient}
               />
@@ -1369,7 +1421,7 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
             <div style={S.ingRow}>
               <input style={{ ...S.input, flex: 2 }} placeholder="naam" value={i.naam} onChange={(e) => setIng(idx, "naam", e.target.value)} />
               <input style={{ ...S.input, flex: 1 }} placeholder="aantal" value={i.hoev} onChange={(e) => setIng(idx, "hoev", e.target.value)} />
-              <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={i.eenheid} onChange={(e) => setIng(idx, "eenheid", e.target.value)} />
+              <input style={{ ...S.input, flex: 1 }} placeholder="eenh." list="standaard-maten" value={i.eenheid} onChange={(e) => setIng(idx, "eenheid", e.target.value)} />
               <button onClick={() => delIng(idx)} style={S.iconBtnSm} aria-label="Verwijder"><X size={15} /></button>
             </div>
             <div style={S.ingRow2}>
@@ -2723,7 +2775,7 @@ function BoodItem({
           </div>
           <div style={S.boodEditRow}>
             <input style={{ ...S.input, flex: 1 }} type="number" placeholder="aantal" value={it.hoev} onChange={(e) => onHoev(Number(e.target.value))} />
-            <input style={{ ...S.input, flex: 1 }} placeholder="eenh." value={it.eenheid} onChange={(e) => onEenheid(e.target.value)} />
+            <input style={{ ...S.input, flex: 1 }} placeholder="eenh." list="standaard-maten" value={it.eenheid} onChange={(e) => onEenheid(e.target.value)} />
           </div>
           <div style={S.boodEditRow}>
             <select style={{ ...S.input, flex: 1 }} value={it.winkel} onChange={(e) => onWinkel(e.target.value)}>

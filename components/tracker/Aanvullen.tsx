@@ -34,9 +34,11 @@ export default function Aanvullen({
   ingredient: string;
   bezig: boolean;
   /** Huidige waarden als dit ingrediënt al herkend werd. */
-  begin?: { weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients };
+  begin?: { weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients; portie?: number };
   onOpslaan: (gegevens: {
     naam: string; weergavenaam: string; eenheid: "g" | "ml"; per100: Nutrients;
+    /** Gewicht van één stuk, als dat een zinnige maat is. */
+    portie?: number;
   }) => void;
   /** Weglaten als het scherm al een eigen sluitknop heeft. */
   onTerug?: () => void;
@@ -45,6 +47,7 @@ export default function Aanvullen({
   const [eenheid, setEenheid] = useState<"g" | "ml">(begin?.eenheid ?? "g");
   const [categorie, setCategorie] = useState<Category>(begin?.per100.category ?? "default");
   const [v, setV] = useState<Velden>(begin ? naarVelden(begin.per100) : LEEG);
+  const [portie, setPortie] = useState(begin?.portie ? String(begin.portie) : "");
   const [schat, setSchat] = useState(false);
   const [fout, setFout] = useState("");
   const [toelichting, setToelichting] = useState("");
@@ -169,8 +172,18 @@ export default function Aanvullen({
       </div>
       <div style={T.veldRij}>
         <Getal id="vez" label="Vezels (g)" waarde={v.fiber_g} onChange={zet("fiber_g")} />
-        <div style={{ flex: 1 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <label style={T.label} htmlFor="av-portie">Gewicht per stuk (g)</label>
+          <input id="av-portie" style={T.veld} inputMode="decimal" value={portie}
+            placeholder="optioneel"
+            onChange={(e) => setPortie(e.target.value.replace(",", "."))} />
+        </div>
       </div>
+      <p style={{ ...T.hint, marginBottom: 12 }}>
+        Staat dit ingrediënt in een recept als "1 stuk" of "2 stuks", dan wordt dit gewicht
+        gebruikt. Vul je niets in, dan rekent de app met 100 g per stuk en zie je dat als aanname
+        bij het recept staan.
+      </p>
 
       <div style={T.veldVak}>
         <label style={T.label} htmlFor="av-cat">Soort product</label>
@@ -186,6 +199,7 @@ export default function Aanvullen({
           weergavenaam: weergavenaam.trim(),
           eenheid,
           per100,
+          ...(getal(portie) > 0 ? { portie: getal(portie) } : {}),
         })}>
         {bezig
           ? <><Loader2 size={16} className="spin" /> Opslaan...</>

@@ -296,6 +296,32 @@ Twee stappen kunnen daarbij misgaan, en dat hoor je te zien:
   zijn. Liever een getal met een kanttekening dan een getal dat doet alsof het
   klopt.
 
+#### Maten
+
+De maattabel kent lepels, kopjes, verpakkingen en de Nederlandse gewichtsmaten
+(ons, pond). Eenheden worden eerst genormaliseerd — kleine letters, geen punten,
+geen meervoud — zodat `E.L.`, `eetlepels` en `el` allemaal dezelfde maat vinden.
+Het receptformulier stelt de gangbare maten voor, maar dwingt niets af: een
+import levert vrije tekst en die moet gewoon door kunnen.
+
+**Een maat die niet herkend wordt, telt niet mee.** Vroeger viel zo'n maat terug
+op 100 g per stuk, en dat liep flink mis: `2 koffielepel olijfolie` werd 200 g
+olie en leverde 19,5 punten op waar er 0,6 hoort te staan — vier vijfde van een
+recepttotaal, uit een getal dat nergens op sloeg. Nu blijft dat ingrediënt buiten
+de telling en staat er bij welke maat niet gelezen kon worden.
+
+Bij **stuks** ligt dat anders. Daar is 100 g een verdedigbare aanname: een stuk
+groente of fruit zit meestal binnen een factor drie daarvan, terwijl een lepel er
+twintig keer naast zat. Beter is het om het echte gewicht in te vullen — dat kan
+per ingrediënt bij *Gewicht per stuk*, en daarna geldt het voor elk recept waar
+het in zit.
+
+De rekenregels hebben een eigen versienummer (`REKENVERSIE`) dat meetelt in de
+vingerafdruk van een recept. Verbetert de omrekening, dan verschuift die
+vingerafdruk en wordt elk recept opnieuw doorgerekend. Zonder dat houdt een al
+doorgerekend recept zijn oude uitkomst, ook als die inmiddels fout is — de code
+klopt dan wel, de cache niet.
+
 #### Ontbrekende ingrediënten aanvullen
 
 Onder de melding staat elk niet-herkend ingrediënt met een knop **Aanvullen**.

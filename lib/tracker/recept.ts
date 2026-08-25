@@ -21,34 +21,87 @@ import type { IngredientBibliotheek } from "./ingredienten";
 /**
  * Gewicht in gram voor huishoudelijke maten. Ruwe schattingen — daarom staat
  * bij elk ingredient wat er is aangenomen, zodat je het kunt bijstellen.
+ *
+ * Alleen enkelvoud: `normaliseerEenheid` haalt punten en meervoud eraf voordat
+ * hier gezocht wordt. Onregelmatige meervouden staan er wel apart in.
+ *
+ * Vloeistofmaten staan als gram. Voor water klopt dat, voor olie zit je er acht
+ * procent naast; dat valt weg tegen de onzekerheid van "een scheut".
  */
 const MAAT_IN_GRAM: Record<string, number> = {
-  g: 1, gr: 1, gram: 1,
-  kg: 1000,
+  // Exacte maten.
+  g: 1, gr: 1, gram: 1, kg: 1000, ons: 100, pond: 500,
   ml: 1, cl: 10, dl: 100, l: 1000, liter: 1000,
-  el: 15, eetlepel: 15, eetlepels: 15, "e.l.": 15,
-  tl: 5, theelepel: 5, theelepels: 5, "t.l.": 5,
-  snufje: 1, mespunt: 2,
-  teen: 5, tenen: 5, teentje: 5, teentjes: 5,
-  blik: 400, blikje: 400,
-  pak: 500, pakje: 250,
-  bosje: 30, bos: 30,
-  plak: 20, plakje: 20, plakken: 20, plakjes: 20,
-  snee: 35, sneetje: 35, sneetjes: 35, sneden: 35,
+
+  // Lepels. Een koffielepel geldt in Nederlands en Vlaams recepttaalgebruik als
+  // theelepel; de officiele koffielepel van 2 ml komt in recepten niet voor.
+  el: 15, eetlepel: 15, eetl: 15, soeplepel: 15, opscheplepel: 60,
+  tl: 5, theelepel: 5, theel: 5, kl: 5, koffielepel: 5,
+  dessertlepel: 10, scheut: 15, scheutje: 10, kneepje: 5, druppel: 1,
+
+  // Kopjes en glazen.
+  kop: 150, kopje: 125, mok: 250, glas: 200,
+
+  // Kleine hoeveelheden.
+  snuf: 1, snufje: 1, mespunt: 2, takje: 3, blaadje: 1, vel: 5,
+
+  // Stuks met een gangbaar gewicht.
+  teen: 5, teentje: 5, tenen: 5, stengel: 40,
+  plak: 20, plakje: 20, snee: 35, sneetje: 35, sneden: 35,
   handje: 25, hand: 25,
-  bol: 125, krop: 300, struik: 400,
-  scheut: 15, scheutje: 10,
+  bol: 125, krop: 300, struik: 400, bosje: 30, bos: 30,
+
+  // Verpakkingen.
+  blik: 400, blikje: 400, pot: 350, potje: 200,
+  pak: 500, pakje: 250, zak: 500, zakje: 100,
+  bakje: 150, doosje: 250, flesje: 300,
 };
 
+/** De maten die het receptformulier voorstelt, in gangbare volgorde. */
+export const STANDAARD_MATEN = [
+  "g", "gram", "kg", "ml", "l", "stuk", "el", "tl", "koffielepel",
+  "snufje", "teentje", "handje", "plak", "snee", "bosje", "takje",
+  "blik", "pot", "pak", "zakje", "bakje", "kop", "glas", "scheut", "portie",
+] as const;
+
+/**
+ * Maakt een eenheid vergelijkbaar: kleine letters, geen punten, geen meervoud.
+ * Zo vinden "E.L.", "eetlepels" en "el" allemaal dezelfde maat.
+ */
+export function normaliseerEenheid(eenheid: string): string {
+  return (eenheid || "").trim().toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
+}
+
+/** Zoekt een maat op, ook als hij in het meervoud staat. */
+function zoekMaat(e: string): number | undefined {
+  if (MAAT_IN_GRAM[e] != null) return MAAT_IN_GRAM[e];
+  for (const achtervoegsel of ["s", "es", "en"]) {
+    if (e.length > achtervoegsel.length && e.endsWith(achtervoegsel)) {
+      const enkel = e.slice(0, -achtervoegsel.length);
+      if (MAAT_IN_GRAM[enkel] != null) return MAAT_IN_GRAM[enkel];
+    }
+  }
+  return undefined;
+}
+
 /** Eenheden die "per stuk" betekenen: dan telt de portiegrootte van het product. */
-const STUK_EENHEDEN = ["", "st", "st.", "stuk", "stuks", "x", "stuk(s)"];
+const STUK_EENHEDEN = ["", "st", "stuk", "stuks", "x", "stuk(s)", "portie", "porties"];
 
 export interface Omrekening {
   grams: number;
   /** Hoe het gewicht tot stand kwam, voor in de uitleg. */
   aanname: string;
-  /** Onbekende eenheid: de gebruiker moet er even naar kijken. */
+  /** Aangenomen in plaats van gemeten: de gebruiker mag er even naar kijken. */
   onzeker: boolean;
+  /**
+   * De maat zegt niets bruikbaars. Dit ingredient telt niet mee.
+   *
+   * Er wordt met opzet niet meer teruggevallen op 100 g. Bij "2 koffielepel
+   * olie" leverde die aanname 19,5 punten op waar er 1 hoort te staan — vier
+   * vijfde van een recepttotaal, uit een getal dat nergens op sloeg. Liever een
+   * zichtbaar gat dan een totaal dat doet alsof het klopt.
+   */
+  onbekend: boolean;
 }
 
 /** Rekent hoeveelheid plus eenheid om naar gram, met het product als hulp. */
@@ -58,16 +111,16 @@ export function ingredientNaarGram(
   product?: Product
 ): Omrekening {
   const aantal = Number.isFinite(hoev) && hoev > 0 ? hoev : 1;
-  const e = (eenheid || "").trim().toLowerCase();
+  const e = normaliseerEenheid(eenheid);
 
   if (STUK_EENHEDEN.includes(e)) {
     const perStuk = product?.portie?.grams;
     return perStuk != null
-      ? { grams: aantal * perStuk, aanname: `${aantal} × ${product!.portie!.label} (${perStuk} g)`, onzeker: false }
-      : { grams: aantal * 100, aanname: `${aantal} stuk, aangenomen 100 g per stuk`, onzeker: true };
+      ? { grams: aantal * perStuk, aanname: `${aantal} × ${product!.portie!.label} (${perStuk} g)`, onzeker: false, onbekend: false }
+      : { grams: aantal * 100, aanname: `${aantal} stuk, aangenomen 100 g per stuk`, onzeker: true, onbekend: false };
   }
 
-  const factor = MAAT_IN_GRAM[e];
+  const factor = zoekMaat(e);
   if (factor != null) {
     const grams = aantal * factor;
     const exact = e === "g" || e === "gram" || e === "gr" || e === "ml";
@@ -75,13 +128,15 @@ export function ingredientNaarGram(
       grams,
       aanname: exact ? `${grams} ${e}` : `${aantal} ${eenheid} ≈ ${Math.round(grams)} g`,
       onzeker: false,
+      onbekend: false,
     };
   }
 
   return {
-    grams: aantal * 100,
-    aanname: `${aantal} ${eenheid}: onbekende maat, aangenomen 100 g`,
+    grams: 0,
+    aanname: `maat "${eenheid}" niet herkend`,
     onzeker: true,
+    onbekend: true,
   };
 }
 
@@ -163,7 +218,7 @@ export function matchIngredient(
 
 /** Maakt van een match een maaltijdonderdeel met eigen punten. */
 export function matchNaarComponent(m: IngredientMatch): MaaltijdComponent | null {
-  if (!m.product || m.overgeslagen) return null;
+  if (!m.product || m.overgeslagen || m.omrekening.onbekend) return null;
 
   const f = m.omrekening.grams / 100;
   const per100 = m.product.per100;
@@ -200,6 +255,14 @@ export interface ReceptPunten {
   nietHerkend: string[];
   /** Herkend, maar met lage zekerheid. Waard om na te kijken. */
   onzeker: string[];
+  /**
+   * Het product is bekend maar de maat niet te lezen; deze tellen niet mee.
+   *
+   * Los van `nietHerkend`, zodat de twee lijsten samen precies de ingredienten
+   * zijn die buiten het totaal vallen. Zat een ingredient in allebei, dan zou
+   * die telling te hoog uitvallen.
+   */
+  maatOnbekend: string[];
 }
 
 /**
@@ -258,10 +321,25 @@ export function berekenReceptPunten(
     personen: delen,
     nietHerkend: matches.filter((m) => m.overgeslagen).map((m) => m.ingredient),
     onzeker: matches
-      .filter((m) => !m.overgeslagen && (m.score < 50 || m.omrekening.onzeker))
+      .filter((m) => !m.overgeslagen && !m.omrekening.onbekend
+        && (m.score < 50 || m.omrekening.onzeker))
+      .map((m) => m.ingredient),
+    maatOnbekend: matches
+      .filter((m) => !m.overgeslagen && m.omrekening.onbekend)
       .map((m) => m.ingredient),
   };
 }
+
+/**
+ * Versie van de rekenregels zelf.
+ *
+ * Verhoog dit zodra de omrekening of de puntenformule verandert. De
+ * vingerafdruk schuift dan mee en elk recept wordt opnieuw doorgerekend —
+ * zonder dat houdt een al doorgerekend recept zijn oude uitkomst, ook als die
+ * inmiddels fout is. Precies wat er bij de lepelmaten misging: de code klopte,
+ * de cache niet.
+ */
+export const REKENVERSIE = 2;
 
 /**
  * Vingerafdruk van een recept. Verandert er iets aan de ingredienten of het
@@ -279,7 +357,7 @@ export function receptVingerafdruk(
 ): string {
   const tekst = ingredienten
     .map((i) => `${i.naam}|${i.hoev}|${i.eenheid}`)
-    .join("~") + `#${personen}@${eigenRevisie}`;
+    .join("~") + `#${personen}@${eigenRevisie}!${REKENVERSIE}`;
   let h = 2166136261;
   for (let i = 0; i < tekst.length; i++) {
     h ^= tekst.charCodeAt(i);
