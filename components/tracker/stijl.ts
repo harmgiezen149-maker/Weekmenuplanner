@@ -72,6 +72,7 @@ export const T: Record<string, React.CSSProperties> = {
   veldVak: { flex: 1, minWidth: 0, marginBottom: 12 },
   hint: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "6px 0 0" },
   sectieKop: { fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent)", margin: "18px 0 10px" },
+  subKop: { fontSize: 14, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--ink)", margin: "18px 0 6px" },
 
   chips: { display: "flex", gap: 6, flexWrap: "wrap" },
   chip: { padding: "7px 13px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 13, fontWeight: 600, cursor: "pointer" },

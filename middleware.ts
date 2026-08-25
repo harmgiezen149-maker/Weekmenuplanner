@@ -34,6 +34,9 @@ const OPEN: (string | RegExp)[] = [
   // zijn eigen controle (CRON_SECRET) en kan niets veranderen behalve een
   // melding versturen.
   /^\/api\/cron(\/|$)/,
+  // Je horloge stuurt activiteiten in met een eigen sleutel, buiten de browser
+  // om. Die route controleert die sleutel zelf en kan verder niets.
+  "/api/tracker/beweging/extern",
   "/manifest.webmanifest",
   "/favicon.ico",
   "/apple-touch-icon.png",

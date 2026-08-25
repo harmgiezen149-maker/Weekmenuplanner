@@ -516,6 +516,27 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="horloge" titel="Beweging uit je horloge">
+          <p style={{ margin: "0 0 8px" }}>
+            Onder <span style={S.route}>Instellingen → Beweging uit je horloge</span> staat een
+            plakveld. Kopieer je activiteiten uit Garmin Connect en plak ze erin — één per regel,
+            met de soort, de datum en de duur. De app leest <em>45:12</em>, <em>1:05:00</em> en
+            <em>90 min</em>, en wat hij niet herkent laat hij staan in plaats van te gokken.
+            Dezelfde regel twee keer plakken levert één activiteit op.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Wil je het automatisch, dan maak je daar een sleutel aan. Garmin Connect schrijft naar
+            Health Connect op je telefoon; Tasker kan dat uitlezen en met die sleutel naar de app
+            sturen. Eenmalig instellen, daarna gaat het vanzelf. Garmin zelf heeft geen koppeling
+            voor particulieren — vandaar de omweg.
+          </p>
+          <p style={{ margin: 0 }}>
+            De punten worden altijd door de app zelf berekend, uit je gewicht en je basaal
+            metabolisme. Wat je horloge als verbranding meestuurt telt niet mee: die getallen zijn
+            structureel te hoog, en het dagplafond van zes punten geldt onverkort.
+          </p>
+        </H>
+
         <H id="meldingen" titel="Herinneringen">
           <p style={{ margin: "0 0 8px" }}>
             Onder <span style={S.route}>Instellingen → Meldingen</span> zet je herinneringen aan.

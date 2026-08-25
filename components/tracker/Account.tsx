@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { T } from "./stijl";
 import Meldingen from "./Meldingen";
+import Koppeling from "./Koppeling";
 
 // Account, mensen en back-up. Staat onderaan het instellingenscherm en haalt
 // zijn eigen gegevens op: het heeft niets te maken met het profiel erboven en
@@ -84,6 +85,8 @@ export default function Account() {
       />
 
       <Meldingen />
+
+      <Koppeling />
 
       <Backup onFout={setFout} onMelding={(m) => { setMelding(m); setFout(""); }} />
     </>

@@ -1144,6 +1144,83 @@ nog openstaat.
 
 ---
 
+## Beweging uit je horloge
+
+### Waarom niet gewoon Garmin
+
+Garmin heeft geen koppeling voor particulieren: hun API vereist een
+rechtspersoon en een aanvraagprocedure. Strava's Standard-tier is sinds 30 juni
+2026 betaald (ongeveer €12 per maand). De Google Fit API is uitgezet, en de
+opvolger (Google Health API) bedient Fitbit en Pixel Watch, niet Garmin. Health
+Connect is Android-only en werkt alleen op het toestel zelf.
+
+Wat wél gratis kan: Garmin Connect schrijft naar Health Connect, een Tasker-
+plug-in leest daaruit, en Tasker doet een HTTP POST naar deze app. Eenmalig
+priegelen, daarna vanzelf. Daarnaast is er de weg die altijd werkt: een lijst
+kopiëren uit Garmin Connect en die plakken.
+
+### De sleutel
+
+`POST /api/tracker/beweging/extern` is de enige route in de app die zonder
+sessie bereikbaar is én gegevens wegschrijft. Daarom een eigen sleutel per
+persoon, die alleen dit ene kan.
+
+De sleutel staat leesbaar in Redis (`wl:p:<id>:koppelsleutel`, met
+`auth:koppel:<sleutel>` als omgekeerde opzoeking). Dat is bewust anders dan bij
+wachtwoorden: je moet hem in Tasker kunnen overtypen, ook een maand later, en
+een hash zou hem na één keer tonen onleesbaar maken. Wat hij kan is beperkt tot
+één handeling, en "nieuwe sleutel maken" trekt de oude op datzelfde moment in.
+
+Sleutels gaan niet mee in de back-up — het is een toegangsmiddel, en die horen
+niet in een bestand dat in je downloadmap belandt.
+
+### Niet twee keer boeken
+
+Tasker vuurt bij een wankele verbinding zonder blikken of blozen drie keer, en
+drie keer dezelfde hardloopsessie verruimt je budget met punten die je niet hebt
+verdiend. Elke binnengekomen training laat daarom een merkje achter in
+`wl:p:<id>:extern:<id>` (90 dagen), geschreven met `NX` zodat twee gelijktijdige
+aanroepen niet allebei denken dat zij de eerste zijn. Loopt het opslaan daarna
+alsnog mis, dan gaat het merkje weer weg — anders zou die training voorgoed
+overgeslagen zijn.
+
+Stuurt de bron geen eigen id mee, dan wordt er een gemaakt uit datum, soort en
+duur. Niet waterdicht (twee identieke wandelingen op één dag tellen dan als
+één), wel beter dan elke herhaling dubbel boeken.
+
+### Namen herkennen
+
+`herkenSoort()` brengt namen als `RUNNING`, `MOUNTAIN_BIKING` en
+`strength_training` terug tot de acht soorten die de app kent. Dat gaat op hele
+woorden, niet op substrings: "hardlopen" bevat "lopen", en een losse
+substring-treffer boekte een hardloopsessie daardoor als wandelen. Er wordt
+gezocht op aaneengesloten reeksen woorden, de langste eerst, zodat namen van
+twee woorden ook werken.
+
+Geen treffer betekent geen activiteit. Liever een afgewezen regel dan punten
+onder een verkeerde noemer — die vind je later niet meer terug.
+
+### De verbranding van het horloge telt niet mee
+
+Een `kcal` of `calories` die meekomt wordt genegeerd. De app rekent zelf uit
+MET, gewicht en basaal metabolisme, met de rustverbranding eraf en een plafond
+van zes punten per dag. Een externe schatting zou precies om die twee dempers
+heen lopen, en horloges schatten structureel te hoog.
+
+### Een lijst plakken
+
+`POST /api/tracker/beweging/plakken` leest een geplakte lijst — bewust zonder
+model. Het formaat is regelmatig genoeg om zelf te lezen, het kost dan niets,
+het werkt zonder API-sleutel, en het is te testen. Herkent `45:12`, `1:05:00`,
+`90 min`, `1u30`, en datums in ISO- en Nederlandse notatie. Wat niet herkend
+wordt komt terug als afgewezen regel, niet als gok.
+
+Aparte route van `/extern`, en niet dezelfde met een andere methode: die route
+staat bewust open voor je horloge, en een route die half open en half achter de
+inlog zit is een route waarvan niemand meer weet wat er geldt.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1164,6 +1241,9 @@ In Upstash Redis:
   voeding.
 - `wl:p:<persoon>:push` en `wl:p:<persoon>:melding:*` — de aangemelde apparaten,
   welke meldingen aan staan en wat er vandaag al verstuurd is.
+- `wl:p:<persoon>:koppelsleutel`, `auth:koppel:<sleutel>` en
+  `wl:p:<persoon>:extern:<id>` — de sleutel voor je horloge, bij wie hij hoort,
+  en welke trainingen al geboekt zijn.
 
 Eén database = één huishouden, met meerdere personen erin. Wil je later echt
 gescheiden huishoudens, dan is de weg dezelfde als bij `wl:p:` — een tussenstuk
@@ -1190,6 +1270,9 @@ app/
     backup/route.ts         GET back-up downloaden / POST terugzetten
     bon/route.ts            POST kassabon of productfoto lezen / PUT prijzen opnemen
     prijzen/route.ts        GET het prijsboek, voor de raming op de lijst
+    koppeling/route.ts      GET/POST/DELETE de sleutel voor je horloge
+    tracker/beweging/extern/route.ts   POST vanaf je horloge, met eigen sleutel
+    tracker/beweging/plakken/route.ts  POST een geplakte lijst uit Garmin Connect
     push/route.ts           GET sleutel+voorkeur / POST aanmelden / DELETE afmelden
     push/proef/route.ts     POST een proefmelding naar je eigen apparaten
     cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
@@ -1246,6 +1329,7 @@ components/
     Instellingen.tsx    Profiel met live budgetberekening
     Account.tsx         Account, personen en back-up onder Instellingen
     Meldingen.tsx       Pushmeldingen aan- en uitzetten, met proefknop
+    Koppeling.tsx       Lijst plakken en de sleutel voor je horloge
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
     api.ts              Fetch-helpers voor de tracker-endpoints
@@ -1266,6 +1350,7 @@ lib/
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
   prijsboek.ts          Het prijsboek bewaren en bonnen erin opnemen (Redis)
+  koppelsleutel.ts      De sleutel waarmee je horloge mag insturen
   tracker/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule
@@ -1287,6 +1372,7 @@ lib/
     schat-model.ts      De modelaanroep achter het schatten
     herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
     meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
+    koppeling.ts        Externe activiteiten en geplakte lijsten lezen (puur)
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)
