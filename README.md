@@ -596,7 +596,7 @@ De opzet is vijf lagen diep, en alleen de derde is AI:
 
 ```
 [1] feitenlaag      deterministisch, altijd waar
-[2] trigger         wanneer er advies mag komen
+[2] trigger         wanneer er advies mag komen, en hoe vaak
 [3] adviesgeneratie het model leest het feitenpakket en interpreteert vrij
 [4] validatie       elk getal herleidbaar naar het pakket
 [5] evaluatielus    werkte het advies van vorige keer
@@ -677,9 +677,46 @@ dezelfde meetwaarde met dezelfde of een grotere stap. Een merkbaar kleinere stap
 mag wel — het ontwerp noemt "een andere invalshoek óf een kleinere actie", en dat
 zijn twee geldige uitwegen.
 
-Wat er nog niet is: de afwijkingstriggers met hun dempingsregels (fase D), en de
-knop om zelf een analyse te vragen plus de adviesgeschiedenis met een tijdlijn
-(fase E).
+### Wanneer de module zelf iets meldt
+
+Naast het weegmoment kan de module ook uit zichzelf iets melden. Vijf
+aanleidingen, in deze volgorde — de twee guardrails gaan voor:
+
+1. de inname ligt structureel onder het dagbudget;
+2. de afname gaat sneller dan bedoeld;
+3. het trendgewicht is met minstens een procent gestegen;
+4. de weekbuffer ging deze week al binnen drie dagen op;
+5. er is in de laatste zeven dagen bijna niet gelogd.
+
+Voor de derde stond er "≥1% gestegen over twee opeenvolgende wegingen". Dat is
+gelezen als de spanne van twee weegintervallen, dus de trend van nu tegen die van
+drie wegingen terug. De trendlijn is een voortschrijdend gemiddelde met factor
+0,25; tussen twee lósse trendwaarden een procent stijgen zou bij 90 kg een sprong
+van 3,6 kg op de weegschaal vragen, en die drempel gaat dus nooit af. Over twee
+intervallen is het wél een signaal: bijna een kilo omhoog in twee weken.
+
+**Drie dempingsregels, alle drie afgedwongen in code:**
+
+- hooguit één afwijkingsmelding per tien dagen;
+- nooit binnen twee etmalen na een advies bij het weegmoment;
+- dezelfde aanleiding niet twee keer binnen dertig dagen.
+
+Dat is geen kosmetiek. Frequente gewichts- en intakemonitoring hangt samen met
+een verhoogde kans op maaltijden overslaan en overmatig bewegen; een module die
+op elke overschrijding reageert bouwt dat mechanisme actief in. Een test loopt
+dertig dagen aan onafgebroken aanleidingen door en komt op één melding uit als
+het steeds dezelfde is, en op hooguit drie als ze wisselen.
+
+**Het kanaal** is een banner op `/tracker` en een stip op de Inzicht-navigatie.
+Geen push-notificaties: die zijn op iOS onbetrouwbaar en verhogen de meldingsdruk
+zonder aantoonbare winst. De banner leest beschrijvend — er staat wat er is, niet
+wat je zou moeten doen — en verdwijnt zodra je Inzicht hebt geopend.
+
+De melding-route rekent zelf niets uit en kost dus nooit een modelaanroep; het
+advies wordt pas gemaakt als je Inzicht opent.
+
+Wat er nog niet is: de knop om zelf een analyse te vragen plus de
+adviesgeschiedenis met een tijdlijn (fase E).
 
 ### Opslag
 
@@ -710,6 +747,10 @@ kookboek-keys:
   Wordt nooit verwijderd: de historie is het interessantste deel van de module.
 - `wl:advice:index` — sorted set met alle adviezen, score is het tijdstip.
 - `wl:advice:active` — het id van het lopende advies.
+- `wl:advice:cooldown` — wanneer er voor het laatst een afwijkingsmelding was en
+  waarover. Zonder dit geheugen zou de module op elke overschrijding reageren.
+- `wl:advice:seen` — het id van het advies dat je al bekeken hebt; bepaalt of de
+  melding op `/tracker` nog staat.
 
 Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
 
