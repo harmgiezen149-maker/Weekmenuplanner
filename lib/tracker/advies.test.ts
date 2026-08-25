@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import {
   leesFeit, getallenIn, leesAdviesJson, valideerAdvies, weegmomentOpen,
   bouwAdviesBericht, adviesSysteem, VERBODEN_PATRONEN,
-  type AdviesPayload, type Advies,
+  evalueerAdvies, evaluatieVenster, moetHerzien, vastgelopen,
+  type AdviesPayload, type Advies, type AdviesEvaluatie, type EvaluatieUitkomst,
 } from "./advies.ts";
 import { buildFactPack, vensterDatums, type FactPack } from "./feiten.ts";
 import { berekenTotalen } from "./points.ts";
@@ -417,6 +418,7 @@ test("een geëvalueerd vorig advies gaat met zijn uitkomst mee", () => {
   const met = opgeslagen({
     evaluation: {
       uitkomst: "ongewijzigd", gemeten_op: "2026-08-25", beginwaarde: 38, eindwaarde: 38,
+      dagen_gemeten: 14, aandeel: 0,
     },
   });
   const bericht = JSON.parse(bouwAdviesBericht({
@@ -442,4 +444,175 @@ test("metricLabel zet een sleutel om in gewone taal", async () => {
   assert.equal(metricLabel("by_time_of_day.after_21"), "het aandeel punten na 21:00");
   // Een onbekende sleutel valt terug op zichzelf: liever technisch dan leeg.
   assert.equal(metricLabel("iets.nieuws"), "iets.nieuws");
+});
+
+// -- de evaluatielus ---------------------------------------------------------
+
+/** Een pakket over een kort venster, zoals de evaluatielus het opbouwt. */
+function periodePak(dagen: number, eind: string, punten: (i: number) => number | null): FactPack {
+  const rijen: Day[] = [];
+  vensterDatums(eind, dagen).forEach((datum, i) => {
+    const p = punten(i);
+    if (p == null) return;
+    const entries = [regel(datum, 12, p)];
+    rijen.push({ date: datum, entries, activity: [], totals: berekenTotalen(entries), buffer_used: 0 });
+  });
+  return buildFactPack({
+    peildatum: eind, dagen: rijen, wegingen: [], profiel: profiel(),
+    vensterDagen: dagen, nu: NU,
+  });
+}
+
+/** Een uitgegeven advies: van 38 punten naar 30, omlaag, over veertien dagen. */
+function lopend(over: Partial<Advies> = {}): Advies {
+  const payload = advies({ facts_used: ["budget.avg_points_per_day"] });
+  payload.action.metric_key = "budget.avg_points_per_day";
+  payload.action.target_direction = "down";
+  payload.action.target_value = 30;
+  payload.action.horizon_days = 14;
+  return {
+    id: "a1", created_at: "2026-08-11T09:00:00.000Z", trigger: "weegmoment",
+    weeg_datum: "2026-08-09", payload, fact_pack_ref: "2026-08-09",
+    metric_start: 38, verified: true, onverklaarbare_getallen: [], evaluation: null,
+    ...over,
+  };
+}
+
+function meet(puntenPerDag: number, gelogdeDagen = 14): EvaluatieUitkomst | null {
+  const periode = periodePak(14, "2026-08-25", (i) => (i < gelogdeDagen ? puntenPerDag : null));
+  return evalueerAdvies(lopend(), periode)?.uitkomst ?? null;
+}
+
+test("de vijf uitkomsten worden elk correct berekend", () => {
+  // Van 38 naar een doel van 30: acht punten af te leggen.
+  assert.equal(meet(30), "verbeterd");    // helemaal
+  assert.equal(meet(34), "verbeterd");    // precies de helft telt als verbeterd
+  assert.equal(meet(36), "deels");        // een kwart
+  assert.equal(meet(38), "ongewijzigd");  // niets bewogen
+  assert.equal(meet(42), "tegengesteld"); // de andere kant op
+  assert.equal(meet(30, 7), "onvoldoende"); // de helft gelogd is te weinig
+});
+
+test("een kleine schommeling telt als ongewijzigd, niet als tegengesteld", () => {
+  // 38,4 is een halve procent de andere kant op: ruis, geen richting.
+  assert.equal(meet(38.4), "ongewijzigd");
+});
+
+test("de evaluatie legt vast waarover gemeten is", () => {
+  const periode = periodePak(14, "2026-08-25", () => 34);
+  const e = evalueerAdvies(lopend(), periode) as AdviesEvaluatie;
+  assert.equal(e.beginwaarde, 38);
+  assert.equal(e.eindwaarde, 34);
+  assert.equal(e.dagen_gemeten, 14);
+  assert.equal(e.aandeel, 0.5);
+  assert.equal(e.gemeten_op, "2026-08-25");
+});
+
+test("een advies van een paar dagen oud wordt nog niet gemeten", () => {
+  const kort = periodePak(4, "2026-08-25", () => 30);
+  assert.equal(evalueerAdvies(lopend(), kort), null);
+});
+
+test("een meetwaarde die niet meer bestaat levert geen uitslag op", () => {
+  const kapot = lopend();
+  kapot.payload.action.metric_key = "budget.bestaat_niet";
+  assert.equal(evalueerAdvies(kapot, periodePak(14, "2026-08-25", () => 30)), null);
+});
+
+test("de horizon telt vanaf de uitgifte, niet terug vanaf vandaag", () => {
+  // Uitgegeven op 11 augustus met een horizon van veertien dagen: de meting
+  // loopt tot en met 25 augustus, ook als je later kijkt.
+  assert.deepEqual(evaluatieVenster(lopend(), "2026-08-25"), { eind: "2026-08-25", dagen: 14 });
+  assert.deepEqual(evaluatieVenster(lopend(), "2026-09-30"), { eind: "2026-08-25", dagen: 14 });
+  // Loopt de horizon nog, dan wordt er over het verstreken deel gemeten.
+  assert.deepEqual(evaluatieVenster(lopend(), "2026-08-19"), { eind: "2026-08-19", dagen: 8 });
+});
+
+// -- vastgelopen invalshoeken ------------------------------------------------
+
+function metUitslag(uitkomst: EvaluatieUitkomst, id: string): Advies {
+  return lopend({
+    id,
+    evaluation: {
+      uitkomst, gemeten_op: "2026-08-25", beginwaarde: 38, eindwaarde: 38,
+      dagen_gemeten: 14, aandeel: 0,
+    },
+  });
+}
+
+test("twee stilstaande adviezen op rij vragen om een andere invalshoek", () => {
+  assert.equal(moetHerzien([metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")]), true);
+  assert.equal(moetHerzien([metUitslag("tegengesteld", "a"), metUitslag("ongewijzigd", "b")]), true);
+  assert.equal(moetHerzien([metUitslag("verbeterd", "a"), metUitslag("ongewijzigd", "b")]), false);
+  assert.equal(moetHerzien([metUitslag("ongewijzigd", "a")]), false);
+  assert.equal(moetHerzien([]), false);
+});
+
+test("een nog niet gemeten advies telt niet mee in die beoordeling", () => {
+  const vers = lopend({ id: "c" });
+  assert.equal(vers.evaluation, null);
+  // De twee gemeten adviezen eronder tellen wel.
+  const rij = [vers, metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")];
+  assert.equal(moetHerzien(rij), true);
+  assert.equal(vastgelopen(rij).length, 2);
+});
+
+test("de instructie noemt de meetwaarden die al geprobeerd zijn", () => {
+  const rij = [metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")];
+  const s = adviesSysteem(pak(), rij);
+  assert.ok(s.includes("VORIGE ADVIEZEN LIEPEN VAST"));
+  assert.ok(s.includes("budget.avg_points_per_day"));
+  // Zonder vastgelopen adviezen blijft die aanvulling weg.
+  assert.ok(!adviesSysteem(pak(), []).includes("VORIGE ADVIEZEN LIEPEN VAST"));
+  assert.ok(!adviesSysteem(pak(), [metUitslag("verbeterd", "a")]).includes("VORIGE ADVIEZEN LIEPEN VAST"));
+});
+
+test("na twee stilstanden wordt dezelfde vraag met dezelfde stap geweigerd", () => {
+  const p = pak(); // budget.avg_points_per_day staat hier op 38
+  const rij = [metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")];
+
+  const herhaling = advies({ facts_used: ["budget.avg_points_per_day"] });
+  herhaling.action.metric_key = "budget.avg_points_per_day";
+  herhaling.action.target_direction = "down";
+  herhaling.action.target_value = 30; // exact hetzelfde als de vorige keer
+
+  const v = valideerAdvies(herhaling, p, rij);
+  assert.equal(v.geldig, false);
+  assert.ok(v.redenen.some((r) => r.includes("zonder kleinere stap")));
+});
+
+test("dezelfde meetwaarde mag wél met een merkbaar kleinere stap", () => {
+  const p = pak();
+  const rij = [metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")];
+
+  const kleiner = advies({ facts_used: ["budget.avg_points_per_day"] });
+  kleiner.action.metric_key = "budget.avg_points_per_day";
+  kleiner.action.target_direction = "down";
+  kleiner.action.target_value = 35; // van 38 naar 35 in plaats van naar 30
+
+  const v = valideerAdvies(kleiner, p, rij);
+  assert.equal(v.geldig, true, v.redenen.join("; "));
+});
+
+test("een andere invalshoek mag altijd", () => {
+  const p = pak();
+  const rij = [metUitslag("ongewijzigd", "a"), metUitslag("ongewijzigd", "b")];
+
+  const ander = advies({ facts_used: ["nutrition.fiber_g"] });
+  ander.action.metric_key = "nutrition.fiber_g";
+  ander.action.target_direction = "up";
+  ander.action.target_value = 30;
+  ander.observation = "Je vezelinname ligt op 5 gram per dag.";
+
+  const v = valideerAdvies(ander, p, rij);
+  assert.equal(v.geldig, true, v.redenen.join("; "));
+});
+
+test("zonder vastgelopen adviezen mag een herhaling gewoon", () => {
+  const p = pak();
+  const herhaling = advies({ facts_used: ["budget.avg_points_per_day"] });
+  herhaling.action.metric_key = "budget.avg_points_per_day";
+  herhaling.action.target_direction = "down";
+  herhaling.action.target_value = 30;
+  assert.equal(valideerAdvies(herhaling, p, [metUitslag("verbeterd", "a")]).geldig, true);
 });

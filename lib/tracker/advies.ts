@@ -1,6 +1,7 @@
 import type { FactPack } from "./feiten";
 import { GUARDRAIL_VLAGGEN, adviesDrempel } from "./feiten.ts";
 import { dagIndex } from "./week.ts";
+import { dagenTussen, verschuifDatum } from "./datum.ts";
 import type { Weging } from "./gewicht";
 import type { Profile } from "./types";
 
@@ -48,6 +49,10 @@ export interface AdviesEvaluatie {
   gemeten_op: string;
   beginwaarde: number;
   eindwaarde: number;
+  /** Over hoeveel dagen er gemeten is; hooguit de horizon van de actie. */
+  dagen_gemeten: number;
+  /** Aandeel van de weg naar de doelwaarde dat is afgelegd. Negatief is de andere kant op. */
+  aandeel: number;
 }
 
 export interface Advies {
@@ -303,7 +308,9 @@ export interface Validatie {
  * erbij. Stilzwijgend accepteren is geen optie, en weggooien om één getal ook
  * niet.
  */
-export function valideerAdvies(payload: AdviesPayload, pakket: FactPack): Validatie {
+export function valideerAdvies(
+  payload: AdviesPayload, pakket: FactPack, vorige: Advies[] = []
+): Validatie {
   const redenen: string[] = [];
 
   // 1. Elke sleutel in facts_used moet bestaan.
@@ -348,7 +355,26 @@ export function valideerAdvies(payload: AdviesPayload, pakket: FactPack): Valida
     }
   }
 
-  // 5. Getallen die nergens op terug te voeren zijn. Alleen de vier tekstvelden:
+  // 5. Twee vastgelopen adviezen op rij: dan mag hetzelfde niet nog eens.
+  //    Dezelfde meetwaarde blijft toegestaan als de stap merkbaar kleiner is —
+  //    het ontwerp noemt "een andere invalshoek óf een kleinere actie" — maar
+  //    dezelfde vraag nog een keer stellen wordt geweigerd.
+  const vast = vastgelopen(vorige);
+  if (vast.length > 0) {
+    const eerder = vast.find((a) => a.payload.action.metric_key === payload.action.metric_key);
+    if (eerder) {
+      const huidig = leesFeit(pakket, payload.action.metric_key);
+      const oudeStap = Math.abs(eerder.payload.action.target_value - (huidig ?? 0));
+      const nieuweStap = Math.abs(payload.action.target_value - (huidig ?? 0));
+      if (nieuweStap >= oudeStap) {
+        redenen.push(
+          `herhaalt ${payload.action.metric_key} zonder kleinere stap terwijl de vorige twee adviezen vastliepen`
+        );
+      }
+    }
+  }
+
+  // 6. Getallen die nergens op terug te voeren zijn. Alleen de vier tekstvelden:
   //    de doelwaarde van de actie is per definitie nieuw en hoort niet in het
   //    pakket te staan.
   const onverklaarbaar: number[] = [];
@@ -414,6 +440,96 @@ export function weegmomentOpen(
   }
 
   return { open: true, datum: laatste.date, reden: "" };
+}
+
+// -- de evaluatielus ---------------------------------------------------------
+
+/** Korter dan dit valt er niets over een actie te zeggen. */
+export const MIN_DAGEN_VOOR_EVALUATIE = 7;
+
+/** Onder deze dekking is de meting niet te vertrouwen; zie sectie 8. */
+export const MIN_DEKKING_VOOR_EVALUATIE = 0.6;
+
+/**
+ * Het venster waarover een advies gemeten wordt: vanaf de dag na uitgifte tot
+ * en met de horizon, of tot vandaag als die nog niet om is.
+ *
+ * De horizon telt vanaf de uitgifte en niet terug vanaf vandaag. Anders zou een
+ * advies van acht weken geleden gemeten worden over de laatste twee weken, en
+ * dat zegt niets over wat het advies heeft gedaan.
+ */
+export function evaluatieVenster(
+  advies: Advies, vandaag: string
+): { eind: string; dagen: number } {
+  const uitgifte = advies.created_at.slice(0, 10);
+  const horizonEind = verschuifDatum(uitgifte, advies.payload.action.horizon_days);
+  const eind = horizonEind < vandaag ? horizonEind : vandaag;
+  return { eind, dagen: Math.max(0, dagenTussen(uitgifte, eind)) };
+}
+
+/**
+ * Meet wat er met `metric_key` gebeurd is sinds het advies werd uitgegeven.
+ *
+ * Het pakket dat hier binnenkomt is over hetzelfde venster gebouwd als
+ * `evaluatieVenster` teruggeeft, met dezelfde rekenregels als bij uitgifte. Dat
+ * is geen detail: zou de meting bij uitgifte anders werken dan bij evaluatie,
+ * dan meet je het verschil tussen twee formules in plaats van tussen twee weken.
+ *
+ * Geeft null zolang er te weinig dagen verstreken zijn — een uitslag na drie
+ * dagen is geen uitslag.
+ */
+export function evalueerAdvies(advies: Advies, periode: FactPack): AdviesEvaluatie | null {
+  const dagen = periode.meta.days_in_window;
+  if (dagen < MIN_DAGEN_VOOR_EVALUATIE) return null;
+
+  const eindwaarde = leesFeit(periode, advies.payload.action.metric_key);
+  if (eindwaarde == null) return null;
+
+  const beginwaarde = advies.metric_start;
+  const basis = {
+    gemeten_op: periode.meta.reference_date,
+    beginwaarde,
+    eindwaarde,
+    dagen_gemeten: dagen,
+  };
+
+  // Te weinig gelogd om iets te beweren. Dat is een uitkomst op zich, geen fout.
+  if (periode.meta.days_logged / dagen < MIN_DEKKING_VOOR_EVALUATIE) {
+    return { ...basis, uitkomst: "onvoldoende", aandeel: 0 };
+  }
+
+  const afstand = advies.payload.action.target_value - beginwaarde;
+  const verplaatsing = eindwaarde - beginwaarde;
+  // Staat het doel op de beginwaarde, dan is er geen afstand af te leggen en
+  // telt alleen de richting.
+  const teken = advies.payload.action.target_direction === "up" ? 1 : -1;
+  const aandeel = afstand !== 0 ? verplaatsing / afstand : Math.sign(verplaatsing * teken);
+
+  const uitkomst: EvaluatieUitkomst =
+    Math.abs(aandeel) < 0.1 ? "ongewijzigd"
+      : aandeel < 0 ? "tegengesteld"
+        : aandeel >= 0.5 ? "verbeterd"
+          : "deels";
+
+  return { ...basis, uitkomst, aandeel: Math.round(aandeel * 100) / 100 };
+}
+
+/**
+ * Of de volgende ronde een andere invalshoek moet kiezen: twee gemeten adviezen
+ * achter elkaar die niets in beweging hebben gekregen.
+ *
+ * `vorige` staat nieuwste eerst. Adviezen die nog niet gemeten zijn tellen niet
+ * mee — die weten we nog niet.
+ */
+export function moetHerzien(vorige: Advies[]): boolean {
+  const gemeten = vorige.filter((a) => a.evaluation != null).slice(0, 2);
+  return gemeten.length === 2 && gemeten.every((a) =>
+    a.evaluation!.uitkomst === "ongewijzigd" || a.evaluation!.uitkomst === "tegengesteld");
+}
+
+/** De adviezen waarvan de invalshoek is vastgelopen, nieuwste eerst. */
+export function vastgelopen(vorige: Advies[]): Advies[] {
+  return moetHerzien(vorige) ? vorige.filter((a) => a.evaluation != null).slice(0, 2) : [];
 }
 
 // -- de aanroep opbouwen -----------------------------------------------------
@@ -521,10 +637,33 @@ export function bouwAdviesBericht(invoer: AdviesInvoer): string {
   });
 }
 
-/** De systeeminstructie voor dit pakket, met de guardrail-aanvulling als die nodig is. */
-export function adviesSysteem(pakket: FactPack): string {
-  const guardrail = pakket.flags.some((v) => (GUARDRAIL_VLAGGEN as readonly string[]).includes(v));
-  return guardrail ? ADVIES_SYSTEM + "\n" + GUARDRAIL_SYSTEM : ADVIES_SYSTEM;
+/**
+ * De aanvulling als twee adviezen achter elkaar niets in beweging kregen.
+ * Dan is het patroon niet het probleem maar de invalshoek, en heeft nog een
+ * ronde van hetzelfde geen zin.
+ */
+export function herzienSysteem(vast: Advies[]): string {
+  return [
+    "",
+    "LET OP — VORIGE ADVIEZEN LIEPEN VAST",
+    "De laatste twee adviezen zijn gemeten en hebben niets in beweging gekregen, of het",
+    "tegenovergestelde. Herhaal ze niet.",
+    "Deze meetwaarden zijn al geprobeerd: " + vast.map((a) => a.payload.action.metric_key).join(", ") + ".",
+    "Kies een andere invalshoek — een ander patroon, een andere meetwaarde — of houd dezelfde",
+    "meetwaarde aan met een merkbaar kleinere stap dan vorige keer. Dezelfde meetwaarde met",
+    "dezelfde of een grotere stap wordt afgekeurd.",
+  ].join("\n");
+}
+
+/** De systeeminstructie voor dit pakket, met de aanvullingen die nodig zijn. */
+export function adviesSysteem(pakket: FactPack, vorige: Advies[] = []): string {
+  let uit = ADVIES_SYSTEM;
+  if (pakket.flags.some((v) => (GUARDRAIL_VLAGGEN as readonly string[]).includes(v))) {
+    uit += "\n" + GUARDRAIL_SYSTEM;
+  }
+  const vast = vastgelopen(vorige);
+  if (vast.length > 0) uit += "\n" + herzienSysteem(vast);
+  return uit;
 }
 
 function jarenSinds(geboortedatum: string, op: string): number {

@@ -42,7 +42,7 @@ export async function genereerAdvies(
   client: Anthropic,
   invoer: AdviesInvoer
 ): Promise<AdviesUitkomst> {
-  const systeem = adviesSysteem(invoer.pakket);
+  const systeem = adviesSysteem(invoer.pakket, invoer.vorige);
   const berichten: Anthropic.MessageParam[] = [
     { role: "user", content: bouwAdviesBericht(invoer) },
   ];
@@ -63,7 +63,7 @@ export async function genereerAdvies(
 
     const payload = leesAdviesJson(tekst);
     if (payload) {
-      const validatie = valideerAdvies(payload, invoer.pakket);
+      const validatie = valideerAdvies(payload, invoer.pakket, invoer.vorige);
       if (validatie.geldig) return { ok: true, payload, validatie, pogingen: poging };
       laatsteRedenen = validatie.redenen;
     }
