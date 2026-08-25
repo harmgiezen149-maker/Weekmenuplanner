@@ -17,6 +17,8 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
 - **Importeren** van recepten op drie manieren: handmatig, via foto, of via een link.
 - **Tracker** (`/tracker`) — een puntengebaseerde voedingstracker met een dagbudget
   dat wordt afgeleid van je lichaamsgegevens. Zie het hoofdstuk hieronder.
+- **Inzicht** (`/tracker/inzicht`) — je eetpatroon over twaalf weken, teruggerekend
+  tot cijfers: weekdagen, dagdelen, energiebalans en waar de punten heen gaan.
 
 ---
 
@@ -185,6 +187,7 @@ budget op onderhoud.
 | `/tracker` | Dagoverzicht: puntenring, eiwitbalk, macro's en je regels per maaltijd |
 | `/tracker/toevoegen` | Een product loggen: snel, zoeken, scannen of handmatig |
 | `/tracker/week` | Punten per dag tegen je budget, weekbuffer, gemiddelde, voedingsstoffen |
+| `/tracker/inzicht` | Je patroon over twaalf weken: weekdagen, dagdelen, energiebalans, bijdragers |
 | `/tracker/gewicht` | Wegen, trendlijn en voortgang naar je streefgewicht |
 | `/tracker/instellingen` | Profiel, activiteitsniveau, weegdag, puntenschaal, eiwitdoel |
 
@@ -528,6 +531,63 @@ kloppen met de macro's — tikfouten vallen daardoor meteen om.
 
 Een volledige NEVO-dataset zit er bewust niet in; die mag je zelf aanleveren.
 
+### Inzicht
+
+`/tracker/inzicht` legt je eetpatroon over **twaalf weken** naast elkaar. Geen
+losse dag, geen reactie op één uitschieter: elke uitspraak rust op een venster
+van 84 dagen.
+
+Het scherm rust op een **feitenlaag** — `lib/tracker/feiten.ts`, één pure functie
+`buildFactPack` die het logboek en de wegingen terugrekent tot een plat object
+met alleen getallen. Geen conclusies, geen AI. Die scheiding is het hele punt van
+de opzet: de feitenlaag is de enige laag die correct móét zijn, en die is daarom
+zonder database te testen op geseede data.
+
+Wat er te zien is:
+
+- **Punten per weekdag**, met het aantal gelogde dagen onder elke balk. Een
+  gemiddelde zonder dat getal is niet te wegen.
+- **Verdeling over de dag** in vijf blokken, als aandeel van de punten — niet van
+  het aantal regels, want dan zou een dag met tien kleine dingen zwaarder wegen
+  dan een dag met twee grote.
+- **Budget en spreiding**: naleving, gemiddelde, mediaan en standaardafwijking.
+  De spreiding vertelt vaak meer dan het gemiddelde.
+- **Weekbuffer**: hoeveel er per week opgaat en op welk moment van de week.
+- **Logboek tegen weegschaal**: wat je inname voorspelt tegenover wat de
+  trendlijn laat zien. Loopt de weegschaal achter, dan zit er meestal iets niet
+  in het logboek — dat is waar deze vergelijking voor is.
+- **Voedingsstoffen per dag** en **waar de punten heen gaan**, de vijftien
+  producten die samen het meest gekost hebben.
+
+**Signalen.** Onder "Wat opvalt" staan deterministisch berekende vlaggen, elk met
+de cijfers erbij waar hij op rust. Ze zijn bedoeld als hints, niet als
+conclusies. Twee ervan — te weinig eten en te snel afvallen — draaien de toon om
+en krijgen voorrang boven alle andere.
+
+Drie regels zitten in de code vast:
+
+- **Geen uitspraak zonder bewijslast.** Patroonvlaggen verschijnen pas vanaf
+  veertien gelogde dagen. Onder de veertien dagen historie of acht gelogde dagen
+  in de laatste twee weken staat er wél een dashboard, maar met de melding
+  hoeveel er nog nodig is.
+- **Geen prestatiedruk bij weinig loggen.** De module meldt dat de analyse onder
+  vijf gelogde dagen per week onbetrouwbaar wordt en houdt het daarbij. Geen
+  herinneringen, geen aansporing, en op een leeg of splinternieuw logboek zwijgt
+  hij helemaal.
+- **Geen waarderende taal.** Nergens staat of een dag goed of slecht was. Er
+  staat wat er gemeten is.
+
+Waar de opzet afwijkt van wat er op papier stond: het uitputtingsmoment van de
+weekbuffer staat er twee keer in. `avg_exhaustion_day` is de kalenderdag, maar
+"vroeg in de week" is alleen te zien ten opzichte van de weegdag — bij een
+weegdag op zondag is maandag de tweede dag van de week. Daarom staat de plaats
+binnen de trackerweek er als `avg_exhaustion_position` naast, en rust het signaal
+op die tweede waarde.
+
+De volgende fases bouwen hierop verder: advies bij het weegmoment, een
+validatielaag die elk genoemd getal terugvoert op het feitenpakket, en een
+evaluatielus die meet of een advies iets heeft opgeleverd.
+
 ### Opslag
 
 Alle keys van de tracker staan onder de prefix `wl:`, volledig gescheiden van de
@@ -551,6 +611,8 @@ kookboek-keys:
 - `wl:meals` — je vaste, samengestelde maaltijden.
 - `wl:recipe:points:<id>` — een doorgerekend kookboekrecept, met de
   vingerafdruk waarmee de cache vervalt.
+- `wl:facts:<YYYY-Www>` — het gecachete feitenpakket van Inzicht, acht dagen
+  houdbaar, met de vingerafdruk waarmee het vervalt zodra je iets logt.
 
 Twee dingen worden bewust **niet** opgeslagen maar telkens opnieuw berekend:
 
@@ -574,9 +636,14 @@ testset legt onder meer vast dat kipfilet 1 punt is, broccoli 0 en een koekje 6,
 dat het budget nooit onder het basaal metabolisme zakt, en dat het dagtotaal op
 de onafgeronde waarden wordt gerekend.
 
+De feitenlaag van Inzicht staat er met geseede data in: de zes scenario's uit het
+ontwerp (weekendpatroon, verborgen gat, plateau, te weinig, te snel, te weinig
+data) hebben elk hun eigen test, plus een test die vastlegt dat de laag puur is
+en een die de twaalf weken binnen een halve seconde doorrekent.
+
 ### Over de grafieken
 
-De twee grafieken zijn met de hand geschreven SVG, zonder grafiekbibliotheek.
+De grafieken zijn met de hand geschreven SVG, zonder grafiekbibliotheek.
 Twee keuzes zijn bewust:
 
 - **"Over budget" heeft een eigen, donkerder tint** (`--over`). De lichtere
@@ -585,7 +652,10 @@ Twee keuzes zijn bewust:
   voor kleurenblinde lezers goed van het accent te onderscheiden.
 - **Verschil zit nooit alleen in kleur.** In de trendgrafiek verschillen de twee
   reeksen ook van vorm (punten tegen lijn); in het staafdiagram staat bij een dag
-  boven budget het getal erbij.
+  boven budget het getal erbij. De verdeling over de dag in Inzicht gebruikt
+  één kleurverloop van licht naar donker — de blokken zijn geordend, dus hoort
+  daar geen palet van losse kleuren bij — en zet elk percentage ook in de
+  legenda.
 
 ### Over de Anthropic API
 
