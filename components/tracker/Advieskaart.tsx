@@ -119,8 +119,14 @@ export default function Advieskaart({
       {advies.evaluation && (
         <div style={S.voet}>
           <strong>{UITKOMST_LABEL[advies.evaluation.uitkomst] ?? advies.evaluation.uitkomst}.</strong>{" "}
-          Van {nl(advies.evaluation.beginwaarde, 2)} naar {nl(advies.evaluation.eindwaarde, 2)},
-          gemeten op {toonDatum(advies.evaluation.gemeten_op)}.
+          {advies.evaluation.uitkomst === "onvoldoende" ? (
+            <>Over de {advies.evaluation.dagen_gemeten} dagen sinds dit advies is te weinig gelogd
+            om {metricLabel(payload.action.metric_key)} te kunnen meten.</>
+          ) : (
+            <>{hoofdletter(metricLabel(payload.action.metric_key))} ging van{" "}
+            {nl(advies.evaluation.beginwaarde, 2)} naar {nl(advies.evaluation.eindwaarde, 2)},
+            gemeten over {advies.evaluation.dagen_gemeten} dagen tot {toonDatum(advies.evaluation.gemeten_op)}.</>
+          )}
         </div>
       )}
 

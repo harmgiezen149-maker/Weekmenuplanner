@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import {
-  laadFeiten, getProfile, getWegingen, getActiefAdvies, getLaatsteAdviezen,
+  laadFeiten, getProfile, getWegingen, getLaatsteAdviezen, werkEvaluatieBij,
   saveAdvies, nieuwId, geldigeDatum, datumSleutel,
 } from "@/lib/tracker/data";
 import { leesFeit, weegmomentOpen, type Advies } from "@/lib/tracker/advies";
@@ -23,12 +23,16 @@ export async function GET(req: NextRequest) {
   const profiel = await getProfile();
   if (!profiel) return NextResponse.json({ advies: null, historie: [], weegmoment: null });
 
-  const [{ pakket }, wegingen, historie] = await Promise.all([
+  const [{ pakket }, wegingen, opgeslagen] = await Promise.all([
     laadFeiten(peildatum),
     getWegingen(),
     getLaatsteAdviezen(3),
   ]);
   if (!pakket) return NextResponse.json({ advies: null, historie: [], weegmoment: null });
+
+  // De uitslag van een lopend advies schuift mee, zodat het scherm de stand van
+  // nu toont in plaats van te wachten tot het volgende advies wordt gemaakt.
+  const historie = await Promise.all(opgeslagen.map((a) => werkEvaluatieBij(a, peildatum)));
 
   return NextResponse.json({
     advies: historie[0] ?? null,
@@ -61,7 +65,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Vul eerst je profiel in bij Instellingen." }, { status: 400 });
   }
 
-  const [{ pakket }, wegingen, historie] = await Promise.all([
+  const [{ pakket }, wegingen, opgeslagen] = await Promise.all([
     laadFeiten(peildatum),
     getWegingen(),
     getLaatsteAdviezen(3),
@@ -69,6 +73,10 @@ export async function POST(req: NextRequest) {
   if (!pakket) {
     return NextResponse.json({ error: "Er zijn nog geen gegevens om door te rekenen." }, { status: 400 });
   }
+
+  // Eerst meten, dan pas vragen: het model hoort te weten wat het vorige advies
+  // heeft opgeleverd voordat het een nieuwe kiest.
+  const historie = await Promise.all(opgeslagen.map((a) => werkEvaluatieBij(a, peildatum)));
 
   const moment = weegmomentOpen(pakket, wegingen, profiel, historie[0] ?? null);
   if (!moment.open) {

@@ -11,6 +11,9 @@ import {
   buildFactPack, feitenVingerafdruk, vensterDatums, type FactPack,
 } from "./feiten";
 import type { Advies } from "./advies";
+import {
+  evalueerAdvies, evaluatieVenster, MIN_DAGEN_VOOR_EVALUATIE,
+} from "./advies";
 
 export { datumSleutel, geldigeDatum };
 
@@ -546,4 +549,57 @@ export async function getLaatsteAdviezen(aantal = 3): Promise<Advies[]> {
 export async function telAdviezen(): Promise<number> {
   const ids = (await redis.zrange<string[]>(ADVICE_INDEX, 0, -1)) ?? [];
   return ids.length;
+}
+
+/**
+ * Een feitenpakket over een kort venster, voor de evaluatielus.
+ *
+ * Niet gecachet: het venster verschuift per advies en de berekening is
+ * goedkoop. Belangrijker is dat het door dezelfde `buildFactPack` gaat als het
+ * pakket bij uitgifte — anders meet je het verschil tussen twee formules in
+ * plaats van tussen twee weken.
+ */
+export async function laadPeriodePakket(
+  peildatum: string, vensterDagen: number
+): Promise<FactPack | null> {
+  const profiel = await getProfile();
+  if (!profiel) return null;
+
+  const [dagen, wegingen] = await Promise.all([
+    getDays(vensterDatums(peildatum, vensterDagen)),
+    getWegingen(),
+  ]);
+  return buildFactPack({ peildatum, dagen, wegingen, profiel, vensterDagen });
+}
+
+/**
+ * Meet een advies opnieuw en schrijft de uitslag bij als die veranderd is.
+ *
+ * Een advies waarvan de horizon om is wordt niet nog eens gemeten: die uitslag
+ * ligt vast. Zolang de horizon loopt schuift de uitslag mee, zodat het scherm
+ * altijd de stand van nu toont in plaats van te wachten op het volgende advies.
+ */
+export async function werkEvaluatieBij(advies: Advies, vandaag: string): Promise<Advies> {
+  const definitief = advies.evaluation != null
+    && advies.evaluation.dagen_gemeten >= advies.payload.action.horizon_days;
+  if (definitief) return advies;
+
+  const venster = evaluatieVenster(advies, vandaag);
+  if (venster.dagen < MIN_DAGEN_VOOR_EVALUATIE) return advies;
+
+  const periode = await laadPeriodePakket(venster.eind, venster.dagen);
+  if (!periode) return advies;
+
+  const evaluation = evalueerAdvies(advies, periode);
+  if (!evaluation) return advies;
+  if (advies.evaluation
+    && advies.evaluation.uitkomst === evaluation.uitkomst
+    && advies.evaluation.dagen_gemeten === evaluation.dagen_gemeten) {
+    return advies;
+  }
+
+  const bijgewerkt: Advies = { ...advies, evaluation };
+  // Alleen de regel zelf bijwerken: de index en het lopende advies veranderen niet.
+  await redis.set(ADVICE(advies.id), bijgewerkt);
+  return bijgewerkt;
 }
