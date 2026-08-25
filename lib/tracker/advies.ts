@@ -1,7 +1,8 @@
 import type { FactPack } from "./feiten";
 import { GUARDRAIL_VLAGGEN, adviesDrempel } from "./feiten.ts";
 import { dagIndex } from "./week.ts";
-import { dagenTussen, verschuifDatum } from "./datum.ts";
+import { dagenTussen, datumSleutel, verschuifDatum } from "./datum.ts";
+import { metTrend } from "./gewicht.ts";
 import type { Weging } from "./gewicht";
 import type { Profile } from "./types";
 
@@ -61,6 +62,8 @@ export interface Advies {
   trigger: AdviesTrigger;
   /** Datum van de weging die dit advies uitlokte. Alleen bij het weegmoment. */
   weeg_datum?: string;
+  /** Welke afwijking dit advies opende. Alleen bij een afwijkingsmelding. */
+  aanleiding?: string;
   payload: AdviesPayload;
   /** Peildatum van het feitenpakket waarop dit advies rust. */
   fact_pack_ref: string;
@@ -415,8 +418,12 @@ export function weegmomentOpen(
   pakket: FactPack,
   wegingen: Weging[],
   profiel: Pick<Profile, "weigh_day">,
-  laatsteAdvies: Advies | null
+  vorige: Advies[]
 ): Weegmoment {
+  // Zoeken naar het laatste wéégmomentadvies, niet naar het laatste advies.
+  // Een afwijkingsmelding ertussen zou het weegmoment anders heropenen, en dan
+  // krijgt dezelfde weging een tweede advies.
+  const laatsteAdvies = vorige.find((a) => a.trigger === "weegmoment") ?? null;
   const laatste = [...wegingen].sort((a, b) => a.date.localeCompare(b.date)).at(-1) ?? null;
   if (!laatste) return { open: false, datum: null, reden: "er is nog niet gewogen" };
 
@@ -532,6 +539,134 @@ export function vastgelopen(vorige: Advies[]): Advies[] {
   return moetHerzien(vorige) ? vorige.filter((a) => a.evaluation != null).slice(0, 2) : [];
 }
 
+// -- trigger: een grote afwijking --------------------------------------------
+
+/**
+ * Wat er is gemeld en wanneer. Zonder dit geheugen zou de module op elke
+ * overschrijding reageren, en dat is precies het mechanisme dat het ontwerp
+ * niet wil inbouwen: frequente monitoring hangt samen met maaltijden overslaan
+ * en overmatig bewegen.
+ */
+export interface Cooldown {
+  last_push_at: string | null;
+  flags_seen: Record<string, string>;
+}
+
+export const LEGE_COOLDOWN: Cooldown = { last_push_at: null, flags_seen: {} };
+
+/** Hooguit één afwijkingsmelding per tien dagen. */
+export const AFWIJKING_INTERVAL_DAGEN = 10;
+/** Nooit binnen twee etmalen na een advies bij het weegmoment. */
+export const NA_WEEGADVIES_UREN = 48;
+/** Dezelfde aanleiding niet twee keer binnen een maand. */
+export const ZELFDE_VLAG_DAGEN = 30;
+
+export const AFWIJKING_LABEL: Record<string, string> = {
+  underconsumption: "de inname ligt structureel onder het dagbudget",
+  rapid_loss: "de afname gaat sneller dan bedoeld",
+  trend_rise: "het trendgewicht is gestegen over twee wegingen",
+  buffer_early: "de weekbuffer is deze week al vroeg op",
+  logging_stopped: "er is bijna niet gelogd deze week",
+};
+
+export interface Afwijking {
+  open: boolean;
+  vlag: string | null;
+  reden: string;
+}
+
+/**
+ * Welke afwijking er speelt, of null. Guardrails eerst: te weinig eten en te
+ * snel afvallen gaan vóór alles.
+ */
+export function detecteerAfwijking(
+  pakket: FactPack,
+  wegingen: Weging[],
+  profiel: Pick<Profile, "weekly_buffer">
+): string | null {
+  if (pakket.flags.includes("underconsumption")) return "underconsumption";
+  if (pakket.flags.includes("rapid_loss")) return "rapid_loss";
+
+  // "Trendgewicht >= 1% gestegen over twee opeenvolgende wegingen", gelezen als
+  // de spanne van twee weegintervallen — dus de trend van nu tegen die van drie
+  // wegingen terug.
+  //
+  // De trendlijn is een voortschrijdend gemiddelde met een wegingsfactor van
+  // 0,25. Tussen twee losse trendwaarden 1% stijgen zou bij 90 kg een sprong van
+  // 3,6 kg op de weegschaal vragen; die drempel gaat dus nooit af. Over twee
+  // intervallen is het wel een echt signaal: bijna een kilo omhoog in twee weken.
+  const reeks = metTrend(wegingen);
+  if (reeks.length >= 3) {
+    const laatste = reeks[reeks.length - 1];
+    const ervoor = reeks[reeks.length - 3];
+    if (ervoor.trend_kg > 0 && (laatste.trend_kg - ervoor.trend_kg) / ervoor.trend_kg >= 0.01) {
+      return "trend_rise";
+    }
+  }
+
+  const week = pakket.current_week;
+  if (week.exhausted_on_position != null
+    && week.exhausted_on_position <= 3
+    && week.buffer_used >= profiel.weekly_buffer) {
+    return "buffer_early";
+  }
+
+  if (pakket.recent.logged_days_last_7_calendar < 3) return "logging_stopped";
+
+  return null;
+}
+
+/**
+ * Of er nu een afwijkingsmelding mag komen. Alle drie de dempingsregels uit
+ * sectie 5.2 worden hier afgedwongen.
+ *
+ * `vorige` staat nieuwste eerst.
+ */
+export function afwijkingOpen(
+  pakket: FactPack,
+  wegingen: Weging[],
+  profiel: Pick<Profile, "weekly_buffer">,
+  vorige: Advies[],
+  cooldown: Cooldown,
+  nu: Date
+): Afwijking {
+  const vlag = detecteerAfwijking(pakket, wegingen, profiel);
+  if (!vlag) return { open: false, vlag: null, reden: "er speelt op dit moment niets" };
+
+  if (cooldown.last_push_at != null) {
+    const dagen = urenTussen(cooldown.last_push_at, nu) / 24;
+    if (dagen < AFWIJKING_INTERVAL_DAGEN) {
+      return { open: false, vlag, reden: "er was korter dan tien dagen geleden al een melding" };
+    }
+  }
+
+  const laatsteWeegadvies = vorige.find((a) => a.trigger === "weegmoment");
+  if (laatsteWeegadvies && urenTussen(laatsteWeegadvies.created_at, nu) < NA_WEEGADVIES_UREN) {
+    return { open: false, vlag, reden: "je kreeg net advies bij je weegmoment" };
+  }
+
+  const eerderGezien = cooldown.flags_seen[vlag];
+  if (eerderGezien && dagenTussen(eerderGezien, datumSleutel(nu)) < ZELFDE_VLAG_DAGEN) {
+    return { open: false, vlag, reden: "deze aanleiding is deze maand al gemeld" };
+  }
+
+  return { open: true, vlag, reden: "" };
+}
+
+/** Legt vast dat er zojuist over deze aanleiding gemeld is. */
+export function noteerAfwijking(cooldown: Cooldown, vlag: string, nu: Date): Cooldown {
+  return {
+    last_push_at: nu.toISOString(),
+    flags_seen: { ...cooldown.flags_seen, [vlag]: datumSleutel(nu) },
+  };
+}
+
+function urenTussen(iso: string, nu: Date): number {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return Number.POSITIVE_INFINITY;
+  return (nu.getTime() - t) / 3600000;
+}
+
 // -- de aanroep opbouwen -----------------------------------------------------
 
 export const ADVIES_SYSTEM = [
@@ -604,6 +739,8 @@ export interface AdviesInvoer {
   /** De laatste drie adviezen, nieuwste eerst. */
   vorige: Advies[];
   trigger: AdviesTrigger;
+  /** Bij een afwijkingsmelding: welke aanleiding hem opende. */
+  aanleiding?: string;
 }
 
 /**
@@ -615,6 +752,9 @@ export function bouwAdviesBericht(invoer: AdviesInvoer): string {
   const p = invoer.profiel;
   return JSON.stringify({
     trigger: invoer.trigger,
+    ...(invoer.aanleiding
+      ? { aanleiding: AFWIJKING_LABEL[invoer.aanleiding] ?? invoer.aanleiding }
+      : {}),
     profiel: {
       leeftijd_jaar: jarenSinds(p.birthdate, invoer.pakket.meta.reference_date),
       lengte_cm: p.height_cm,

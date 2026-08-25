@@ -127,10 +127,26 @@ export interface FactPack {
     gap_kg_per_week: number | null;
   };
 
+  /**
+   * De week waar je nu in zit. Staat los van `buffer`, dat alleen volledige
+   * weken telt: de afwijkingstrigger moet juist naar de lopende week kijken.
+   */
+  current_week: {
+    start: string;
+    days_elapsed: number;
+    logged_days: number;
+    buffer_used: number;
+    /** Plaats in de week waarop de buffer opging, of null. 1 = de weegdag. */
+    exhausted_on_position: number | null;
+  };
+
   /** Getallen waar vlaggen op rusten die verder nergens in het pakket staan. */
   recent: {
-    logged_days_last_7: number;
-    days_under_80pct_budget_last_7: number;
+    /** Hoeveel gelogde dagen zijn meegewogen voor de telling hieronder; hooguit zeven. */
+    logged_days_considered: number;
+    days_under_80pct_budget: number;
+    /** Gelogde dagen in de laatste zeven kalenderdagen — niet de laatste zeven gelogde. */
+    logged_days_last_7_calendar: number;
     /** Gelogde dagen per volledige trackerweek, oudste eerst, hooguit vier. */
     logged_days_per_week_last_4: number[];
     weeks_with_logging: number;
@@ -234,6 +250,7 @@ export function buildFactPack(invoer: FeitenInvoer): FactPack {
     recipe_vs_freestyle: bouwReceptVergelijking(gelogd),
     activity: bouwBeweging(dagFeiten),
     weight: bouwGewicht(invoer.wegingen, datums, profiel),
+    current_week: bouwLopendeWeek(dagFeiten, profiel),
     energy_reconciliation: { tdee_kcal: 0, avg_logged_kcal: 0, expected_change_kg_per_week: null, actual_change_kg_per_week: null, gap_kg_per_week: null },
     recent: bouwRecent(dagFeiten, gelogd, profiel),
     flags: [],
@@ -504,18 +521,50 @@ function bouwEnergiebalans(
 }
 
 function bouwRecent(alle: DagFeit[], gelogd: DagFeit[], profiel: Profile): FactPack["recent"] {
-  const laatsteZeven = gelogd.slice(-7);
+  // Voor "te weinig eten" tellen de laatste zeven gelógde dagen: een dag die je
+  // niet bijhield was geen dag zonder eten. Voor "je logt bijna niet meer"
+  // tellen juist de laatste zeven kálenderdagen — daar is het ontbreken zelf
+  // het signaal.
+  const laatsteZevenGelogd = gelogd.slice(-7);
   const drempel = profiel.daily_budget * 0.8;
   const weken = volledigeWeken(alle, profiel.weigh_day);
 
   return {
-    logged_days_last_7: laatsteZeven.length,
-    days_under_80pct_budget_last_7: profiel.daily_budget > 0
-      ? laatsteZeven.filter((d) => d.punten < drempel).length
+    logged_days_considered: laatsteZevenGelogd.length,
+    days_under_80pct_budget: profiel.daily_budget > 0
+      ? laatsteZevenGelogd.filter((d) => d.punten < drempel).length
       : 0,
+    logged_days_last_7_calendar: alle.slice(-7).filter((d) => d.gelogd).length,
     logged_days_per_week_last_4: weken.slice(-4).map((w) => w.filter((d) => d.gelogd).length),
     weeks_with_logging: wekenMetLogging(alle),
     complete_weeks: weken.length,
+  };
+}
+
+/**
+ * De week waar de peildatum in valt, tot en met die dag.
+ *
+ * `buffer` hierboven telt alleen volledige weken, want een halve week vertekent
+ * elk gemiddelde. Maar de afwijkingstrigger moet juist weten of de buffer déze
+ * week al op is, en dan is die halve week precies wat je nodig hebt.
+ */
+function bouwLopendeWeek(alle: DagFeit[], profiel: Profile): FactPack["current_week"] {
+  const start = weekStart(alle[alle.length - 1].datum, profiel.weigh_day);
+  const dagen = alle.filter((d) => d.datum >= start);
+
+  let cumulatief = 0;
+  let positie: number | null = null;
+  dagen.forEach((d, i) => {
+    cumulatief += d.overBudget;
+    if (positie == null && cumulatief >= profiel.weekly_buffer) positie = i + 1;
+  });
+
+  return {
+    start: dagen[0]?.datum ?? start,
+    days_elapsed: dagen.length,
+    logged_days: dagen.filter((d) => d.gelogd).length,
+    buffer_used: rond(cumulatief, 1),
+    exhausted_on_position: positie,
   };
 }
 
@@ -594,7 +643,7 @@ export function bepaalVlaggen(p: FactPack): string[] {
     vlaggen.push("logging_gaps");
   }
 
-  if (p.recent.days_under_80pct_budget_last_7 >= 5) vlaggen.push("underconsumption");
+  if (p.recent.days_under_80pct_budget >= 5) vlaggen.push("underconsumption");
   if (p.weight.trend_change_kg_per_week != null && p.weight.trend_change_kg_per_week < -1) {
     vlaggen.push("rapid_loss");
   }

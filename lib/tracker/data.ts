@@ -12,8 +12,9 @@ import {
 } from "./feiten";
 import type { Advies } from "./advies";
 import {
-  evalueerAdvies, evaluatieVenster, MIN_DAGEN_VOOR_EVALUATIE,
+  evalueerAdvies, evaluatieVenster, MIN_DAGEN_VOOR_EVALUATIE, LEGE_COOLDOWN,
 } from "./advies";
+import type { Cooldown } from "./advies";
 
 export { datumSleutel, geldigeDatum };
 
@@ -32,6 +33,8 @@ export { datumSleutel, geldigeDatum };
 //   wl:advice:<id>      -> een uitgegeven advies; wordt nooit verwijderd
 //   wl:advice:index     -> sorted set met adviezen, score = epoch
 //   wl:advice:active    -> id van het lopende advies
+//   wl:advice:cooldown  -> wanneer er voor het laatst gemeld is, en waarover
+//   wl:advice:seen      -> id van het advies dat je al gezien hebt
 //
 // De volgende fases voegen hier wl:week:*, wl:weight:* en
 // wl:recipe:points:* aan toe.
@@ -52,6 +55,8 @@ const FACTS = (week: string) => `wl:facts:${week}`;
 const ADVICE = (id: string) => `wl:advice:${id}`;
 const ADVICE_INDEX = "wl:advice:index";
 const ADVICE_ACTIVE = "wl:advice:active";
+const ADVICE_COOLDOWN = "wl:advice:cooldown";
+const ADVICE_SEEN = "wl:advice:seen";
 
 // Producten uit Open Food Facts blijven 90 dagen bruikbaar. Lang genoeg dat
 // een winkelmandje aan vaste boodschappen offline werkt, kort genoeg dat een
@@ -602,4 +607,28 @@ export async function werkEvaluatieBij(advies: Advies, vandaag: string): Promise
   // Alleen de regel zelf bijwerken: de index en het lopende advies veranderen niet.
   await redis.set(ADVICE(advies.id), bijgewerkt);
   return bijgewerkt;
+}
+
+/**
+ * Wanneer er voor het laatst een afwijkingsmelding is geweest, en waarover.
+ * Zonder dit geheugen zou de module op elke overschrijding reageren.
+ */
+export async function getCooldown(): Promise<Cooldown> {
+  const c = await redis.get<Cooldown>(ADVICE_COOLDOWN);
+  return c
+    ? { last_push_at: c.last_push_at ?? null, flags_seen: c.flags_seen ?? {} }
+    : LEGE_COOLDOWN;
+}
+
+export async function saveCooldown(cooldown: Cooldown): Promise<void> {
+  await redis.set(ADVICE_COOLDOWN, cooldown);
+}
+
+/** Het id van het advies dat al bekeken is; bepaalt of de melding nog staat. */
+export async function getGezienAdvies(): Promise<string | null> {
+  return (await redis.get<string>(ADVICE_SEEN)) ?? null;
+}
+
+export async function setGezienAdvies(id: string): Promise<void> {
+  await redis.set(ADVICE_SEEN, id);
 }

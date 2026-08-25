@@ -4,6 +4,8 @@ import {
   leesFeit, getallenIn, leesAdviesJson, valideerAdvies, weegmomentOpen,
   bouwAdviesBericht, adviesSysteem, VERBODEN_PATRONEN,
   evalueerAdvies, evaluatieVenster, moetHerzien, vastgelopen,
+  detecteerAfwijking, afwijkingOpen, noteerAfwijking, LEGE_COOLDOWN,
+  type Cooldown,
   type AdviesPayload, type Advies, type AdviesEvaluatie, type EvaluatieUitkomst,
 } from "./advies.ts";
 import { buildFactPack, vensterDatums, type FactPack } from "./feiten.ts";
@@ -356,32 +358,32 @@ function opgeslagen(over: Partial<Advies> = {}): Advies {
 
 test("na een weging op de weegdag staat het weegmoment open", () => {
   // 23 augustus 2026 is een zondag, en de weegdag staat op zondag.
-  const w = weegmomentOpen(pak(), WEGINGEN, profiel(), null);
+  const w = weegmomentOpen(pak(), WEGINGEN, profiel(), []);
   assert.equal(w.open, true);
   assert.equal(w.datum, "2026-08-23");
 });
 
 test("een weging op een andere dag dan de weegdag opent niets", () => {
-  const w = weegmomentOpen(pak(), [...WEGINGEN, { date: "2026-08-25", kg: 87.9 }], profiel(), null);
+  const w = weegmomentOpen(pak(), [...WEGINGEN, { date: "2026-08-25", kg: 87.9 }], profiel(), []);
   assert.equal(w.open, false);
   assert.ok(w.reden.includes("weegdag"));
 });
 
 test("zonder wegingen is er geen weegmoment", () => {
-  const w = weegmomentOpen(pak(), [], profiel(), null);
+  const w = weegmomentOpen(pak(), [], profiel(), []);
   assert.equal(w.open, false);
   assert.equal(w.datum, null);
 });
 
 test("hetzelfde weegmoment levert maar één advies op", () => {
-  const w = weegmomentOpen(pak(), WEGINGEN, profiel(), opgeslagen());
+  const w = weegmomentOpen(pak(), WEGINGEN, profiel(), [opgeslagen()]);
   assert.equal(w.open, false);
   assert.ok(w.reden.includes("al een advies"));
 });
 
 test("een volgende weging opent het weegmoment opnieuw", () => {
   const later = [...WEGINGEN, { date: "2026-08-30", kg: 87.6 }];
-  const w = weegmomentOpen(pak(), later, profiel(), opgeslagen());
+  const w = weegmomentOpen(pak(), later, profiel(), [opgeslagen()]);
   assert.equal(w.open, true);
   assert.equal(w.datum, "2026-08-30");
 });
@@ -395,7 +397,7 @@ test("onder de bewijslast komt er geen advies, met de reden erbij", () => {
     }),
     wegingen: WEGINGEN, profiel: profiel(), nu: NU,
   });
-  const w = weegmomentOpen(mager, WEGINGEN, profiel(), null);
+  const w = weegmomentOpen(mager, WEGINGEN, profiel(), []);
   assert.equal(w.open, false);
   assert.ok(w.reden.includes("nodig"));
 });
@@ -615,4 +617,173 @@ test("zonder vastgelopen adviezen mag een herhaling gewoon", () => {
   herhaling.action.target_direction = "down";
   herhaling.action.target_value = 30;
   assert.equal(valideerAdvies(herhaling, p, [metUitslag("verbeterd", "a")]).geldig, true);
+});
+
+// -- de afwijkingstrigger ----------------------------------------------------
+
+const NU_D = new Date("2026-08-25T09:00:00.000Z");
+
+/** Een pakket waarin bijna niet gelogd is in de laatste zeven kalenderdagen. */
+function pakStilgevallen(): FactPack {
+  return pak({}, (datum, i) => (i < 79 ? [regel(datum, 12, 38)] : []))
+    ;
+}
+
+/** Een pakket waarin de weekbuffer meteen op de eerste dag van de week opging. */
+function pakBufferVroeg(): FactPack {
+  // 23 augustus is een zondag en dus de eerste dag van de lopende week.
+  return pak({}, (datum) => [regel(datum, 12, datum === "2026-08-23" ? 90 : 38)]);
+}
+
+const STIJGEND: Weging[] = [
+  { date: "2026-08-09", kg: 88 }, { date: "2026-08-16", kg: 90 }, { date: "2026-08-23", kg: 92 },
+];
+
+test("de guardrails gaan voor elke andere aanleiding", () => {
+  assert.equal(detecteerAfwijking(pakOndereten(), [], profiel()), "underconsumption");
+  assert.equal(detecteerAfwijking(pakSnelleAfname(), [], profiel()), "rapid_loss");
+});
+
+test("een stijgend trendgewicht over twee wegingen is een aanleiding", () => {
+  assert.equal(detecteerAfwijking(pak(), STIJGEND, profiel()), "trend_rise");
+  // Een dalende trend niet.
+  assert.equal(detecteerAfwijking(pak(), WEGINGEN, profiel()), null);
+});
+
+test("een weekbuffer die vroeg opgaat is een aanleiding", () => {
+  const p = pakBufferVroeg();
+  assert.equal(p.current_week.exhausted_on_position, 1);
+  assert.ok(p.current_week.buffer_used >= 28);
+  assert.equal(detecteerAfwijking(p, [], profiel()), "buffer_early");
+});
+
+test("bijna niet loggen is een aanleiding", () => {
+  const p = pakStilgevallen();
+  assert.ok(p.recent.logged_days_last_7_calendar < 3);
+  assert.equal(detecteerAfwijking(p, [], profiel()), "logging_stopped");
+});
+
+test("zonder aanleiding komt er geen melding", () => {
+  const a = afwijkingOpen(pak(), WEGINGEN, profiel(), [], LEGE_COOLDOWN, NU_D);
+  assert.equal(a.open, false);
+  assert.equal(a.vlag, null);
+});
+
+test("hooguit één afwijkingsmelding per tien dagen, ook bij een nieuwe aanleiding", () => {
+  const gemeld: Cooldown = {
+    last_push_at: "2026-08-20T09:00:00.000Z", // vijf dagen geleden
+    flags_seen: { trend_rise: "2026-08-20" },
+  };
+  // Een andere aanleiding, maar het is te kort dag.
+  const te_vroeg = afwijkingOpen(pakStilgevallen(), [], profiel(), [], gemeld, NU_D);
+  assert.equal(te_vroeg.open, false);
+  assert.ok(te_vroeg.reden.includes("tien dagen"));
+
+  // Elf dagen later mag het wel.
+  const later = new Date("2026-08-31T09:00:00.000Z");
+  assert.equal(afwijkingOpen(pakStilgevallen(), [], profiel(), [], gemeld, later).open, true);
+});
+
+test("geen melding binnen twee etmalen na een advies bij het weegmoment", () => {
+  const netAdvies = [opgeslagen({ created_at: "2026-08-24T09:00:00.000Z", trigger: "weegmoment" })];
+  const kort = afwijkingOpen(pakStilgevallen(), [], profiel(), netAdvies, LEGE_COOLDOWN, NU_D);
+  assert.equal(kort.open, false);
+  assert.ok(kort.reden.includes("weegmoment"));
+
+  // Drie dagen na dat advies mag het wel.
+  const ouderAdvies = [opgeslagen({ created_at: "2026-08-22T09:00:00.000Z", trigger: "weegmoment" })];
+  assert.equal(afwijkingOpen(pakStilgevallen(), [], profiel(), ouderAdvies, LEGE_COOLDOWN, NU_D).open, true);
+});
+
+test("dezelfde aanleiding komt niet twee keer binnen een maand terug", () => {
+  const gemeld: Cooldown = {
+    last_push_at: "2026-08-01T09:00:00.000Z", // ruim tien dagen geleden
+    flags_seen: { logging_stopped: "2026-08-01" },
+  };
+  const zelfde = afwijkingOpen(pakStilgevallen(), [], profiel(), [], gemeld, NU_D);
+  assert.equal(zelfde.open, false);
+  assert.ok(zelfde.reden.includes("deze maand"));
+
+  // Een andere aanleiding mag dan wél.
+  assert.equal(afwijkingOpen(pakOndereten(), [], profiel(), [], gemeld, NU_D).open, true);
+});
+
+test("dertig dagen aan dezelfde aanleiding levert precies één melding op", () => {
+  const p = pakStilgevallen();
+  let cooldown = LEGE_COOLDOWN;
+  let meldingen = 0;
+
+  for (let dag = 0; dag < 30; dag++) {
+    const nu = new Date(Date.UTC(2026, 8, 1 + dag, 9, 0, 0));
+    const a = afwijkingOpen(p, [], profiel(), [], cooldown, nu);
+    if (a.open) {
+      meldingen++;
+      cooldown = noteerAfwijking(cooldown, a.vlag as string, nu);
+    }
+  }
+  assert.equal(meldingen, 1);
+});
+
+test("dertig dagen aan wisselende aanleidingen levert er hooguit drie op", () => {
+  // Elke dag een andere aanleiding: alleen de tien-dagenregel houdt hem tegen.
+  const pakketten = [pakStilgevallen(), pakOndereten(), pakBufferVroeg()];
+  let cooldown = LEGE_COOLDOWN;
+  const gemeld: string[] = [];
+
+  for (let dag = 0; dag < 30; dag++) {
+    const nu = new Date(Date.UTC(2026, 8, 1 + dag, 9, 0, 0));
+    const a = afwijkingOpen(pakketten[dag % 3], [], profiel(), [], cooldown, nu);
+    if (a.open) {
+      gemeld.push(a.vlag as string);
+      cooldown = noteerAfwijking(cooldown, a.vlag as string, nu);
+    }
+  }
+  assert.ok(gemeld.length <= 3, `${gemeld.length} meldingen: ${gemeld.join(", ")}`);
+  assert.ok(gemeld.length >= 1);
+});
+
+test("noteerAfwijking onthoudt het tijdstip en de aanleiding", () => {
+  const na = noteerAfwijking(LEGE_COOLDOWN, "trend_rise", NU_D);
+  assert.equal(na.last_push_at, "2026-08-25T09:00:00.000Z");
+  assert.equal(na.flags_seen.trend_rise, "2026-08-25");
+  // Eerdere aanleidingen blijven staan.
+  const later = noteerAfwijking(na, "buffer_early", new Date("2026-09-10T09:00:00.000Z"));
+  assert.equal(later.flags_seen.trend_rise, "2026-08-25");
+  assert.equal(later.flags_seen.buffer_early, "2026-09-10");
+});
+
+test("de aanleiding gaat in gewone taal mee naar het model", () => {
+  const bericht = JSON.parse(bouwAdviesBericht({
+    pakket: pakStilgevallen(), profiel: profiel(), vorige: [],
+    trigger: "afwijking", aanleiding: "logging_stopped",
+  }));
+  assert.equal(bericht.trigger, "afwijking");
+  assert.equal(bericht.aanleiding, "er is bijna niet gelogd deze week");
+});
+
+test("een enkele uitschieter op de weegschaal is nog geen stijging", () => {
+  // Een vochtdag van twee kilo verzet de trend maar een half procent.
+  const uitschieter: Weging[] = [
+    { date: "2026-08-09", kg: 88 }, { date: "2026-08-16", kg: 88 }, { date: "2026-08-23", kg: 90 },
+  ];
+  assert.equal(detecteerAfwijking(pak(), uitschieter, profiel()), null);
+});
+
+test("twee wegingen zijn te weinig voor een uitspraak over de trend", () => {
+  const kort: Weging[] = [{ date: "2026-08-16", kg: 88 }, { date: "2026-08-23", kg: 95 }];
+  assert.equal(detecteerAfwijking(pak(), kort, profiel()), null);
+});
+
+test("een afwijkingsmelding ertussen heropent het weegmoment niet", () => {
+  const weegadvies = opgeslagen({ id: "w1", trigger: "weegmoment", weeg_datum: "2026-08-23" });
+  const afwijkingsadvies = opgeslagen({
+    id: "x1", trigger: "afwijking", aanleiding: "underconsumption",
+    created_at: "2026-08-24T09:00:00.000Z",
+  });
+  delete (afwijkingsadvies as { weeg_datum?: string }).weeg_datum;
+
+  // Nieuwste eerst: de afwijking staat vooraan, het weegadvies eronder.
+  const w = weegmomentOpen(pak(), WEGINGEN, profiel(), [afwijkingsadvies, weegadvies]);
+  assert.equal(w.open, false);
+  assert.ok(w.reden.includes("al een advies"));
 });

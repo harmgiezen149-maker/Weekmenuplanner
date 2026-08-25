@@ -358,7 +358,7 @@ test("scenario 4 — structureel te weinig geeft underconsumption, ook op weinig
   // Zes gelogde dagen op 28 punten: 70% van een budget van 40.
   const p = bouw(reeks((datum, i) => (i >= 78 ? [regel(datum, 12, 28)] : null)));
   assert.equal(p.meta.days_logged, 6);
-  assert.equal(p.recent.days_under_80pct_budget_last_7, 6);
+  assert.equal(p.recent.days_under_80pct_budget, 6);
   assert.ok(p.flags.includes("underconsumption"));
   assert.ok(heeftGuardrail(p.flags));
   // De patroonvlaggen blijven weg: zes dagen is geen patroon.
