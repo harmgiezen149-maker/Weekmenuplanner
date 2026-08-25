@@ -155,3 +155,96 @@ test("de vingerafdruk verandert zodra het recept verandert", () => {
     basis, "andere hoeveelheid"
   );
 });
+
+// -- wat elk ingredient bijdraagt --------------------------------------------
+
+/**
+ * De uitsplitsing die het receptvenster toont, precies zoals de API hem maakt:
+ * per match de punten van dat onderdeel, gedeeld door het aantal personen.
+ */
+function bijdragePerPortie(
+  matches: ReturnType<typeof berekenReceptPunten>["matches"],
+  personen: number
+): (number | null)[] {
+  return matches.map((m) => {
+    const c = matchNaarComponent(m);
+    return c ? c.points_raw / personen : null;
+  });
+}
+
+test("de bijdragen per ingredient tellen op tot het totaal per portie", () => {
+  const recept = [
+    { naam: "kipfilet", hoev: 400, eenheid: "g" },
+    { naam: "olijfolie", hoev: 2, eenheid: "el" },
+    { naam: "rijst", hoev: 300, eenheid: "g" },
+    { naam: "broccoli", hoev: 500, eenheid: "g" },
+  ];
+  const uit = berekenReceptPunten(recept, 4);
+  const bijdragen = bijdragePerPortie(uit.matches, uit.personen);
+
+  const som = bijdragen.reduce<number>((s, v) => s + (v ?? 0), 0);
+  // Zonder deze gelijkheid zou het venster een uitsplitsing tonen die niet bij
+  // het getoonde totaal optelt, en dan is hij als controlemiddel waardeloos.
+  assert.ok(Math.abs(som - uit.perPortiePunten) < 1e-9,
+    `som ${som} wijkt af van totaal ${uit.perPortiePunten}`);
+});
+
+test("een niet herkend ingredient levert geen bijdrage op", () => {
+  const recept = [
+    { naam: "rijst", hoev: 300, eenheid: "g" },
+    { naam: "sjalotjesconfituur van de buurman", hoev: 1, eenheid: "el" },
+  ];
+  const uit = berekenReceptPunten(recept, 2);
+  const bijdragen = bijdragePerPortie(uit.matches, uit.personen);
+
+  assert.equal(bijdragen.length, 2);
+  assert.ok(bijdragen[0] != null);
+  assert.equal(bijdragen[1], null);
+  // Het totaal telt hem ook niet mee, dus de optelling blijft kloppen.
+  assert.ok(Math.abs((bijdragen[0] as number) - uit.perPortiePunten) < 1e-9);
+});
+
+test("meer personen verdeelt dezelfde bijdrage over meer porties", () => {
+  const recept = [{ naam: "rijst", hoev: 400, eenheid: "g" }];
+  const twee = berekenReceptPunten(recept, 2);
+  const vier = berekenReceptPunten(recept, 4);
+
+  const perTwee = bijdragePerPortie(twee.matches, twee.personen)[0] as number;
+  const perVier = bijdragePerPortie(vier.matches, vier.personen)[0] as number;
+  assert.ok(Math.abs(perTwee - 2 * perVier) < 1e-9);
+});
+
+test("een bijdrage onder nul wordt niet afgekapt", () => {
+  // Vezelrijk en vrijwel calorieloos: dan trekt het ingredient de puntensom
+  // omlaag. In de uitsplitsing hoort dat als min zichtbaar te zijn, want juist
+  // zo'n regel verklaart een totaal dat laag uitvalt. Afkappen op nul gebeurt
+  // pas bij het tonen van het recepttotaal.
+  const vezelrijk = matchNaarComponent({
+    ingredient: "psylliumvezels",
+    hoev: 100,
+    eenheid: "g",
+    product: {
+      id: "test-vezel", name: "Psylliumvezels", bron: "eigen", eenheid: "g",
+      per100: {
+        kcal: 20, protein_g: 2, fat_g: 0, satfat_g: 0,
+        carbs_g: 2, sugar_g: 0, fiber_g: 80, category: "default",
+      },
+    },
+    score: 100,
+    omrekening: { grams: 100, aanname: "100 g", onzeker: false },
+    overgeslagen: false,
+  });
+
+  assert.ok(vezelrijk != null);
+  assert.ok(vezelrijk.points_raw < 0, `verwachtte een min, kreeg ${vezelrijk.points_raw}`);
+  // En zo'n waarde wordt pas bij het tonen van een totaal op nul gezet.
+  assert.equal(toonPunten(vezelrijk.points_raw), 0);
+});
+
+test("kipfilet levert een positieve maar lage bijdrage", () => {
+  // Vastgelegd omdat het de intuitie tegenspreekt: eiwit maakt een product
+  // goedkoper, maar niet gratis. 100 g kipfilet blijft rond een punt.
+  const uit = berekenReceptPunten([{ naam: "kipfilet", hoev: 400, eenheid: "g" }], 4);
+  const bijdrage = bijdragePerPortie(uit.matches, uit.personen)[0] as number;
+  assert.ok(bijdrage > 0.5 && bijdrage < 1.5, `kreeg ${bijdrage}`);
+});

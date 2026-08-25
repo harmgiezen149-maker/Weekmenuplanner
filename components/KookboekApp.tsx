@@ -918,6 +918,10 @@ function ReceptModal({
   const [zoom, setZoom] = useState(false);
   // Per ingrediënt of de tracker het kent. Null zolang het nog niet geladen is.
   const [status, setStatus] = useState<IngredientStatus[] | null>(null);
+  // Wat elk ingredient bijdraagt aan één portie, onafgerond en schaalvrij.
+  // Zelfde volgorde als de ingredienten; null waar niets herkend is.
+  const [bijdrage, setBijdrage] = useState<(number | null)[] | null>(null);
+  const [schaal, setSchaal] = useState(1);
   // Welk ingrediënt (index) op dit moment wordt aangevuld of aangepast.
   const [aanvullen, setAanvullen] = useState<number | null>(null);
   const [bewaart, setBewaart] = useState(false);
@@ -931,9 +935,12 @@ function ReceptModal({
       if (!res.ok) throw new Error();
       const d = await res.json();
       setStatus(Array.isArray(d?.punten?.matches) ? d.punten.matches : []);
+      setBijdrage(Array.isArray(d?.perIngredient) ? d.perIngredient : null);
+      setSchaal(typeof d?.schaal === "number" && d.schaal > 0 ? d.schaal : 1);
     } catch {
       // Stil: dan blijft de ingrediëntenlijst gewoon zoals hij altijd was.
       setStatus([]);
+      setBijdrage(null);
     }
   }, [r.id]);
 
@@ -994,6 +1001,12 @@ function ReceptModal({
   };
 
   const onbekend = status?.filter((s) => s.overgeslagen).length ?? 0;
+  // Optelling van wat er getoond wordt. Hoort na afronden gelijk te zijn aan de
+  // badge bovenaan; wijkt het af, dan zit het verschil in een ingredient dat
+  // niet meetelt.
+  const samenPerPortie = bijdrage
+    ? bijdrage.reduce<number>((som, v) => som + (v ?? 0), 0) * schaal
+    : null;
   const bezigItem = aanvullen != null ? r.ingredienten[aanvullen] : null;
   const bezigStatus = aanvullen != null ? status?.[aanvullen] : null;
 
@@ -1154,10 +1167,15 @@ function ReceptModal({
                       <Plus size={12} /> niet bekend — tik om aan te vullen
                     </span>
                   ) : (
-                    <span style={S.ingBekend}>
-                      {hoeveelheidGeschat && <Info size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}
-                      {st.product!.name} · {st.omrekening.aanname}
-                      {st.product!.bron === "schatting" && <>{" "}<span style={S.ingGeschat}>geschat</span></>}
+                    <span style={S.ingBekendRij}>
+                      <span style={S.ingBekend}>
+                        {hoeveelheidGeschat && <Info size={11} style={{ verticalAlign: -1, marginRight: 3 }} />}
+                        {st.product!.name} · {st.omrekening.aanname}
+                        {st.product!.bron === "schatting" && <>{" "}<span style={S.ingGeschat}>geschat</span></>}
+                      </span>
+                      {bijdrage?.[k] != null && (
+                        <span style={S.ingPunt}>{puntTekst(bijdrage[k]! * schaal)} pt</span>
+                      )}
                     </span>
                   )}
                 </button>
@@ -1165,6 +1183,19 @@ function ReceptModal({
             );
           })}
         </ul>
+
+        {samenPerPortie != null && (
+          <div style={S.ingTotaal}>
+            <span>
+              Samen per portie
+              <span style={S.ingTotaalSub}>
+                {" "}· {r.personen} {r.personen === 1 ? "persoon" : "personen"}
+                {onbekend > 0 && `, ${onbekend} niet meegeteld`}
+              </span>
+            </span>
+            <span style={S.ingTotaalPunt}>{puntTekst(samenPerPortie)} pt</span>
+          </div>
+        )}
 
         {aanvullen != null && bezigItem && (
           <div style={S.modalBg} onClick={(e) => { e.stopPropagation(); setAanvullen(null); }}>
@@ -2980,6 +3011,16 @@ function AfbeeldingZoom({ src, onClose }: { src: string; onClose: () => void }) 
   );
 }
 
+/**
+ * Punten met één decimaal. Altijd een decimaal, zodat een kolom getallen onder
+ * elkaar uitlijnt, en zonder "-0" bij een waarde die net onder nul afrondt.
+ */
+function puntTekst(v: number): string {
+  const afgerond = Math.round(v * 10) / 10;
+  const n = Object.is(afgerond, -0) ? 0 : afgerond;
+  return n.toLocaleString("nl-NL", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
 function Tag({ children, tone }: { children: React.ReactNode; tone?: "maaltijd" }) {
   return <span style={{ ...S.tag, ...(tone === "maaltijd" ? S.tagMaaltijd : {}) }}>{children}</span>;
 }
@@ -3106,6 +3147,13 @@ const S: Record<string, React.CSSProperties> = {
   ingKnop: { display: "flex", flexDirection: "column", gap: 3, width: "100%", padding: "8px 0", background: "none", border: "none", textAlign: "left", font: "inherit", color: "inherit", cursor: "pointer" },
   ingKop: { display: "flex", justifyContent: "space-between", gap: 12, fontSize: 14 },
   ingBekend: { fontSize: 12, color: "var(--sub)" },
+  ingBekendRij: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 },
+  // Geen kleurcodering naar hoog of laag: dat zou een oordeel over eten worden.
+  // Alleen het getal, met het teken erbij.
+  ingPunt: { fontSize: 12, fontWeight: 800, color: "var(--accent)", flexShrink: 0, fontVariantNumeric: "tabular-nums" },
+  ingTotaal: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, padding: "10px 0 2px", fontSize: 13, fontWeight: 700 },
+  ingTotaalSub: { fontWeight: 500, color: "var(--sub)", fontSize: 12 },
+  ingTotaalPunt: { fontSize: 13, fontWeight: 800, color: "var(--accent)", fontVariantNumeric: "tabular-nums" },
   ingOnbekend: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--over)" },
   ingGeschat: { marginLeft: 6, fontSize: 11, fontWeight: 800, color: "var(--over)", background: "#fff2e2", padding: "1px 6px", borderRadius: 999 },
   ingUitslag: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 8px" },

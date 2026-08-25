@@ -435,6 +435,28 @@ Zonder ingevuld trackerprofiel verschijnen de badges niet en werkt het kookboek
 verder gewoon door. De puntenschaal is dan onbekend, dus het getal zou niets
 zeggen.
 
+#### Wat elk ingrediënt bijdraagt
+
+Achter elk herkend ingrediënt staat hoeveel punten het bijdraagt aan één
+portie — de opgegeven hoeveelheid, gedeeld door het aantal personen van het
+recept. Onder de lijst staat de optelling.
+
+Die uitsplitsing komt uit dezelfde `matchNaarComponent` als de puntentelling
+zelf en wordt bij het uitlezen berekend, niet mee gecachet. Zo kan hij niet uit
+de pas lopen met het totaal, en blijven bestaande gecachete recepten bruikbaar.
+Een test legt vast dat de bijdragen exact optellen tot het totaal per portie —
+zonder die gelijkheid is de uitsplitsing als controlemiddel waardeloos.
+
+Een bijdrage kan onder nul uitkomen bij iets wat vooral vezels levert; die wordt
+niet afgekapt, want juist zo'n regel verklaart een laag totaal. Afkappen op nul
+gebeurt pas bij het recepttotaal. Er zit geen kleurcodering op hoog of laag: dat
+zou een oordeel over eten worden, en dat hoort hier niet.
+
+Hiermee is een totaal dat er raar uitziet na te lopen. De twee dingen die je dan
+meestal ziet: een ingrediënt dat aan het verkeerde product hangt, of een
+hoeveelheid die anders is omgerekend dan je dacht — beide staan op dezelfde
+regel.
+
 #### Zien en aanpassen waarmee gerekend wordt
 
 Open je een recept, dan staat onder elk ingrediënt welk product de tracker eraan
