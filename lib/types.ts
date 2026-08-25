@@ -83,7 +83,7 @@ export interface BoodschapItem {
   winkel: string; // een van WINKELS, of "" (niet toegewezen)
   gebied: string; // een van WINKELGEBIEDEN, of "" (niet bepaald)
   gedaan: boolean;
-  bron: "week" | "hand";
+  bron: "week" | "hand" | "voorraad";
 }
 
 export interface Boodschappen {
@@ -102,6 +102,14 @@ export interface VoorraadArtikel {
   naam: string;
   winkel: string; // een van WINKELS, of "" (niet toegewezen)
   gebied: string; // een van WINKELGEBIEDEN, of "" (niet bepaald)
+  // De velden hieronder zijn optioneel: artikelen van voor deze uitbreiding
+  // hebben ze niet, en een voorraad zonder aantallen blijft prima werken.
+  /** Hoeveel je er nu hebt. */
+  aantal?: number;
+  /** stuk, pak, fles, rol — waarin je het telt. */
+  eenheid?: string;
+  /** Bij dit aantal of lager hoort het artikel op de boodschappenlijst. */
+  drempel?: number;
 }
 
 export interface Voorraad {

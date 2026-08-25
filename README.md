@@ -1085,6 +1085,65 @@ browsertabblad biedt iOS het niet aan. Het instellingenscherm zegt dat ook.
 
 ---
 
+## Voorraad vullen met een foto, en wat het kost
+
+### Een kassabon lezen
+
+Onder *Voorraad → Vullen met een foto* fotografeer je een kassabon. Het model
+leest hem uit en geeft een **voorstel** terug: alles staat met een vinkje klaar
+en de naam is aan te passen voor je op toevoegen drukt. Dat is geen
+beleefdheidsstap — bij een bon van dertig regels valt één verkeerd gelezen regel
+niet op, en die zou anders ongemerkt in je voorraad én je prijsboek belanden.
+
+Het model wordt gevraagd de kassa-afkorting terug te brengen tot een gewone
+Nederlandse naam ("AH BASIS H-MELK 1L" wordt "halfvolle melk") en alles wat geen
+product is weg te laten. Daar staat in `lib/bon.ts` een tweede zeef achter, want
+één gemiste regel zou als "TOTAAL" in je voorraad staan. Die zeef toetst op
+woordgrens, zodat "bonbons" niet sneuvelt op "bon" en "totaalbrood" niet op
+"totaal".
+
+Dezelfde knop leest ook een foto van losse producten, voor wat je in huis hebt
+maar niet op een bon staat.
+
+Een naam die al in je voorraad staat wordt niet nog een keer toegevoegd maar
+opgehoogd. De vergelijking gaat op de naam zonder hoofdletters en spaties, want
+zo typ je hem de tweede keer zelden precies hetzelfde.
+
+### Het prijsboek
+
+Wat je betaald hebt wordt onthouden per product, in `prijzen:boek`. De naam gaat
+eerst door `prijsSleutel()`, die merk en verpakkingsaanduiding eraf haalt: "AH
+Halfvolle melk 1L", "halfvolle melk" en "Melk halfvol" treffen dezelfde regel.
+Een nieuwere prijs vervangt een oudere, maar een oudere nooit een nieuwere — een
+oude bon nascannen hoort de actuele prijs niet terug te draaien.
+
+Onder aan je boodschappenlijst staat wat hij ongeveer gaat kosten. "Ongeveer" is
+daar geen slag om de arm maar de kern: er staat altijd bij hoeveel items géén
+bekende prijs hebben, en hoeveel prijzen ouder zijn dan vier maanden. Een raming
+die stiekem een gemiddelde invult voor onbekende items ziet er nauwkeuriger uit
+dan hij is.
+
+Prijzen gaan pas het boek in nadat jij de regels hebt nagekeken — het lezen
+(`POST /api/bon`) en het opnemen (`PUT /api/bon`) zijn daarom gescheiden. Een
+misgelezen prijs zou anders maandenlang je ramingen scheeftrekken.
+
+### Aantallen in de voorraad
+
+Een voorraadartikel kan nu een aantal en een eenheid hebben, met een drempel
+waaronder het "bijna op" heet. Alle drie optioneel: artikelen van voor deze
+uitbreiding hebben ze niet, en een voorraadlijst waar overal een geraden 0 bij
+staat is erger dan geen aantallen. Pas als je op "tel mee" drukt gaat de app
+erover praten.
+
+### Wat hier nog niet zit
+
+Streepjescodes scannen om voorraad toe te voegen (optie 3.3 uit de optielijst)
+is niet gebouwd. De scanner bestaat al aan de trackerkant
+(`components/tracker/Scanner.tsx`); hem naar het kookboek halen is het werk dat
+nog openstaat.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1094,6 +1153,7 @@ In Upstash Redis:
 - `week:current` — de weekplanning (startdag + gekozen gerechten per dag).
 - `boodschappen:current`, `gebiedvolgorde:current`, `voorraad:current` — de
   boodschappenlijst, de looproute per winkel en de vaste voorraadartikelen.
+- `prijzen:boek` — de laatst betaalde prijs per product, uit je kassabonnen.
 - `wl:*` — het gedeelde deel van de tracker (zie het hoofdstuk hierboven).
   Bewust een eigen prefix, zodat kookboek en tracker elkaars data nooit kunnen
   raken.
@@ -1128,6 +1188,8 @@ app/
     auth/gebruikers/route.ts GET lijst / POST persoon erbij / DELETE inlog weg
     auth/wachtwoord/route.ts POST eigen wachtwoord wijzigen
     backup/route.ts         GET back-up downloaden / POST terugzetten
+    bon/route.ts            POST kassabon of productfoto lezen / PUT prijzen opnemen
+    prijzen/route.ts        GET het prijsboek, voor de raming op de lijst
     push/route.ts           GET sleutel+voorkeur / POST aanmelden / DELETE afmelden
     push/proef/route.ts     POST een proefmelding naar je eigen apparaten
     cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
@@ -1156,6 +1218,7 @@ app/
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   Login.tsx             Het loginscherm (staat los van de rest van de app)
+  Bonscanner.tsx        Kassabon of productfoto omzetten in voorraadartikelen
   ServiceWorker.tsx     Registreert public/sw.js; toont zelf niets
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
@@ -1199,6 +1262,10 @@ lib/
   backup-formaat.ts     Vorm van een back-upbestand + inlezen (puur, getest)
   backup.ts             Back-up maken en terugzetten (Redis)
   push.ts               VAPID-sleutelpaar, abonnementen en versturen
+  afbeelding.ts         Foto's schalen en comprimeren (browser)
+  bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
+  prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
+  prijsboek.ts          Het prijsboek bewaren en bonnen erin opnemen (Redis)
   tracker/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule

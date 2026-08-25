@@ -14,6 +14,7 @@ import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./tr
 import type { Weging } from "./tracker/gewicht";
 import type { Advies, Cooldown } from "./tracker/advies";
 import type { IngredientBibliotheek } from "./tracker/ingredienten";
+import type { Prijsboek } from "./prijzen";
 
 export const BACKUP_VERSIE = 1;
 
@@ -34,6 +35,8 @@ export interface BackupBestand {
     maaltijden: Maaltijdsjabloon[];
     ingredienten: IngredientBibliotheek | null;
     eigenProducten: { barcode: string; product: Product }[];
+    /** Ontbreekt in back-ups van voor het prijsboek; dan gewoon null. */
+    prijsboek: Prijsboek | null;
   };
   persoonlijk: {
     profiel: Profile | null;
@@ -102,6 +105,7 @@ export function leesBackup(ruw: unknown): { bestand: BackupBestand } | { fout: s
         maaltijden: lijst(g.maaltijden),
         ingredienten: g.ingredienten ?? null,
         eigenProducten: lijst(g.eigenProducten),
+        prijsboek: g.prijsboek ?? null,
       },
       persoonlijk: {
         profiel: p.profiel ?? null,

@@ -2,12 +2,17 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { comprimeerAfbeelding, fileNaarDataUrl } from "@/lib/afbeelding";
+import Bonscanner from "./Bonscanner";
+import type { BonKeuze } from "./Bonscanner";
+import { euroTekst, raamLijst } from "@/lib/prijzen";
+import type { Prijsboek } from "@/lib/prijzen";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
-  Activity, ClipboardCheck, WifiOff,
+  Activity, ClipboardCheck, WifiOff, Receipt, Euro,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -60,6 +65,9 @@ const api = {
   },
   async saveGebiedVolgorde(g: GebiedVolgorde): Promise<GebiedVolgorde> {
     const res = await fetch("/api/gebiedvolgorde", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(g) }); return res.json();
+  },
+  async getPrijsboek(): Promise<{ boek: Prijsboek }> {
+    const r = await fetch("/api/prijzen", { cache: "no-store" }); return r.json();
   },
   async getVoorraad(): Promise<Voorraad> {
     const r = await fetch("/api/voorraad", { cache: "no-store" }); return r.json();
@@ -144,41 +152,6 @@ const isStandaardKruid = (naam: string): boolean => {
   ].includes(n);
 };
 
-// ---------------------------------------------------------------------------
-// Afbeeldings-helpers. We slaan afbeeldingen op als gecomprimeerde JPEG data-URL,
-// zodat ze binnen de Upstash-limiet (~1MB per waarde) passen.
-// ---------------------------------------------------------------------------
-const MAX_DIM = 1000; // langste zijde in px na compressie
-
-function fileNaarDataUrl(file: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result as string);
-    fr.onerror = rej;
-    fr.readAsDataURL(file);
-  });
-}
-
-// Schaalt + comprimeert een afbeelding (data-URL) naar een JPEG data-URL.
-// maxDim: langste zijde; hoger voor foto's die de AI moet kunnen lezen.
-function comprimeerAfbeelding(bron: string, kwaliteit = 0.82, maxDim = MAX_DIM): Promise<string> {
-  return new Promise((res, rej) => {
-    const img = new Image();
-    img.onload = () => {
-      let { width, height } = img;
-      if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
-      else if (height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
-      const canvas = document.createElement("canvas");
-      canvas.width = width; canvas.height = height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return rej(new Error("geen canvas"));
-      ctx.drawImage(img, 0, 0, width, height);
-      res(canvas.toDataURL("image/jpeg", kwaliteit));
-    };
-    img.onerror = rej;
-    img.src = bron;
-  });
-}
 
 // ============================================================================
 // APP
@@ -212,6 +185,7 @@ export default function App() {
   const [boodschappen, setBoodschappen] = useState<Boodschappen>({ items: [] });
   const [gebiedVolgorde, setGebiedVolgorde] = useState<GebiedVolgorde>({});
   const [voorraad, setVoorraad] = useState<Voorraad>({ items: [] });
+  const [prijsboek, setPrijsboek] = useState<Prijsboek>({});
   const [tab, setTab] = useState("recepten");
   // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
   // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
@@ -222,11 +196,14 @@ export default function App() {
 
   useEffect(() => {
     (async () => {
-      const [r, w, b, g, v] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad()]);
+      const [r, w, b, g, v, pb] = await Promise.all([api.getRecepten(), api.getWeek(), api.getBoodschappen(), api.getGebiedVolgorde(), api.getVoorraad(),
+        // Het prijsboek is een extra: gaat het ophalen mis, dan verdwijnt
+        // alleen de raming en werkt de lijst gewoon door.
+        api.getPrijsboek().catch(() => ({ boek: {} as Prijsboek }))]);
       // Migratie: oude slot-sleutels (alleen de dagnaam) worden avondeten.
       const slots: Record<string, { recipeId: string; personen: number }> = {};
       Object.entries(w.slots || {}).forEach(([k, v2]) => { slots[k.includes("|") ? k : slotKey(k, HOOFD_MAALTIJD)] = v2 as any; });
-      setRecepten(r); setWeek({ ...w, slots }); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setLaden(false);
+      setRecepten(r); setWeek({ ...w, slots }); setBoodschappen(b); setGebiedVolgorde(g); setVoorraad(v); setPrijsboek(pb?.boek ?? {}); setLaden(false);
       api.getReceptPunten()
         .then((d) => {
           setReceptPunten(d.punten);
@@ -506,6 +483,7 @@ export default function App() {
                 recepten={recepten} week={week} dagen={dagenInVolgorde}
                 boodschappen={boodschappen} setBoodschappen={setBoodschappen}
                 gebiedVolgorde={gebiedVolgorde} openstaand={boodOpenstaand}
+                prijsboek={prijsboek}
               />
             )}
             {tab === "voorraad" && (
@@ -2385,17 +2363,60 @@ function KiesGerechtModal({
   );
 }
 
+/**
+ * Hoeveel je er nog van hebt.
+ *
+ * Optioneel: artikelen van voor deze uitbreiding hebben geen aantal en tonen
+ * alleen "tel mee". Pas als je er een getal in zet gaat de app erover praten —
+ * een voorraadlijst waar overal een geraden 0 bij staat is erger dan geen
+ * aantallen.
+ */
+function Voorraadstand({
+  art, onWijzig,
+}: { art: VoorraadArtikel; onWijzig: (patch: Partial<VoorraadArtikel>) => void }) {
+  if (art.aantal == null) {
+    return (
+      <button style={S.voorraadTelMee} onClick={() => onWijzig({ aantal: 1, eenheid: art.eenheid || "stuk" })}>
+        <Plus size={11} /> tel mee
+      </button>
+    );
+  }
+
+  const drempel = art.drempel ?? 1;
+  const bijnaOp = art.aantal <= drempel;
+  return (
+    <div style={S.voorraadStand}>
+      <button
+        style={S.voorraadStandBtn}
+        onClick={() => onWijzig(art.aantal! <= 0 ? { aantal: undefined } : { aantal: art.aantal! - 1 })}
+        aria-label={`Minder ${art.naam}`}
+      >
+        <Minus size={12} />
+      </button>
+      <span style={{ ...S.voorraadStandTekst, ...(bijnaOp ? { color: "var(--over)", fontWeight: 800 } : {}) }}>
+        {art.aantal === 0 ? "op" : `${art.aantal} ${art.eenheid || "stuk"}`}
+      </span>
+      <button style={S.voorraadStandBtn} onClick={() => onWijzig({ aantal: art.aantal! + 1 })}
+        aria-label={`Meer ${art.naam}`}>
+        <Plus size={12} />
+      </button>
+    </div>
+  );
+}
+
 // ============================================================================
 // BOODSCHAPPENLIJST
 // ============================================================================
 function BoodschappenPagina({
-  recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde, openstaand,
+  recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde, openstaand, prijsboek,
 }: {
   recepten: Recept[]; week: WeekState; dagen: readonly string[];
   boodschappen: Boodschappen; setBoodschappen: React.Dispatch<React.SetStateAction<Boodschappen>>;
   gebiedVolgorde: GebiedVolgorde;
   /** Er staan wijzigingen open die nog niet bij de server zijn aangekomen. */
   openstaand: boolean;
+  /** Laatst betaalde prijzen, voor de raming onder aan de lijst. */
+  prijsboek: Prijsboek;
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
@@ -2565,6 +2586,15 @@ function BoodschappenPagina({
   const aantalDagen = dagen.filter((d) => week.slots[d]).length;
   const aantalGedaan = items.filter((it) => it.gedaan).length;
 
+  // Wat de lijst ongeveer gaat kosten. Alleen items met een bekende prijs
+  // tellen mee; hoeveel er onbekend zijn staat er altijd bij. Een raming die
+  // stiekem een gemiddelde invult ziet er nauwkeuriger uit dan hij is.
+  const raming = useMemo(
+    () => raamLijst(prijsboek, items.map((it) => ({ naam: it.naam, hoev: it.hoev })),
+      new Date().toISOString().slice(0, 10)),
+    [prijsboek, items]
+  );
+
   return (
     <div>
       {openstaand && (
@@ -2606,9 +2636,22 @@ function BoodschappenPagina({
           Nog geen boodschappen. Genereer de lijst uit je weekmenu{aantalDagen > 0 ? ` (${aantalDagen} maaltijden gepland)` : ""} of voeg handmatig items toe.
         </p>
       ) : (
-        <div style={S.infoBar}>
-          <ShoppingCart size={15} /> {items.length} items{aantalGedaan > 0 ? ` · ${aantalGedaan} afgevinkt` : ""}
-        </div>
+        <>
+          <div style={S.infoBar}>
+            <ShoppingCart size={15} /> {items.length} items{aantalGedaan > 0 ? ` · ${aantalGedaan} afgevinkt` : ""}
+          </div>
+          {raming.bekend > 0 && (
+            <div style={S.ramingBalk}>
+              <Euro size={15} style={{ flexShrink: 0 }} />
+              <span>
+                <strong>{euroTekst(raming.euro)}</strong> voor {raming.bekend}{" "}
+                {raming.bekend === 1 ? "item" : "items"} met een bekende prijs
+                {raming.onbekend > 0 && <> · {raming.onbekend} nog onbekend</>}
+                {raming.verouderd > 0 && <> · {raming.verouderd} ouder dan vier maanden</>}
+              </span>
+            </div>
+          )}
+        </>
       )}
 
       {items.length > 0 && (
@@ -2847,6 +2890,7 @@ function VoorraadPagina({
   setVoorraad: React.Dispatch<React.SetStateAction<Voorraad>>;
   onNaarLijst: (art: VoorraadArtikel, aantal: number) => void;
 }) {
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [nieuwNaam, setNieuwNaam] = useState("");
   const [nieuwWinkel, setNieuwWinkel] = useState("");
   const [nieuwGebied, setNieuwGebied] = useState("");
@@ -2877,6 +2921,42 @@ function VoorraadPagina({
     setToegevoegd((t) => ({ ...t, [art.id]: true }));
   };
 
+  /**
+   * Regels van een gescande bon of foto erbij.
+   *
+   * Een naam die er al staat wordt niet nog een keer toegevoegd maar opgehoogd:
+   * twee keer "melk" in je voorraad helpt niemand. De vergelijking gaat op de
+   * naam zonder hoofdletters en spaties, want zo typ je hem de tweede keer
+   * zelden precies hetzelfde.
+   */
+  const uitFoto = (regels: BonKeuze[], winkelVanBon: string) => {
+    setVoorraad((p) => {
+      const items = [...p.items];
+      const zoek = (n: string) =>
+        items.findIndex((a) => a.naam.trim().toLowerCase() === n.trim().toLowerCase());
+      for (const r of regels) {
+        const naam = r.naam.trim();
+        if (!naam) continue;
+        const i = zoek(naam);
+        if (i >= 0) {
+          items[i] = {
+            ...items[i],
+            aantal: (items[i].aantal ?? 0) + r.aantal,
+            eenheid: items[i].eenheid || r.eenheid,
+            winkel: items[i].winkel || winkelVanBon,
+            gebied: items[i].gebied || r.gebied,
+          };
+        } else {
+          items.push({
+            id: uid(), naam, winkel: winkelVanBon, gebied: r.gebied,
+            aantal: r.aantal, eenheid: r.eenheid,
+          });
+        }
+      }
+      return { items };
+    });
+  };
+
   // Groepeer per afdeling, in de vaste volgorde van WINKELGEBIEDEN; onbekende
   // afdeling ("") komt onderaan.
   const groepen = useMemo(() => {
@@ -2891,6 +2971,14 @@ function VoorraadPagina({
       <p style={S.winkelsIntro}>
         Terugkerende artikelen zoals wasmiddel of aluminiumfolie. Vink een artikel aan om het aan je boodschappenlijst toe te voegen — winkel en afdeling gaan automatisch mee.
       </p>
+
+      <button style={S.bonKnop} onClick={() => setScannerOpen(true)}>
+        <Receipt size={16} /> Vullen met een foto
+      </button>
+
+      {scannerOpen && (
+        <Bonscanner onToevoegen={uitFoto} onSluiten={() => setScannerOpen(false)} />
+      )}
 
       {/* Nieuw artikel toevoegen */}
       <div style={S.voorraadNieuw}>
@@ -2941,6 +3029,7 @@ function VoorraadPagina({
                       {WINKELGEBIEDEN.map((g) => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
+                  <Voorraadstand art={art} onWijzig={(p2) => wijzig(art.id, p2)} />
                 </div>
                 {!toegevoegd[art.id] && (
                   <div style={S.voorraadStepper}>
@@ -3365,6 +3454,12 @@ const S: Record<string, React.CSSProperties> = {
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },
   gebiedKop: { fontSize: 11, fontWeight: 700, color: "var(--sub)", margin: "2px 4px 4px", letterSpacing: "0.02em" },
+  voorraadStand: { display: "flex", alignItems: "center", gap: 4, marginTop: 5 },
+  voorraadStandBtn: { width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--line)", borderRadius: 6, background: "var(--bg)", color: "var(--sub)", cursor: "pointer", padding: 0 },
+  voorraadStandTekst: { fontSize: 11.5, color: "var(--sub)", minWidth: 52, textAlign: "center" },
+  voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
+  ramingBalk: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, color: "var(--sub)", marginBottom: 12 },
+  bonKnop: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "11px", background: "var(--surface)", border: "1px solid var(--accent)", borderRadius: 12, fontSize: 14, fontWeight: 700, color: "var(--accent)", cursor: "pointer", marginBottom: 14 },
   nogNietOpgeslagen: { display: "flex", alignItems: "center", gap: 8, background: "#fdf4e3", border: "1px solid var(--gold)", borderRadius: 12, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, color: "#7a4d09", marginBottom: 12 },
   leeg: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "40px 20px", color: "var(--sub)", textAlign: "center", fontSize: 14 },
   voorraadNieuw: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, marginBottom: 18 },

@@ -41,6 +41,18 @@ test("een back-up uit een nieuwere versie wordt geweigerd", () => {
   assert.match(uit.fout, /nieuwere versie/);
 });
 
+test("het prijsboek gaat mee en ontbreekt netjes in oude back-ups", () => {
+  const met = leesBackup(bestand({
+    gedeeld: { prijsboek: { melk: { euro: 1.2, aantal: 1, eenheid: "l", winkel: "AH", datum: "2026-08-01" } } },
+  }));
+  assert.ok("bestand" in met);
+  assert.equal(met.bestand.gedeeld.prijsboek?.melk.euro, 1.2);
+
+  const zonder = leesBackup(bestand());
+  assert.ok("bestand" in zonder);
+  assert.equal(zonder.bestand.gedeeld.prijsboek, null);
+});
+
 test("ontbrekende onderdelen worden aangevuld met leeg in plaats van geweigerd", () => {
   // Een back-up van vroeger mist velden die er later bij zijn gekomen. Die
   // hoort gewoon te werken.

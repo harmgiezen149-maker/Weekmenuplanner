@@ -28,6 +28,7 @@ import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "./tr
 import type { Weging } from "./tracker/gewicht";
 import type { Advies, Cooldown } from "./tracker/advies";
 import type { IngredientBibliotheek } from "./tracker/ingredienten";
+import type { Prijsboek } from "./prijzen";
 
 export { BACKUP_VERSIE } from "./backup-formaat";
 export { leesBackup, tel } from "./backup-formaat";
@@ -74,6 +75,7 @@ async function leesGedeeld(): Promise<BackupBestand["gedeeld"]> {
       redis.get<Maaltijdsjabloon[]>("wl:meals"),
       redis.get<IngredientBibliotheek>("wl:ingredienten"),
     ]);
+  const prijsboek = await redis.get<Prijsboek>("prijzen:boek");
 
   return {
     recepten,
@@ -86,6 +88,7 @@ async function leesGedeeld(): Promise<BackupBestand["gedeeld"]> {
     recent: recent ?? [],
     maaltijden: maaltijden ?? [],
     ingredienten: ingredienten ?? null,
+    prijsboek: prijsboek ?? null,
     eigenProducten: await leesEigenProducten(),
   };
 }
@@ -216,6 +219,7 @@ async function herstelGedeeld(g: BackupBestand["gedeeld"]): Promise<void> {
   await zetOfWis("gebiedvolgorde:current", g.gebiedvolgorde);
   await zetOfWis("voorraad:current", g.voorraad);
   await zetOfWis("wl:ingredienten", g.ingredienten);
+  await zetOfWis("prijzen:boek", g.prijsboek);
   await redis.set("wl:favorites", g.favorieten);
   await redis.set("wl:recent", g.recent);
   await redis.set("wl:meals", g.maaltijden);

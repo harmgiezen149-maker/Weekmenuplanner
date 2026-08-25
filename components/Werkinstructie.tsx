@@ -487,6 +487,35 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="bon" titel="Voorraad vullen met een foto">
+          <p style={{ margin: "0 0 8px" }}>
+            Op <span style={S.route}>Voorraad</span> staat "Vullen met een foto". Fotografeer je
+            kassabon en de app zet de producten voor je klaar — statiegeld, kortingen en het totaal
+            gaan er vanzelf uit, en de kassa-afkorting wordt teruggebracht tot een gewone naam.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Alles staat met een vinkje klaar en je kunt elke naam nog aanpassen. Pas als je op
+            toevoegen drukt gaat het je voorraad in. Staat een product er al, dan wordt het aantal
+            opgehoogd in plaats van dat het er twee keer komt te staan.
+          </p>
+          <p style={{ margin: 0 }}>
+            Dezelfde knop leest ook een foto van losse producten op je aanrecht, voor wat je wel in
+            huis hebt maar niet op een bon staat.
+          </p>
+        </H>
+
+        <H id="prijzen" titel="Wat je boodschappen kosten">
+          <p style={{ margin: "0 0 8px" }}>
+            Wat je op een bon betaald hebt wordt onthouden per product. Onder aan je
+            boodschappenlijst staat daarna wat de lijst ongeveer gaat kosten.
+          </p>
+          <p style={{ margin: 0 }}>
+            "Ongeveer" is hier geen slag om de arm: er staat altijd bij hoeveel items nog geen
+            bekende prijs hebben, en hoeveel prijzen ouder zijn dan vier maanden. Voor items zonder
+            prijs wordt niets geraden — dan zou het bedrag nauwkeuriger lijken dan het is.
+          </p>
+        </H>
+
         <H id="meldingen" titel="Herinneringen">
           <p style={{ margin: "0 0 8px" }}>
             Onder <span style={S.route}>Instellingen → Meldingen</span> zet je herinneringen aan.
