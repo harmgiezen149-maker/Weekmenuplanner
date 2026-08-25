@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/herinnering?soort=weegdag", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/herinnering?soort=logboek", "schedule": "0 18 * * *" }
+  ]
+}

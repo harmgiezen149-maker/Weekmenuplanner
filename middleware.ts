@@ -27,6 +27,13 @@ const OPEN: (string | RegExp)[] = [
   "/api/auth/logout",
   "/api/auth/status",
   "/api/auth/inrichten",
+  // De service worker moet ook op het loginscherm te registreren zijn, anders
+  // komt hij pas na de eerste inlog binnen en mist de eerste paginalading hem.
+  "/sw.js",
+  // De dagelijkse taak draait zonder browser en dus zonder sessie; hij heeft
+  // zijn eigen controle (CRON_SECRET) en kan niets veranderen behalve een
+  // melding versturen.
+  /^\/api\/cron(\/|$)/,
   "/manifest.webmanifest",
   "/favicon.ico",
   "/apple-touch-icon.png",

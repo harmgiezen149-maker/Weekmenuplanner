@@ -5,6 +5,7 @@ import {
   AlertTriangle, Check, Download, KeyRound, Loader2, LogOut, Trash2, Upload, UserPlus,
 } from "lucide-react";
 import { T } from "./stijl";
+import Meldingen from "./Meldingen";
 
 // Account, mensen en back-up. Staat onderaan het instellingenscherm en haalt
 // zijn eigen gegevens op: het heeft niets te maken met het profiel erboven en
@@ -48,6 +49,13 @@ export default function Account() {
 
   const uitloggen = async () => {
     await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    // De service worker bewaart een kopie van onder meer de boodschappenlijst.
+    // Die hoort niet achter te blijven op een apparaat waar je net af bent.
+    if ("caches" in window) {
+      await caches.keys()
+        .then((namen) => Promise.all(namen.map((n) => caches.delete(n))))
+        .catch(() => {});
+    }
     window.location.href = "/login";
   };
 
@@ -74,6 +82,8 @@ export default function Account() {
         gebruikers={gebruikers} ik={ik} onVernieuw={laad}
         onFout={setFout} onMelding={(m) => { setMelding(m); setFout(""); }}
       />
+
+      <Meldingen />
 
       <Backup onFout={setFout} onMelding={(m) => { setMelding(m); setFout(""); }} />
     </>

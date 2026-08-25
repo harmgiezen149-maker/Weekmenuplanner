@@ -990,6 +990,101 @@ De pure kant (welke velden erin horen, wat een geldig bestand is) staat in
 
 ---
 
+## Meldingen en offline werken
+
+### De service worker
+
+`public/sw.js` doet twee dingen en verder niets. Er wordt met opzet niet
+geprobeerd de hele app offline te laten werken: recepten toevoegen, punten
+berekenen en advies vragen kunnen niet zonder server, en een app die half werkt
+zonder te zeggen wat er niet werkt is verwarrender dan een app die eerlijk zegt
+dat hij geen verbinding heeft.
+
+1. **De boodschappenlijst blijft werken in een winkel met slecht bereik.** Van
+   elke geslaagde `GET` op `/api/boodschappen`, `/api/voorraad`,
+   `/api/gebiedvolgorde` en `/api/week` wordt een kopie bewaard, met een
+   `x-kb-bewaard-op`-kop erbij. Valt het netwerk weg, dan komt die kopie
+   tevoorschijn. Bestanden onder `/_next/static/` dragen een hash in hun naam en
+   komen zonder meer uit de kopie; paginanavigaties zijn netwerk-eerst met de
+   kopie als terugval. Een doorstuur naar het loginscherm wordt nooit onder de
+   oorspronkelijke pagina bewaard — offline zou je anders het loginscherm zien
+   op de plek van je boodschappenlijst.
+2. **Pushmeldingen tonen**, en op een tik de juiste pagina openen in het venster
+   dat al openstaat.
+
+Bij uitloggen worden alle bewaarde kopieën van dat apparaat gewist.
+
+### Afvinken zonder bereik
+
+De boodschappenlijst sloeg wijzigingen al met een vertraging van 350 ms op. Wat
+er nu bij komt: mislukt dat, dan blijft de wijziging openstaan en wordt hij
+opnieuw geprobeerd — bij het `online`-signaal van de browser én elke vijftien
+seconden, want bij een wankele verbinding blijft dat signaal vaker uit dan je
+zou denken. Zolang er iets openstaat verschijnt er een balkje boven de lijst.
+Wat op het scherm staat is ondertussen leidend, dus je kunt gewoon doorwerken.
+
+`api.saveBoodschappen` gooit nu ook een fout bij een antwoord dat niet `ok` is.
+Zonder dat nam de lijst een foutobject over als nieuwe serverstand.
+
+### Pushmeldingen
+
+Twee soorten, allebei apart aan of uit te zetten, allebei standaard uit:
+
+- **Weegdag** — op je weegdag, als er nog geen weging staat.
+- **Dagboek** — aan het eind van de dag, als je nog niets hebt gelogd. Blijft
+  weg als je een week lang niets logt: dat is geen vergeetachtigheid meer maar
+  een pauze, en daar hoort de app zich niet dagelijks in te mengen.
+
+De teksten volgen dezelfde regel als de adviesmodule: er staat wat er is, niet
+wat je zou moeten doen. Een test legt dat vast — geen uitroeptekens, geen
+"vergeet niet", geen oordeel.
+
+Het besluit óf er een melding uitgaat staat in `lib/tracker/herinnering.ts`,
+puur en getest. Die functie geeft `null` terug zodra er ook maar één reden is om
+te zwijgen: een gemiste herinnering merk je nauwelijks, een overbodige melding
+op je telefoon wel.
+
+### Het sleutelpaar
+
+Web Push heeft een VAPID-sleutelpaar nodig. Dat wordt bij de eerste aanvraag
+aangemaakt en in Redis bewaard onder `auth:vapid`, niet als omgevingsvariabele.
+Dat scheelt een handmatige instelstap bij het live zetten, en de database bewaart
+toch al wachtwoordregels en sessies. Het schrijven gaat met `NX`, zodat twee
+gelijktijdige eerste aanvragen niet ieder een eigen paar maken.
+
+Abonnementen staan per persoon onder `wl:p:<id>:push`. Een abonnement waarvan de
+pushdienst zegt dat het niet meer bestaat (404 of 410) wordt opgeruimd; andere
+fouten laten het staan, want een tijdelijke storing hoort je meldingen niet op te
+zeggen. Die fouten worden wél teruggegeven en zijn zichtbaar via de knop
+"Proefmelding sturen" — stil falen is hier het ergste wat kan gebeuren.
+
+### De dagelijkse taak
+
+`vercel.json` plant twee taken: `?soort=weegdag` om 06:00 UTC en
+`?soort=logboek` om 18:00 UTC. Op het gratis abonnement van Vercel mag zo'n taak
+één keer per dag draaien en kan hij tot een uur later uitkomen dan gepland —
+daarom noemt geen enkele meldingstekst een tijdstip.
+
+De taak is onschadelijk als hij vaker draait: hij verstuurt hooguit één melding
+per soort per persoon per dag, en dat geheugen staat in
+`wl:p:<id>:melding:laatst` (twee dagen houdbaar). Dat is hier ook de
+beveiliging; staat `CRON_SECRET` ingesteld in Vercel, dan wordt die
+daarbovenop gecontroleerd.
+
+De taak draait zonder browser en dus zonder sessie. Om tóch de gewone datalaag
+te kunnen gebruiken is er `metPersoon(id, ...)` in `lib/persoon.ts`: binnen dat
+blokje kijkt `huidigePersoon()` naar dat id in plaats van naar de header. Het id
+leeft alleen binnen de callback, dus een route die dit niet aanroept kan er nooit
+per ongeluk in terechtkomen.
+
+### Wat je op je telefoon moet doen
+
+Op Android werkt het zodra je meldingen aanzet. Op een iPhone werkt Web Push
+alleen als de app via Safari op het beginscherm staat — in een gewoon
+browsertabblad biedt iOS het niet aan. Het instellingenscherm zegt dat ook.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1004,8 +1099,11 @@ In Upstash Redis:
   raken.
 - `wl:p:<persoon>:*` — het persoonlijke deel: profiel, weeglijst, feitenpakket
   en adviezen.
-- `auth:*` — accounts en sessies. Buiten `wl:` gehouden: dit gaat over toegang
-  tot de hele app, niet over voeding.
+- `auth:*` — accounts, sessies en het VAPID-sleutelpaar voor pushmeldingen.
+  Buiten `wl:` gehouden: dit gaat over toegang tot de hele app, niet over
+  voeding.
+- `wl:p:<persoon>:push` en `wl:p:<persoon>:melding:*` — de aangemelde apparaten,
+  welke meldingen aan staan en wat er vandaag al verstuurd is.
 
 Eén database = één huishouden, met meerdere personen erin. Wil je later echt
 gescheiden huishoudens, dan is de weg dezelfde als bij `wl:p:` — een tussenstuk
@@ -1015,6 +1113,8 @@ in de sleutel, met één plek die hem invult.
 
 ```
 middleware.ts           Het slot: elke pagina en elke API-route gaat hierlangs
+vercel.json             De twee dagelijkse taken voor de herinneringen
+public/sw.js            Service worker: bewaarde lijst offline + pushmeldingen
 app/
   page.tsx              Hoofdpagina
   login/page.tsx        Inloggen, of het allereerste account aanmaken
@@ -1028,6 +1128,9 @@ app/
     auth/gebruikers/route.ts GET lijst / POST persoon erbij / DELETE inlog weg
     auth/wachtwoord/route.ts POST eigen wachtwoord wijzigen
     backup/route.ts         GET back-up downloaden / POST terugzetten
+    push/route.ts           GET sleutel+voorkeur / POST aanmelden / DELETE afmelden
+    push/proef/route.ts     POST een proefmelding naar je eigen apparaten
+    cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
     recipes/route.ts        GET alle / POST nieuw recept
     recipes/[id]/route.ts   PUT / DELETE per recept
     week/route.ts           GET / PUT weekplanning
@@ -1053,6 +1156,7 @@ app/
   tracker/              De trackerschermen (dag, toevoegen, instellingen)
 components/
   Login.tsx             Het loginscherm (staat los van de rest van de app)
+  ServiceWorker.tsx     Registreert public/sw.js; toont zelf niets
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
                         het kookboek en de tracker
@@ -1078,6 +1182,7 @@ components/
     Import.tsx          Gedeelde receptlink doorrekenen
     Instellingen.tsx    Profiel met live budgetberekening
     Account.tsx         Account, personen en back-up onder Instellingen
+    Meldingen.tsx       Pushmeldingen aan- en uitzetten, met proefknop
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
     api.ts              Fetch-helpers voor de tracker-endpoints
@@ -1093,6 +1198,7 @@ lib/
   migratie.ts           Eenmalige verhuizing naar het eerste account
   backup-formaat.ts     Vorm van een back-upbestand + inlezen (puur, getest)
   backup.ts             Back-up maken en terugzetten (Redis)
+  push.ts               VAPID-sleutelpaar, abonnementen en versturen
   tracker/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule
@@ -1112,6 +1218,8 @@ lib/
     ingredienten-opslag.ts  Die lijst bewaren onder wl:ingredienten
     schatting.ts        Een geschat ingrediënt uitlezen en melden
     schat-model.ts      De modelaanroep achter het schatten
+    herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
+    meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

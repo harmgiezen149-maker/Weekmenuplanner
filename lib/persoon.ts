@@ -18,10 +18,30 @@
 // `getProfile()` blijft `getProfile()`.
 // ---------------------------------------------------------------------------
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { headers } from "next/headers";
 import { PERSOON_HEADER } from "./sessie";
 
 export { PERSOON_HEADER };
+
+/**
+ * Werk namens iemand anders dan de ingelogde persoon.
+ *
+ * Nodig voor de dagelijkse taak die de herinneringen verstuurt: die draait
+ * zonder browser en dus zonder sessie, maar moet wel per persoon het profiel en
+ * het logboek kunnen lezen. Binnen dit blokje kijkt `huidigePersoon()` naar dit
+ * id in plaats van naar de header, zodat de hele datalaag ongewijzigd bruikbaar
+ * blijft.
+ *
+ * Het id leeft alleen binnen de callback. Een route die dit niet aanroept kan
+ * er nooit per ongeluk in terechtkomen.
+ */
+const namensPersoon = new AsyncLocalStorage<string>();
+
+export function metPersoon<T>(id: string, werk: () => Promise<T>): Promise<T> {
+  if (!id) throw new Error("metPersoon zonder id");
+  return namensPersoon.run(id, werk);
+}
 
 /**
  * Het id van de ingelogde persoon.
@@ -32,6 +52,8 @@ export { PERSOON_HEADER };
  * met andermans cijfers.
  */
 export async function huidigePersoon(): Promise<string> {
+  const namens = namensPersoon.getStore();
+  if (namens) return namens;
   const h = await headers();
   const id = h.get(PERSOON_HEADER);
   if (!id) throw new Error("Niet ingelogd");

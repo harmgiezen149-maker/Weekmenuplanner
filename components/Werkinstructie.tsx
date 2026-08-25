@@ -487,6 +487,36 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="meldingen" titel="Herinneringen">
+          <p style={{ margin: "0 0 8px" }}>
+            Onder <span style={S.route}>Instellingen → Meldingen</span> zet je herinneringen aan.
+            Twee soorten, allebei apart: op je <strong>weegdag</strong> als er nog geen weging staat,
+            en aan het <strong>eind van de dag</strong> als je dagboek nog leeg is. Standaard staat
+            alles uit.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Je krijgt hooguit één melding per soort per dag, en alleen als er echt iets ontbreekt —
+            staat alles ingevuld, dan blijft het stil. Log je een week lang niets, dan houdt de app
+            ook op met de dagboekherinnering: een pauze is een pauze.
+          </p>
+          <p style={{ margin: 0 }}>
+            Met "Proefmelding sturen" controleer je meteen of het werkt. Op een iPhone werkt dit
+            alleen als je Kookboek eerst via Safari op je beginscherm zet.
+          </p>
+        </H>
+
+        <H id="offline" titel="Zonder bereik in de winkel">
+          <p style={{ margin: "0 0 8px" }}>
+            De boodschappenlijst werkt door als het bereik wegvalt. Wat je hebt opgehaald blijft in
+            het geheugen van je telefoon staan, en afvinken blijft gewoon werken.
+          </p>
+          <p style={{ margin: 0 }}>
+            Boven de lijst verschijnt dan een balkje dat je afvinkjes nog niet op de server staan.
+            Ze gaan er vanzelf heen zodra je weer verbinding hebt — je hoeft niets te onthouden en
+            niets opnieuw te doen.
+          </p>
+        </H>
+
         <H id="installeren" titel="Als app op je telefoon">
           <p style={{ margin: 0 }}>
             Installeer Kookboek als app: op Android via Chrome → menu → "App installeren", op iPhone via

@@ -7,7 +7,7 @@ import {
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
-  Activity, ClipboardCheck,
+  Activity, ClipboardCheck, WifiOff,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -48,7 +48,12 @@ const api = {
     const r = await fetch("/api/boodschappen", { cache: "no-store" }); return r.json();
   },
   async saveBoodschappen(b: Boodschappen): Promise<Boodschappen> {
-    const res = await fetch("/api/boodschappen", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }); return res.json();
+    const res = await fetch("/api/boodschappen", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+    // Wel een antwoord, maar geen goed antwoord (401 na uitloggen, 500 bij een
+    // storing) telt hier als mislukt: anders neemt de lijst een foutobject over
+    // als nieuwe serverstand.
+    if (!res.ok) throw new Error("opslaan mislukt");
+    return res.json();
   },
   async getGebiedVolgorde(): Promise<GebiedVolgorde> {
     const r = await fetch("/api/gebiedvolgorde", { cache: "no-store" }); return r.json();
@@ -267,15 +272,40 @@ export default function App() {
     if (!laden && boodBasis.current === null) boodBasis.current = boodschappen;
   }, [laden, boodschappen]);
 
+  // In een winkel valt het bereik weg. Een mislukte opslag mag dan geen
+  // afgevinkte boodschap kosten: hij blijft openstaan en wordt opnieuw
+  // geprobeerd zodra er weer verbinding is. Wat op het scherm staat is
+  // ondertussen leidend, dus je kunt gewoon doorwerken.
+  const [boodOpenstaand, setBoodOpenstaand] = useState(false);
+
+  const bewaarBoodschappen = useCallback(async () => {
+    try {
+      boodBasis.current = await api.saveBoodschappen(boodLokaal.current);
+      setBoodOpenstaand(false);
+      return true;
+    } catch {
+      setBoodOpenstaand(true);
+      return false;
+    }
+  }, []);
+
   useEffect(() => {
     if (laden) return;
     if (eersteBood.current) { eersteBood.current = false; return; }
-    const t = setTimeout(async () => {
-      const opgeslagen = await api.saveBoodschappen(boodschappen).catch(() => null);
-      if (opgeslagen) boodBasis.current = opgeslagen;
-    }, 350);
+    const t = setTimeout(bewaarBoodschappen, 350);
     return () => clearTimeout(t);
-  }, [boodschappen, laden]);
+  }, [boodschappen, laden, bewaarBoodschappen]);
+
+  useEffect(() => {
+    if (!boodOpenstaand) return;
+    // Twee prikkels: het moment dat de browser zegt dat hij weer online is, en
+    // een klok voor het geval dat signaal uitblijft (dat gebeurt bij een
+    // wankele verbinding vaker dan je zou denken).
+    const opnieuw = () => { bewaarBoodschappen(); };
+    window.addEventListener("online", opnieuw);
+    const klok = setInterval(opnieuw, 15000);
+    return () => { window.removeEventListener("online", opnieuw); clearInterval(klok); };
+  }, [boodOpenstaand, bewaarBoodschappen]);
 
   // Drieweg-merge per item: serverwijzigingen overnemen tenzij hetzelfde veld
   // lokaal óók is gewijzigd (dan wint lokaal; dat wordt zo weer opgeslagen).
@@ -475,7 +505,7 @@ export default function App() {
               <BoodschappenPagina
                 recepten={recepten} week={week} dagen={dagenInVolgorde}
                 boodschappen={boodschappen} setBoodschappen={setBoodschappen}
-                gebiedVolgorde={gebiedVolgorde}
+                gebiedVolgorde={gebiedVolgorde} openstaand={boodOpenstaand}
               />
             )}
             {tab === "voorraad" && (
@@ -2359,11 +2389,13 @@ function KiesGerechtModal({
 // BOODSCHAPPENLIJST
 // ============================================================================
 function BoodschappenPagina({
-  recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde,
+  recepten, week, dagen, boodschappen, setBoodschappen, gebiedVolgorde, openstaand,
 }: {
   recepten: Recept[]; week: WeekState; dagen: readonly string[];
   boodschappen: Boodschappen; setBoodschappen: React.Dispatch<React.SetStateAction<Boodschappen>>;
   gebiedVolgorde: GebiedVolgorde;
+  /** Er staan wijzigingen open die nog niet bij de server zijn aangekomen. */
+  openstaand: boolean;
 }) {
   const [verbergGedaan, setVerbergGedaan] = useState(false);
   const [bevestigGenereer, setBevestigGenereer] = useState(false);
@@ -2535,6 +2567,16 @@ function BoodschappenPagina({
 
   return (
     <div>
+      {openstaand && (
+        <div style={S.nogNietOpgeslagen}>
+          <WifiOff size={15} style={{ flexShrink: 0 }} />
+          <span>
+            Je afvinkjes staan nog niet op de server. Ze blijven op dit scherm staan en gaan
+            vanzelf mee zodra er weer verbinding is — je kunt gewoon doorwerken.
+          </span>
+        </div>
+      )}
+
       <div style={S.boodTopBar}>
         <button
           onClick={() => (items.some((it) => it.bron === "week") ? setBevestigGenereer(true) : genereer())}
@@ -3323,6 +3365,7 @@ const S: Record<string, React.CSSProperties> = {
   winkelKopGeen: { color: "var(--accent)" },
   winkelLeeg: { fontSize: 12, color: "var(--sub)", fontStyle: "italic", padding: "10px 12px", border: "1.5px dashed var(--line)", borderRadius: 11, textAlign: "center" },
   gebiedKop: { fontSize: 11, fontWeight: 700, color: "var(--sub)", margin: "2px 4px 4px", letterSpacing: "0.02em" },
+  nogNietOpgeslagen: { display: "flex", alignItems: "center", gap: 8, background: "#fdf4e3", border: "1px solid var(--gold)", borderRadius: 12, padding: "9px 12px", fontSize: 12.5, lineHeight: 1.5, color: "#7a4d09", marginBottom: 12 },
   leeg: { display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "40px 20px", color: "var(--sub)", textAlign: "center", fontSize: 14 },
   voorraadNieuw: { background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: 12, marginBottom: 18 },
   voorraadNieuwRij: { display: "flex", gap: 6, alignItems: "center" },

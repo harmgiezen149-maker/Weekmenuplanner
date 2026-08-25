@@ -11,12 +11,14 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@types/web-push": "^3.6.4",
     "@upstash/redis": "^1.38.0",
     "@zxing/browser": "^0.1.5",
     "lucide-react": "^0.460.0",
     "next": "15.1.11",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/node": "^22",
