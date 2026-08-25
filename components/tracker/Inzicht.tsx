@@ -97,8 +97,9 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
         if (afgebroken) return;
         setAdvies(eerst);
 
-        // De trigger uit het ontwerp: na de weging op de weegdag, één keer.
-        if (eerst.weegmoment?.open && !gevraagd.current) {
+        // De twee triggers uit het ontwerp: na de weging op de weegdag, en bij
+        // een grote afwijking. De server bepaalt welke van de twee geldt.
+        if ((eerst.weegmoment?.open || eerst.afwijking?.open) && !gevraagd.current) {
           gevraagd.current = true;
           setAdviesBezig(true);
           const na = await trackerApi.maakAdvies(peildatum);
@@ -130,6 +131,7 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
       <Advieskaart
         advies={advies?.advies ?? null}
         weegmoment={advies?.weegmoment ?? null}
+        afwijking={advies?.afwijking ?? null}
         bezig={adviesBezig}
         afgekeurd={advies?.afgekeurd ?? null}
         fout={adviesFout}
@@ -417,7 +419,7 @@ function vlagBewijs(vlag: string, p: FactPack): string {
     case "buffer_early":
       return `De buffer was gemiddeld op dag ${nl(p.buffer.avg_exhaustion_position ?? 0)} van de week op, in ${p.buffer.weeks_fully_used} van ${p.buffer.weeks_counted} weken.`;
     case "underconsumption":
-      return `${p.recent.days_under_80pct_budget_last_7} van de laatste ${p.recent.logged_days_last_7} gelogde dagen bleef onder 80% van het dagbudget van ${p.budget.current_daily_budget} punten.`;
+      return `${p.recent.days_under_80pct_budget} van de laatste ${p.recent.logged_days_considered} gelogde dagen bleef onder 80% van het dagbudget van ${p.budget.current_daily_budget} punten.`;
     case "rapid_loss":
       return `Het trendgewicht daalt met ${nl(Math.abs(p.weight.trend_change_kg_per_week ?? 0), 2)} kg per week.`;
     default:

@@ -4,8 +4,8 @@ import React from "react";
 import { Loader2, Target, ShieldAlert } from "lucide-react";
 import { T } from "./stijl";
 import { nl } from "@/lib/tracker/datum";
-import { metricLabel } from "@/lib/tracker/advies";
-import type { Advies, Weegmoment } from "@/lib/tracker/advies";
+import { metricLabel, AFWIJKING_LABEL } from "@/lib/tracker/advies";
+import type { Advies, Afwijking, Weegmoment } from "@/lib/tracker/advies";
 
 // ---------------------------------------------------------------------------
 // Het advies bij het weegmoment.
@@ -54,10 +54,11 @@ const UITKOMST_LABEL: Record<string, string> = {
 };
 
 export default function Advieskaart({
-  advies, weegmoment, bezig, afgekeurd, fout,
+  advies, weegmoment, afwijking, bezig, afgekeurd, fout,
 }: {
   advies: Advies | null;
   weegmoment: Weegmoment | null;
+  afwijking: Afwijking | null;
   bezig: boolean;
   afgekeurd: string[] | null;
   fout: string;
@@ -87,6 +88,15 @@ export default function Advieskaart({
   if (!advies) {
     // Zonder advies alleen iets zeggen als er iets te wachten valt. Een tracker
     // die nog niet zover is hoeft geen lege plek met een belofte te tonen.
+    if (afwijking && !afwijking.open && afwijking.vlag) {
+      // Er speelt wel iets, maar een melding is nu niet aan de orde. Dat wordt
+      // gezegd, zonder er een aansporing van te maken.
+      return (
+        <div style={T.melding}>
+          {hoofdletter(AFWIJKING_LABEL[afwijking.vlag] ?? afwijking.vlag)} — {afwijking.reden}.
+        </div>
+      );
+    }
     if (!weegmoment?.datum || !weegmoment.reden || weegmoment.reden.includes("al een advies")) return null;
     return (
       <div style={T.melding}>
@@ -99,7 +109,11 @@ export default function Advieskaart({
 
   return (
     <section style={S.kaart}>
-      <span style={S.merk}>Bij je weging van {toonDatum(advies.weeg_datum ?? advies.fact_pack_ref)}</span>
+      <span style={S.merk}>
+        {advies.trigger === "afwijking" && advies.aanleiding
+          ? `Omdat ${AFWIJKING_LABEL[advies.aanleiding] ?? advies.aanleiding}`
+          : `Bij je weging van ${toonDatum(advies.weeg_datum ?? advies.fact_pack_ref)}`}
+      </span>
       <h2 style={S.kop}>{payload.headline}</h2>
 
       {payload.observation && <p style={S.alinea}>{payload.observation}</p>}

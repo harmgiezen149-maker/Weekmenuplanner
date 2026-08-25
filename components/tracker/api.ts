@@ -2,13 +2,20 @@ import type { Day, FoodTemplate, Maaltijdsjabloon, Product, Profile } from "@/li
 import type { BudgetResultaat } from "@/lib/tracker/budget";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import type { AdviesDrempel, FactPack } from "@/lib/tracker/feiten";
-import type { Advies, Weegmoment } from "@/lib/tracker/advies";
+import type { Advies, Afwijking, Weegmoment } from "@/lib/tracker/advies";
 import type { GewichtGegevens } from "./Gewicht";
+
+export interface Melding {
+  nieuw: boolean;
+  trigger: "weegmoment" | "afwijking" | "gereed" | null;
+  aanleiding: string | null;
+}
 
 export interface AdviesAntwoord {
   advies: Advies | null;
   historie: Advies[];
   weegmoment: Weegmoment | null;
+  afwijking?: Afwijking | null;
   gegenereerd?: boolean;
   /** Redenen waarom er geen advies kwam; zie de validatielaag. */
   afgekeurd?: string[];
@@ -119,6 +126,13 @@ export const trackerApi = {
    */
   maakAdvies: (datum: string) =>
     fetch(`/api/tracker/advies?datum=${datum}`, { method: "POST" }).then(lees<AdviesAntwoord>),
+
+  /**
+   * Of er iets klaarstaat op Inzicht. Licht van gewicht: deze route rekent geen
+   * advies uit en kost dus nooit een modelaanroep.
+   */
+  getMelding: (datum: string) =>
+    fetch(`/api/tracker/melding?datum=${datum}`, { cache: "no-store" }).then(lees<Melding>),
 
   getWeek: (datum: string) =>
     fetch(`/api/tracker/week?datum=${encodeURIComponent(datum)}`, { cache: "no-store" })

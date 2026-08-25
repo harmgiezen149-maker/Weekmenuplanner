@@ -17,6 +17,8 @@ import Import from "./Import";
 import Portiekiezer from "./Portiekiezer";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import { trackerApi } from "./api";
+import type { Melding } from "./api";
+import { AFWIJKING_LABEL } from "@/lib/tracker/advies";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { toonPunten } from "@/lib/tracker/points";
 import { dagBewegingspunten } from "@/lib/tracker/activiteit";
@@ -51,6 +53,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   const [week, setWeek] = useState<{ week: WeekSamenvatting | null; dagenTeGaan: number } | null>(null);
   const [weekDatum, setWeekDatum] = useState(datumSleutel());
   const [herberekend, setHerberekend] = useState(false);
+  const [melding, setMelding] = useState<Melding | null>(null);
   // Een product uit een geïmporteerde link gaat langs de portiekiezer.
   const [importProduct, setImportProduct] = useState<Product | null>(null);
 
@@ -90,6 +93,16 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
   }, [datum]);
 
   const ga = useCallback((pad: string) => { router.push(pad); }, [router]);
+
+  // Het kanaal uit het ontwerp: een banner en een stip, geen push-notificaties.
+  // Deze route rekent geen advies uit en kost dus nooit een modelaanroep.
+  useEffect(() => {
+    let afgebroken = false;
+    trackerApi.getMelding(vandaag)
+      .then((m) => { if (!afgebroken) setMelding(m); })
+      .catch(() => { /* zonder melding werkt de rest gewoon door */ });
+    return () => { afgebroken = true; };
+  }, [vandaag, pagina]);
 
   // De weekgegevens zijn zowel voor het weekoverzicht als voor de bufferbalk
   // op het dagoverzicht nodig; ze volgen de gekozen week.
@@ -204,6 +217,16 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
           </div>
         ) : (
           <div style={T.inhoud}>
+            {pagina === "dag" && melding?.nieuw && (
+              <button style={T.weegPrompt} onClick={() => ga("/tracker/inzicht")}>
+                <LineChart size={20} style={{ flexShrink: 0 }} />
+                <span>
+                  <span style={T.weegPromptKop}>{meldingKop(melding)}</span>
+                  <span style={T.weegPromptSub}>Op Inzicht staat wat de cijfers laten zien.</span>
+                </span>
+              </button>
+            )}
+
             {pagina === "dag" && (
               <Dagoverzicht
                 dag={dag} profiel={profiel} datum={datum} vandaag={vandaag}
@@ -277,7 +300,15 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
         {PAGINAS.map((p) => (
           <button key={p.id} onClick={() => ga(p.id === "dag" ? `/tracker?datum=${datum}` : p.pad)}
             style={{ ...T.navBtn, ...(pagina === p.id ? T.navBtnActief : {}) }}>
-            <p.icon size={20} />
+            <span style={{ position: "relative", display: "inline-flex" }}>
+              <p.icon size={20} />
+              {p.id === "inzicht" && melding?.nieuw && pagina !== "inzicht" && (
+                <span aria-label="er staat iets klaar" style={{
+                  position: "absolute", top: -1, right: -3, width: 7, height: 7,
+                  borderRadius: 999, background: "var(--accent)",
+                }} />
+              )}
+            </span>
             <span style={T.navLabel}>{p.label}</span>
           </button>
         ))}
@@ -288,6 +319,19 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
       </nav>
     </div>
   );
+}
+
+/**
+ * Wat er klaarstaat, in één regel. Beschrijvend en zonder aansporing: er staat
+ * wat er is, niet wat je zou moeten doen.
+ */
+function meldingKop(m: Melding): string {
+  if (m.trigger === "weegmoment") return "Je weegmoment is doorgerekend";
+  if (m.trigger === "afwijking" && m.aanleiding) {
+    const label = AFWIJKING_LABEL[m.aanleiding] ?? m.aanleiding;
+    return label.charAt(0).toUpperCase() + label.slice(1);
+  }
+  return "Er staat een advies voor je klaar";
 }
 
 // Een gok op basis van het tijdstip, zodat het invoerscherm meestal meteen
