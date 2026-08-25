@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Camera, Check, Loader2, Receipt, X } from "lucide-react";
+import { Barcode, Camera, Check, Loader2, Receipt, X } from "lucide-react";
+import Scanner from "./tracker/Scanner";
 import { comprimeerAfbeelding, fileNaarDataUrl } from "@/lib/afbeelding";
 import { euroTekst } from "@/lib/prijzen";
 import type { BonRegel } from "@/lib/bon";
@@ -35,6 +36,7 @@ export default function Bonscanner({
   const [aan, setAan] = useState<boolean[]>([]);
   const [prijzenOnthouden, setPrijzenOnthouden] = useState(true);
   const [klaar, setKlaar] = useState("");
+  const [scanOpen, setScanOpen] = useState(false);
 
   const kiesFoto = (welke: "bon" | "product") => {
     setSoort(welke);
@@ -71,6 +73,33 @@ export default function Bonscanner({
       setDatum(data.datum ?? new Date().toISOString().slice(0, 10));
     } catch (err) {
       setFout(err instanceof Error ? err.message : "Er ging iets mis");
+    } finally { setBezig(false); }
+  };
+
+  /**
+   * Een gescande streepjescode omzetten in een voorraadartikel.
+   *
+   * De code gaat langs dezelfde route als in de tracker, dus je eigen eerdere
+   * invoer telt mee. Levert dat niets op, dan komt er geen artikel bij: een
+   * regel met alleen een cijferreeks erin is geen boodschappenlijst.
+   */
+  const uitCode = async (code: string) => {
+    setScanOpen(false);
+    setBezig(true); setFout(""); setKlaar("");
+    try {
+      const res = await fetch(`/api/tracker/barcode/${encodeURIComponent(code)}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data?.gevonden || !data?.product?.name) {
+        setFout(`Streepjescode ${code} staat in geen enkele lijst. Voeg het artikel met de hand toe, `
+          + "dan onthoudt de app hem voor de volgende keer.");
+        return;
+      }
+      const naam = String(data.product.name);
+      setRegels((r) => [...(r ?? []), { naam, aantal: 1, eenheid: "stuk", prijs: null, gebied: "" }]);
+      setAan((a) => [...a, true]);
+      if (!winkel) setDatum((d) => d || new Date().toISOString().slice(0, 10));
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Er ging iets mis");
     } finally { setBezig(false); }
   };
 
@@ -111,7 +140,7 @@ export default function Bonscanner({
     <div style={S.overlay} role="dialog" aria-label="Bon scannen">
       <div style={S.venster}>
         <div style={S.kop}>
-          <h2 style={S.titel}>Voorraad vullen met een foto</h2>
+          <h2 style={S.titel}>Voorraad snel vullen</h2>
           <button onClick={onSluiten} style={S.sluit} aria-label="Sluiten"><X size={18} /></button>
         </div>
 
@@ -143,7 +172,20 @@ export default function Bonscanner({
                 Voor wat je in huis hebt maar niet op een bon staat: leg het op tafel of zet het
                 op het aanrecht en maak één foto.
               </p>
+
+              <button style={S.knop} onClick={() => setScanOpen(true)} disabled={bezig}>
+                <Barcode size={16} /> Streepjescode scannen
+              </button>
+              <p style={S.hint}>
+                Eén product tegelijk, en exact: waar een foto een gok blijft, leest een
+                streepjescode het pak. Onbekende code? Voeg hem met de hand toe — dan kent de app
+                hem de volgende keer wel.
+              </p>
             </>
+          )}
+
+          {scanOpen && (
+            <Scanner onCode={uitCode} onHandmatig={() => setScanOpen(false)} />
           )}
 
           {regels && regels.length > 0 && (

@@ -1135,12 +1135,16 @@ uitbreiding hebben ze niet, en een voorraadlijst waar overal een geraden 0 bij
 staat is erger dan geen aantallen. Pas als je op "tel mee" drukt gaat de app
 erover praten.
 
-### Wat hier nog niet zit
+### Streepjescode
 
-Streepjescodes scannen om voorraad toe te voegen (optie 3.3 uit de optielijst)
-is niet gebouwd. De scanner bestaat al aan de trackerkant
-(`components/tracker/Scanner.tsx`); hem naar het kookboek halen is het werk dat
-nog openstaat.
+Naast de foto zit er een derde weg: één product tegelijk, gescand. Waar een foto
+een gok blijft, leest een streepjescode het pak. De scanner is dezelfde als in
+de tracker (`components/tracker/Scanner.tsx`) en de code gaat langs dezelfde
+route, dus wat je ooit zelf bij die code hebt ingevuld telt mee.
+
+Levert de code niets op, dan komt er géén artikel bij. Een regel met alleen een
+cijferreeks erin is geen boodschappenlijst; dan voeg je hem met de hand toe en
+kent de app hem de volgende keer wel.
 
 ---
 

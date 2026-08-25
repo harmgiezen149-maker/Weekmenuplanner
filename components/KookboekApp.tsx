@@ -3207,7 +3207,7 @@ function VoorraadPagina({
       </p>
 
       <button style={S.bonKnop} onClick={() => setScannerOpen(true)}>
-        <Receipt size={16} /> Vullen met een foto
+        <Receipt size={16} /> Voorraad snel vullen
       </button>
 
       {scannerOpen && (

@@ -553,9 +553,9 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
-        <H id="bon" titel="Voorraad vullen met een foto">
+        <H id="bon" titel="Voorraad snel vullen">
           <p style={{ margin: "0 0 8px" }}>
-            Op <span style={S.route}>Voorraad</span> staat "Vullen met een foto". Fotografeer je
+            Op <span style={S.route}>Voorraad</span> staat "Voorraad snel vullen". Fotografeer je
             kassabon en de app zet de producten voor je klaar — statiegeld, kortingen en het totaal
             gaan er vanzelf uit, en de kassa-afkorting wordt teruggebracht tot een gewone naam.
           </p>
@@ -565,8 +565,9 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             opgehoogd in plaats van dat het er twee keer komt te staan.
           </p>
           <p style={{ margin: 0 }}>
-            Dezelfde knop leest ook een foto van losse producten op je aanrecht, voor wat je wel in
-            huis hebt maar niet op een bon staat.
+            Dezelfde knop leest ook een foto van losse producten op je aanrecht, en er zit een
+            derde weg bij: één product tegelijk met de streepjescode. Waar een foto een gok blijft,
+            leest een streepjescode het pak.
           </p>
         </H>
 
