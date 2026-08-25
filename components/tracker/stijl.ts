@@ -106,7 +106,10 @@ export const T: Record<string, React.CSSProperties> = {
   zoekWrap: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "11px 13px", marginBottom: 12 },
   zoekInput: { border: "none", outline: "none", flex: 1, fontSize: 15, background: "none", color: "var(--ink)", minWidth: 0 },
   lijstKop: { display: "flex", alignItems: "center", gap: 7, fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--sub)", margin: "18px 0 8px" },
-  resultaat: { display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 15px", borderBottom: "1px solid var(--line)", background: "none", border: "none", borderTop: "none", borderLeft: "none", borderRight: "none", textAlign: "left", cursor: "pointer" },
+  // minWidth 0 is nodig: zonder dat is de ondergrens van dit flex-item de volle
+  // breedte van de nowrap-tekst plus de badge, en wordt een knop ernaast (het
+  // potlood, de prullenbak) de kaart uit geduwd en door overflow:hidden afgekapt.
+  resultaat: { display: "flex", alignItems: "center", gap: 10, width: "100%", minWidth: 0, padding: "12px 15px", borderBottom: "1px solid var(--line)", background: "none", border: "none", borderTop: "none", borderLeft: "none", borderRight: "none", textAlign: "left", cursor: "pointer" },
   resultaatTekst: { display: "block", flex: 1, minWidth: 0 },
   resultaatNaam: { display: "block", fontSize: 14.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   resultaatSub: { display: "block", fontSize: 12, color: "var(--sub)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
