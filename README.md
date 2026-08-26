@@ -1178,10 +1178,49 @@ een hash zou hem na één keer tonen onleesbaar maken. Wat hij kan is beperkt to
 Sleutels gaan niet mee in de back-up — het is een toegangsmiddel, en die horen
 niet in een bestand dat in je downloadmap belandt.
 
+### De ketting heeft drie schakels
+
+Garmin Connect → **Health Sync** → Health Connect → **een Tasker-plug-in voor
+Health Connect** → Tasker → deze app.
+
+Die middelste is makkelijk te vergeten, en dat kost een avond: Health Sync praat
+zelf niet met Tasker. Het is een synchronisatie-app tussen gezondheidsplatformen,
+en verder niets.
+
+### Het hele blok JSON in één keer
+
+Zo'n plug-in geeft geen losse variabelen terug maar één blok JSON met alle
+sessies erin. Dat in Tasker uit elkaar peuteren kan, maar het is priegelwerk in
+een schermpje — en een app is daar nu eenmaal beter in dan een telefoon-UI.
+
+`POST /api/tracker/beweging/extern` herkent zo'n blok aan zijn vorm en leest het
+in zijn geheel: `{records:[…]}`, een kale lijst of één losse sessie. Meerdere
+trainingen in één aanroep worden allemaal geboekt, elk langs dezelfde dedupe.
+Dat laatste is hier belangrijker dan bij een losse melding, want zo'n plug-in
+stuurt vaak alles van de afgelopen dagen mee, elke keer opnieuw.
+
+Per sessie wordt gelezen: de sport uit `exerciseType` (het voorvoegsel
+`EXERCISE_TYPE_` gaat eraf) of anders uit `title`, de duur uit `startTime` en
+`endTime` of uit een duurveld, de datum uit `startTime` mét `startZoneOffset` —
+zonder die verschuiving belandt een training van half één 's nachts op de
+verkeerde dag en klopt je week niet.
+
+**Wat er niet gebeurt is raden.** Staat de sport er als cijfercode
+(`exerciseType: 56`), dan wordt die sessie geweigerd met dat nummer erbij. De
+codes van Health Connect zijn nergens betrouwbaar na te slaan, en een verkeerd
+gegokt nummer boekt stilletjes de verkeerde sport. Een geweigerde regel zie je;
+een verkeerd geboekte niet.
+
+Wat niet te lezen was komt terug in het antwoord, met de reden en de ruwe inhoud
+erbij. Zo is in één aanroep te zien of het aan één sessie ligt of aan het hele
+formaat.
+
 ### Het Tasker-bestand
 
 `GET /api/koppeling/tasker` levert een kant-en-klaar Tasker-project als
-`.prj.xml`, met het adres en de sleutel er al in. Wat bij het instellen telkens
+`.prj.xml`, met het adres en de sleutel er al in. Er zitten twee taken in: één
+die het hele JSON-blok doorstuurt (één veld invullen) en één met losse velden,
+voor het geval een plug-in die wél per activiteit levert. Wat bij het instellen telkens
 misgaat is niet de logica maar het overtypen: een URL van tachtig tekens en een
 sleutel van tweeëndertig, op een telefoon, in een veld zonder plakknop.
 
@@ -1619,6 +1658,7 @@ lib/
     herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
     meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
     koppeling.ts        Externe activiteiten en geplakte lijsten lezen (puur)
+    gezondheidjson.ts   Een blok Health Connect-sessies uitlezen (puur, getest)
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:
     *.test.ts           Unit tests (npm test)

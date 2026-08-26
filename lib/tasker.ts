@@ -30,7 +30,8 @@ const HTTP_REQUEST = 339;
 /** Methode-keuze van HTTP Request: 0=GET, 1=POST, ... */
 const POST = 1;
 
-const TAAK_ID = 10;
+const TAAK_JSON = 10;
+const TAAK_VELDEN = 11;
 
 export interface TaskerOpties {
   /** Volledig adres van het endpoint, zonder queryparameters. */
@@ -40,6 +41,17 @@ export interface TaskerOpties {
   project?: string;
   /** Naam van de taak. */
   naam?: string;
+}
+
+/**
+ * Een tekstargument. Leeg schrijft Tasker zelf als een lege tag, en hoe dichter
+ * dit bestand bij zijn eigen exports blijft, hoe kleiner de kans dat de import
+ * ergens over struikelt.
+ */
+function str(nummer: number, waarde: string): string {
+  return waarde
+    ? `		<Str sr="arg${nummer}" ve="3">${esc(waarde)}</Str>`
+    : `		<Str sr="arg${nummer}" ve="3"/>`;
 }
 
 function esc(tekst: string): string {
@@ -54,8 +66,8 @@ function zetVariabele(nummer: number, naam: string, waarde: string, label: strin
   return `	<Action sr="act${nummer}" ve="7">
 		<code>${VARIABELE_ZETTEN}</code>
 		<label>${esc(label)}</label>
-		<Str sr="arg0" ve="3">${esc(naam)}</Str>
-		<Str sr="arg1" ve="3">${esc(waarde)}</Str>
+${str(0, naam)}
+${str(1, waarde)}
 		<Int sr="arg2" val="0"/>
 		<Int sr="arg3" val="0"/>
 		<Int sr="arg4" val="0"/>
@@ -64,11 +76,42 @@ function zetVariabele(nummer: number, naam: string, waarde: string, label: strin
 	</Action>`;
 }
 
+function httpRequest(
+  nummer: number, url: string, headers: string, body: string, label: string
+): string {
+  return `	<Action sr="act${nummer}" ve="7">
+		<code>${HTTP_REQUEST}</code>
+		<label>${esc(label)}</label>
+		<Int sr="arg0" val="${POST}"/>
+${str(1, url)}
+${str(2, headers)}
+${str(3, "")}
+${str(4, body)}
+${str(5, "")}
+${str(6, "")}
+		<Int sr="arg7" val="30"/>
+		<Int sr="arg8" val="0"/>
+		<Int sr="arg9" val="1"/>
+		<Int sr="arg10" val="0"/>
+	</Action>`;
+}
+
+function taak(id: number, naam: string, acties: string[], nu: number): string {
+  return `	<Task sr="task${id}">
+		<cdate>${nu}</cdate>
+		<edate>${nu}</edate>
+		<id>${id}</id>
+		<nme>${esc(naam)}</nme>
+		<pri>100</pri>
+${acties.join("\n")}
+	</Task>`;
+}
+
 function flash(nummer: number, tekst: string, label: string): string {
   return `	<Action sr="act${nummer}" ve="7">
 		<code>${FLASH}</code>
 		<label>${esc(label)}</label>
-		<Str sr="arg0" ve="3">${esc(tekst)}</Str>
+${str(0, tekst)}
 		<Int sr="arg1" val="0"/>
 		<Int sr="arg2" val="0"/>
 		<Int sr="arg3" val="0"/>
@@ -78,57 +121,59 @@ function flash(nummer: number, tekst: string, label: string): string {
 /**
  * Bouwt het project.
  *
- * De vier waarden bovenaan blijven leeg: welke variabelen jouw plug-in oplevert
- * weet alleen jij, en raden zou hier een taak opleveren die stilletjes het
- * verkeerde verstuurt. Er staat met opzet ook geen voorbeeldnaam als
- * `%hc_type` — dat ziet eruit als een echte variabele en wordt dan letterlijk
- * overgenomen.
+ * Twee taken, want er zijn twee soorten plug-ins:
+ *
+ *   JSON     — een plug-in voor Health Connect geeft één blok JSON terug met
+ *              alle sessies erin. Dat stuur je in zijn geheel door; de app
+ *              haalt eruit wat hij nodig heeft. Eén veld invullen, klaar.
+ *   VELDEN   — heb je wél losse variabelen per activiteit, dan is dit de weg.
+ *
+ * De waarden blijven leeg. Welke variabelen jouw plug-in oplevert weet alleen
+ * jij, en er staat met opzet ook geen voorbeeldnaam als `%hc_type`: die ziet
+ * eruit als een echte variabele, wordt letterlijk overgenomen, en levert dan
+ * een fout op die naar de verkeerde kant wijst.
  */
 export function taskerProject(opties: TaskerOpties): string {
   const projectNaam = opties.project ?? "Kookboek";
-  const taakNaam = opties.naam ?? "Beweging naar Kookboek";
   const nu = Date.now();
+  const header = `Authorization: Bearer ${opties.sleutel}`;
 
-  // De gegevens gaan achter de URL en niet in een body: een variabele die nog
-  // leeg is levert dan een leeg veld op in plaats van kapotte JSON. En de URL
-  // staat hier voluit, zodat Tasker de variabelen in één slag invult.
-  const url = `${opties.adres}?proef=%kb_proef&soort=%kb_soort&minuten=%kb_minuten`
-    + "&datum=%kb_datum&id=%kb_id";
-
-  const acties = [
+  // -- taak 1: het hele blok JSON doorsturen --------------------------------
+  const jsonActies = [
     zetVariabele(0, "%kb_proef", "1",
       "PROEFSTAND — 1 = alleen controleren, 0 = echt in je logboek zetten"),
+    zetVariabele(1, "%kb_json", "",
+      "VUL IN — hier hoort de variabele met de JSON van je Health Connect-plug-in. "
+      + "Het hele blok; uit elkaar halen hoeft niet."),
+    flash(2, "[%kb_json]",
+      "KIJK — staat er tussen de haken JSON? Zo niet, dan klopt de variabelenaam hierboven niet."),
+    httpRequest(3, `${opties.adres}?proef=%kb_proef`,
+      `${header}\nContent-Type: application/json`, "%kb_json",
+      "Versturen — Method POST, de JSON gaat mee als Body."),
+    flash(4, "%http_data",
+      "ANTWOORD — wat er geboekt is, en per sessie waarom er iets niet lukte."),
+  ];
 
+  // -- taak 2: losse velden -------------------------------------------------
+  const url = `${opties.adres}?proef=%kb_proef&soort=%kb_soort&minuten=%kb_minuten`
+    + "&datum=%kb_datum&id=%kb_id";
+  const veldActies = [
+    zetVariabele(0, "%kb_proef", "1",
+      "PROEFSTAND — 1 = alleen controleren, 0 = echt in je logboek zetten"),
     zetVariabele(1, "%kb_soort", "",
-      "VUL IN — hier hoort de variabele van je eigen app die de sport bevat. "
-      + "Engelse namen als RUNNING of WALKING worden herkend."),
+      "VUL IN — de variabele met de sport. Engelse namen als RUNNING of WALKING "
+      + "worden herkend."),
     zetVariabele(2, "%kb_minuten", "",
-      "VUL IN — de duur in minuten. Alleen seconden? Vervang in de HTTP-actie "
-      + "minuten= door seconden=."),
+      "VUL IN — de duur in minuten. Alleen seconden? Vervang minuten= door seconden= "
+      + "in de HTTP-actie."),
     zetVariabele(3, "%kb_datum", "",
       "VUL IN — de datum als 2026-08-26. Laat leeg voor vandaag."),
     zetVariabele(4, "%kb_id", "",
       "VUL IN — een uniek kenmerk van de activiteit. Leeg mag; dan maakt de app er zelf een."),
-
     flash(5, "soort=[%kb_soort] duur=[%kb_minuten] datum=[%kb_datum]",
       "KIJK — staat er tussen de haken iets? Zo niet, dan klopt de variabelenaam hierboven niet."),
-
-    `	<Action sr="act6" ve="7">
-		<code>${HTTP_REQUEST}</code>
-		<label>Versturen — Method POST, Body leeg. Adres en sleutel staan er al in.</label>
-		<Int sr="arg0" val="${POST}"/>
-		<Str sr="arg1" ve="3">${esc(url)}</Str>
-		<Str sr="arg2" ve="3">Authorization: Bearer ${esc(opties.sleutel)}</Str>
-		<Str sr="arg3" ve="3"/>
-		<Str sr="arg4" ve="3"/>
-		<Str sr="arg5" ve="3"/>
-		<Str sr="arg6" ve="3"/>
-		<Int sr="arg7" val="30"/>
-		<Int sr="arg8" val="0"/>
-		<Int sr="arg9" val="1"/>
-		<Int sr="arg10" val="0"/>
-	</Action>`,
-
+    httpRequest(6, url, header, "",
+      "Versturen — Method POST, Body leeg. Adres en sleutel staan er al in."),
     flash(7, "%http_data",
       "ANTWOORD — hier staat of het gelukt is, en anders welk veld leeg binnenkwam."),
   ];
@@ -138,16 +183,10 @@ export function taskerProject(opties: TaskerOpties): string {
 	<Project sr="proj1" ve="2">
 		<cdate>${nu}</cdate>
 		<name>${esc(projectNaam)}</name>
-		<tids>${TAAK_ID}</tids>
+		<tids>${TAAK_JSON},${TAAK_VELDEN}</tids>
 	</Project>
-	<Task sr="task${TAAK_ID}">
-		<cdate>${nu}</cdate>
-		<edate>${nu}</edate>
-		<id>${TAAK_ID}</id>
-		<nme>${esc(taakNaam)}</nme>
-		<pri>100</pri>
-${acties.join("\n")}
-	</Task>
+${taak(TAAK_JSON, "1 Beweging via JSON (begin hier)", jsonActies, nu)}
+${taak(TAAK_VELDEN, "2 Beweging via losse velden", veldActies, nu)}
 </TaskerData>
 `;
 }

@@ -7,22 +7,24 @@ const OPTIES = {
   sleutel: "AbC-123_xyz",
 };
 
-test("het bestand is welgevormde XML met één taak erin", () => {
+test("het bestand is welgevormde XML met twee taken erin", () => {
   const xml = taskerProject(OPTIES);
   assert.match(xml, /^<\?xml version="1\.0"/);
   assert.match(xml, /<TaskerData /);
-  assert.equal((xml.match(/<Task sr=/g) ?? []).length, 1);
+  assert.equal((xml.match(/<Task sr=/g) ?? []).length, 2);
   assert.equal((xml.match(/<\/TaskerData>/g) ?? []).length, 1);
   // Elke geopende actie wordt ook gesloten.
   assert.equal((xml.match(/<Action /g) ?? []).length, (xml.match(/<\/Action>/g) ?? []).length);
 });
 
-test("de acties zijn opeenvolgend genummerd vanaf nul", () => {
+test("de acties zijn per taak opeenvolgend genummerd vanaf nul", () => {
   // Tasker leest ze op sr-nummer; een gat of een dubbele levert een taak op
   // waarin acties ontbreken of van plek wisselen.
-  const nummers = [...taskerProject(OPTIES).matchAll(/<Action sr="act(\d+)"/g)]
-    .map((m) => Number(m[1]));
-  assert.deepEqual(nummers, nummers.map((_, i) => i));
+  for (const blok of taskerProject(OPTIES).split("<Task sr=").slice(1)) {
+    const nummers = [...blok.matchAll(/<Action sr="act(\d+)"/g)].map((m) => Number(m[1]));
+    assert.ok(nummers.length > 0);
+    assert.deepEqual(nummers, nummers.map((_, i) => i));
+  }
 });
 
 test("de sleutel staat in de header-actie", () => {
@@ -55,12 +57,16 @@ test("de taak begint in de proefstand", () => {
   assert.match(xml, /<Str sr="arg0" ve="3">%kb_proef<\/Str>\s*<Str sr="arg1" ve="3">1<\/Str>/);
 });
 
+test("een leeg tekstargument staat er als lege tag, zoals Tasker het zelf schrijft", () => {
+  assert.equal(/<Str sr="arg\d+" ve="3"><\/Str>/.test(taskerProject(OPTIES)), false);
+});
+
 test("de in te vullen velden staan leeg en zijn als zodanig gelabeld", () => {
   const xml = taskerProject(OPTIES);
-  for (const v of ["%kb_soort", "%kb_minuten", "%kb_datum", "%kb_id"]) {
-    assert.match(xml, new RegExp(`<Str sr="arg0" ve="3">${v}</Str>\\s*<Str sr="arg1" ve="3"></Str>`), v);
+  for (const v of ["%kb_json", "%kb_soort", "%kb_minuten", "%kb_datum", "%kb_id"]) {
+    assert.match(xml, new RegExp(`<Str sr="arg0" ve="3">${v}</Str>\\s*<Str sr="arg1" ve="3"/>`), v);
   }
-  assert.equal((xml.match(/VUL IN/g) ?? []).length, 4);
+  assert.equal((xml.match(/VUL IN/g) ?? []).length, 5);
 });
 
 test("elke actie heeft een label, want dat is wat je in Tasker ziet", () => {
@@ -69,22 +75,40 @@ test("elke actie heeft een label, want dat is wat je in Tasker ziet", () => {
   assert.equal((xml.match(/<label>/g) ?? []).length, acties);
 });
 
-test("de gegevens gaan achter de URL en niet in een body", () => {
+test("in de veldentaak gaan de gegevens achter de URL en niet in een body", () => {
   // Een lege variabele levert dan een leeg veld op in plaats van kapotte JSON.
-  const xml = taskerProject(OPTIES);
-  assert.match(xml, /<Str sr="arg4" ve="3"\/>/);
+  // In de JSON-taak is de body juist wél gevuld; die staat hierboven apart.
+  const veldenTaak = taskerProject(OPTIES).split("<Task sr=")[2];
+  assert.match(veldenTaak, /<Str sr="arg4" ve="3"\/>/);
+  assert.equal(veldenTaak.includes("%kb_json"), false);
 });
 
-test("er zit een Project in, anders weigert Tasker het bestand", () => {
+test("er zit een Project in dat naar alle taken verwijst", () => {
   // Letterlijk de fout die een bestand met alleen een <Task> oplevert:
-  // "Import failed ... no Project found".
+  // "Import failed ... no Project found". En een tids die naar een taak wijst
+  // die er niet is levert een leeg tabblad op.
   const xml = taskerProject(OPTIES);
   assert.match(xml, /<Project sr="proj\d+"/);
-  const tids = /<tids>(\d+)<\/tids>/.exec(xml)?.[1];
-  const taakId = /<Task sr="task(\d+)"/.exec(xml)?.[1];
-  assert.ok(tids, "het project moet een taak-id noemen");
-  assert.equal(tids, taakId, "het project verwijst naar een taak die er niet is");
-  assert.equal(tids, /<id>(\d+)<\/id>/.exec(xml)?.[1]);
+  const tids = (/<tids>([\d,]+)<\/tids>/.exec(xml)?.[1] ?? "").split(",");
+  const taakIds = [...xml.matchAll(/<Task sr="task(\d+)"/g)].map((m) => m[1]);
+  assert.deepEqual(tids, taakIds);
+  assert.deepEqual([...xml.matchAll(/<id>(\d+)<\/id>/g)].map((m) => m[1]), taakIds);
+});
+
+test("de JSON-taak stuurt het hele blok mee als body", () => {
+  // De plug-in geeft JSON terug, geen losse velden. Dat in Tasker uit elkaar
+  // peuteren is priegelwerk; de app kan het in één keer.
+  const xml = taskerProject(OPTIES);
+  const jsonTaak = xml.split("<Task sr=")[1];
+  assert.match(jsonTaak, /%kb_json/);
+  assert.match(jsonTaak, /<Str sr="arg4" ve="3">%kb_json<\/Str>/);
+  assert.match(jsonTaak, /Content-Type: application\/json/);
+});
+
+test("de taken staan in de volgorde waarin je ze aanpakt", () => {
+  const namen = [...taskerProject(OPTIES).matchAll(/<nme>([^<]+)<\/nme>/g)].map((m) => m[1]);
+  assert.match(namen[0], /^1 /);
+  assert.match(namen[1], /^2 /);
 });
 
 test("de URL staat voluit in de HTTP-actie, niet via een tussenvariabele", () => {
@@ -95,6 +119,11 @@ test("de URL staat voluit in de HTTP-actie, niet via een tussenvariabele", () =>
   assert.equal(xml.includes("%kb_url"), false);
   assert.equal(xml.includes("%kb_header"), false);
   assert.match(xml, /<Str sr="arg1" ve="3">https:\/\/voorbeeld\.nl[^<]*soort=%kb_soort/);
+});
+
+test("beide taken beginnen in de proefstand", () => {
+  const xml = taskerProject(OPTIES);
+  assert.equal((xml.match(/%kb_proef<\/Str>\s*<Str sr="arg1" ve="3">1<\/Str>/g) ?? []).length, 2);
 });
 
 test("er staat geen voorbeeldvariabele in die op een echte lijkt", () => {

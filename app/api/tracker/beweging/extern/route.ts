@@ -6,6 +6,7 @@ import { addActiviteit, datumSleutel, getProfile, nieuwId } from "@/lib/tracker/
 import { activiteitPunten } from "@/lib/tracker/activiteit";
 import { bmr, leeftijd } from "@/lib/tracker/budget";
 import { leesExterneActiviteit, ontvangenVelden } from "@/lib/tracker/koppeling";
+import { leesGezondheidJson, lijktOpGezondheidJson } from "@/lib/tracker/gezondheidjson";
 import type { Activity } from "@/lib/tracker/types";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +76,10 @@ async function leesBericht(req: NextRequest): Promise<
     if (!data || typeof data !== "object") {
       return { fout: "De inhoud is wel leesbaar maar geen object.", ruw: tekst.slice(0, 200) };
     }
+    // Een lijst blijft een lijst. Zou de query eroverheen worden gespreid, dan
+    // wordt hij een object met cijfers als sleutels en is er niets meer van te
+    // maken.
+    if (Array.isArray(data)) return { velden: data as unknown as Record<string, unknown> };
     return { velden: { ...query, ...(data as Record<string, unknown>) } };
   } catch {
     return {
@@ -105,6 +110,17 @@ export async function POST(req: NextRequest) {
   }
 
   const vandaag = datumSleutel();
+
+  // Een plug-in voor Health Connect geeft geen losse velden terug maar één blok
+  // JSON met sessies erin. Dat in Tasker uit elkaar peuteren is priegelwerk in
+  // een schermpje; hier kan het in één keer, en meerdere trainingen tegelijk.
+  if (lijktOpGezondheidJson(body)) {
+    // De proefstand komt bij een blok uit de query, want de body is dan al
+    // gevuld met de gegevens van de plug-in.
+    const proef = new URL(req.url).searchParams.get("proef");
+    return blokVerwerken(persoon, body, vandaag, proef === "1" || proef === "true");
+  }
+
   const gelezen = leesExterneActiviteit(body, vandaag);
   if ("fout" in gelezen) {
     // Teruggeven wát er binnenkwam. Zonder dat sta je in het Tasker-log te
@@ -167,4 +183,79 @@ export async function POST(req: NextRequest) {
     await redis.del(GEZIEN(persoon, a.externId));
     throw e;
   }
+}
+
+/**
+ * Een blok sessies uit een Health Connect-plug-in.
+ *
+ * Elke sessie gaat langs dezelfde dedupe als een losse melding, dus hetzelfde
+ * blok twee keer sturen levert geen dubbele regels op. Dat is hier belangrijker
+ * dan bij een losse melding: zo'n plug-in stuurt vaak alles van de afgelopen
+ * dagen mee, elke keer opnieuw.
+ *
+ * Wat niet te lezen was komt terug in het antwoord, met de reden erbij. Zonder
+ * dat weet je niet of er niets was of dat er iets misging.
+ */
+async function blokVerwerken(
+  persoon: string, body: unknown, vandaag: string, proef: boolean
+) {
+  const { gevonden, geweigerd } = leesGezondheidJson(body, vandaag);
+
+  if (gevonden.length === 0) {
+    return NextResponse.json({
+      geboekt: [],
+      overgeslagen: 0,
+      geweigerd,
+      hint: geweigerd.length > 0
+        ? "Er zaten wel sessies in, maar geen enkele was compleet te lezen. Hierboven staat waarom."
+        : "Er zaten geen sessies in dit blok.",
+    }, { status: geweigerd.length > 0 ? 400 : 200 });
+  }
+
+  if (proef) {
+    return NextResponse.json({
+      proef: true,
+      zouBoeken: gevonden.map((a) => ({
+        datum: a.datum, soort: a.soort.naam, minuten: a.minuten, id: a.externId,
+      })),
+      geweigerd,
+    });
+  }
+
+  const profiel = await metPersoon(persoon, () => getProfile());
+  if (!profiel) {
+    return NextResponse.json({ error: "Vul eerst je profiel in de app in." }, { status: 400 });
+  }
+  const basaal = bmr(profiel.sex, profiel.current_weight_kg, profiel.height_cm,
+    leeftijd(profiel.birthdate));
+
+  const geboekt: { datum: string; soort: string; minuten: number; punten: number }[] = [];
+  let overgeslagen = 0;
+
+  for (const a of gevonden) {
+    const nieuw = await redis.set(GEZIEN(persoon, a.externId), a.datum,
+      { nx: true, ex: GEZIEN_TTL });
+    if (!nieuw) { overgeslagen++; continue; }
+
+    try {
+      await metPersoon(persoon, async () => {
+        const activiteit: Activity = {
+          id: nieuwId(), ts: Date.now(), name: a.soort.naam, met: a.soort.met,
+          minutes: a.minuten,
+          points: activiteitPunten(a.soort.met, profiel.current_weight_kg, a.minuten,
+            basaal, profiel.points_scale),
+        };
+        await addActiviteit(a.datum, activiteit);
+        geboekt.push({
+          datum: a.datum, soort: a.soort.naam, minuten: a.minuten, punten: activiteit.points,
+        });
+      });
+    } catch (e) {
+      // Merkje weer weg, anders is deze training voorgoed overgeslagen.
+      await redis.del(GEZIEN(persoon, a.externId));
+      throw e;
+    }
+  }
+
+  return NextResponse.json({ geboekt, overgeslagen, geweigerd });
 }

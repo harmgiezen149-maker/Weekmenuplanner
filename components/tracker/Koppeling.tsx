@@ -153,10 +153,11 @@ export default function Koppeling() {
       ) : !sleutel ? (
         <>
           <p style={T.hint}>
-            Garmin heeft geen koppeling voor particulieren, maar via je telefoon kan het wel: een
-            app als Health Sync haalt je activiteiten uit Garmin Connect, en Tasker stuurt ze
-            hierheen. Eenmalig instellen, daarna vanzelf. Je krijgt een kant-en-klaar
-            Tasker-bestand mee zodra je een sleutel hebt.
+            Garmin heeft geen koppeling voor particulieren, maar via je telefoon kan het wel. De
+            ketting heeft drie schakels: <strong>Health Sync</strong> haalt je activiteiten uit
+            Garmin Connect en zet ze in Health Connect; een <strong>Tasker-plug-in voor Health
+            Connect</strong> leest ze daar uit; <strong>Tasker</strong> stuurt ze hierheen. Die
+            middelste is makkelijk te vergeten — Health Sync praat zelf niet met Tasker.
           </p>
           <button style={{ ...T.primair, opacity: bezig ? 0.6 : 1 }} onClick={nieuweSleutel} disabled={bezig}>
             <Watch size={15} /> Sleutel aanmaken
@@ -173,10 +174,15 @@ export default function Koppeling() {
             <span style={S.bestand}>kookboek-beweging.tsk.xml</span> uit je downloadmap.
           </p>
           <p style={T.hint}>
-            De taak staat in de <strong>proefstand</strong>: de eerste keer controleert hij alles en
-            zet hij nog niets in je logboek. Bovenaan staan vier acties met <strong>VUL IN</strong>
-            {" "}in het label — daar zet je de variabelen van Health Sync neer. Werkt het, zet dan de
-            eerste actie <span style={S.bestand}>%kb_proef</span> op 0.
+            Er zitten twee taken in. Begin met <strong>1 Beweging via JSON</strong>: een plug-in voor
+            Health Connect geeft één blok JSON terug met alle sessies erin, en dat stuur je in zijn
+            geheel door — uit elkaar peuteren in Tasker hoeft niet. Je vult daar één veld in.
+            Taak 2 is voor het geval je wél losse variabelen per activiteit hebt.
+          </p>
+          <p style={T.hint}>
+            Beide taken staan in de <strong>proefstand</strong>: de eerste keer controleren ze alles
+            en zetten ze nog niets in je logboek. Werkt het, zet dan de eerste actie
+            {" "}<span style={S.bestand}>%kb_proef</span> op 0.
           </p>
           <p style={{ ...T.hint, marginBottom: 14 }}>
             Het bestand bevat je sleutel. Deel het met niemand, en gooi het uit je downloadmap als
@@ -219,11 +225,17 @@ export default function Koppeling() {
             misgaat.
           </p>
           <p style={T.hint}>
-            <strong>De namen van de variabelen</strong> hangen af van je plug-in. Kijk in het
-            actiescherm van de plug-in zelf welke variabelen hij teruggeeft — die lijst staat daar,
-            en gokken kost je een avond. Vertalen hoef je niet: Engelse namen uit Health Connect
-            worden herkend (RUNNING, WALKING, BIKING, MOUNTAIN_BIKING, STRENGTH_TRAINING,
-            SWIMMING_POOL, HIKING), net als de Nederlandse.
+            <strong>De naam van de variabele</strong> hangt af van je plug-in. Kijk in het
+            actiescherm van de plug-in zelf welke variabele hij vult — die staat daar, en gokken
+            kost je een avond. Vertalen hoef je niet: Engelse namen worden herkend (RUNNING,
+            WALKING, BIKING, MOUNTAIN_BIKING, STRENGTH_TRAINING, SWIMMING_POOL, HIKING), net als de
+            Nederlandse.
+          </p>
+          <p style={T.hint}>
+            <strong>Staat de sport als nummer in de JSON</strong> in plaats van als naam, dan zegt
+            de app welk nummer het was en boekt hij die sessie niet. Dat is met opzet: die
+            cijfercodes zijn nergens betrouwbaar na te slaan, en een verkeerd gegokt nummer boekt
+            stilletjes de verkeerde sport. Geef het nummer door, dan zet ik het erbij.
           </p>
           <p style={T.hint}>
             Gaat er iets mis, dan staat in het antwoord welke velden er binnenkwamen en met welke

@@ -592,10 +592,11 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             Dezelfde regel twee keer plakken levert één activiteit op.
           </p>
           <p style={{ margin: "0 0 8px" }}>
-            Wil je het automatisch, dan maak je daar een sleutel aan. Garmin Connect schrijft naar
-            Health Connect op je telefoon; Tasker kan dat uitlezen en met die sleutel naar de app
-            sturen. Eenmalig instellen, daarna gaat het vanzelf. Garmin zelf heeft geen koppeling
-            voor particulieren — vandaar de omweg.
+            Wil je het automatisch, dan heb je drie schakels nodig: <strong>Health Sync</strong>
+            haalt je activiteiten uit Garmin Connect naar Health Connect, een
+            <strong> Tasker-plug-in voor Health Connect</strong> leest ze daar uit, en Tasker stuurt
+            ze hierheen. Die middelste vergeet je makkelijk — Health Sync praat zelf niet met
+            Tasker. Garmin heeft geen koppeling voor particulieren; vandaar de omweg.
           </p>
           <p style={{ margin: "0 0 8px" }}>
             Bij de sleutel staat een knop <strong>Tasker-taak downloaden</strong>: een kant-en-klaar
