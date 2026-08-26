@@ -598,10 +598,15 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             voor particulieren — vandaar de omweg.
           </p>
           <p style={{ margin: "0 0 8px" }}>
-            Zet in Tasker alles áchter de URL en laat de body leeg; dan kan een variabele die nog
-            leeg is niets kapotmaken. Met <span style={S.route}>?proef=1</span> erbij controleert de
-            app alles en zegt hij wat hij zou boeken, zonder het te boeken. Gaat er iets mis, dan
-            staat in het antwoord welk veld leeg binnenkwam — daar zit de fout vrijwel altijd.
+            Bij de sleutel staat een knop <strong>Tasker-taak downloaden</strong>: een kant-en-klaar
+            bestand met je adres en sleutel er al in, dat je in Tasker importeert via Taken → menu →
+            Importeer taak. De taak begint in de proefstand, dus de eerste keer zet hij nog niets in
+            je logboek. Bovenaan staan vier acties met <strong>VUL IN</strong> in het label; daar
+            zet je de variabelen van je eigen app neer.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Gaat er iets mis, dan staat in het antwoord precies welk veld leeg binnenkwam — daar zit
+            de fout vrijwel altijd, en dan is het een verkeerde variabelenaam.
           </p>
           <p style={{ margin: 0 }}>
             De punten worden altijd door de app zelf berekend, uit je gewicht en je basaal

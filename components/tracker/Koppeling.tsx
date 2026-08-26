@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Loader2, RefreshCw, Trash2, Watch } from "lucide-react";
+import { Check, Copy, Download, Loader2, RefreshCw, Trash2, Watch } from "lucide-react";
 import { T } from "./stijl";
 
 // Beweging uit je horloge.
@@ -153,9 +153,10 @@ export default function Koppeling() {
       ) : !sleutel ? (
         <>
           <p style={T.hint}>
-            Garmin heeft geen koppeling voor particulieren, maar je telefoon wel: Garmin Connect
-            schrijft naar Health Connect, en de gratis app TaskerHealthConnect kan daar activiteiten
-            uit halen en naar deze app sturen. Eenmalig instellen, daarna vanzelf.
+            Garmin heeft geen koppeling voor particulieren, maar via je telefoon kan het wel: een
+            app als Health Sync haalt je activiteiten uit Garmin Connect, en Tasker stuurt ze
+            hierheen. Eenmalig instellen, daarna vanzelf. Je krijgt een kant-en-klaar
+            Tasker-bestand mee zodra je een sleutel hebt.
           </p>
           <button style={{ ...T.primair, opacity: bezig ? 0.6 : 1 }} onClick={nieuweSleutel} disabled={bezig}>
             <Watch size={15} /> Sleutel aanmaken
@@ -163,8 +164,27 @@ export default function Koppeling() {
         </>
       ) : (
         <>
+          <a href="/api/koppeling/tasker" download style={{ ...T.primair, textDecoration: "none", marginTop: 0 }}>
+            <Download size={15} /> Tasker-taak downloaden
+          </a>
+          <p style={T.hint}>
+            Een kant-en-klaar bestand met je adres en je sleutel er al in. In Tasker: tabblad
+            <strong> Taken</strong> → menu rechtsboven → <strong>Importeer taak</strong> → kies
+            <span style={S.bestand}>kookboek-beweging.tsk.xml</span> uit je downloadmap.
+          </p>
+          <p style={T.hint}>
+            De taak staat in de <strong>proefstand</strong>: de eerste keer controleert hij alles en
+            zet hij nog niets in je logboek. Bovenaan staan vier acties met <strong>VUL IN</strong>
+            {" "}in het label — daar zet je de variabelen van Health Sync neer. Werkt het, zet dan de
+            eerste actie <span style={S.bestand}>%kb_proef</span> op 0.
+          </p>
+          <p style={{ ...T.hint, marginBottom: 14 }}>
+            Het bestand bevat je sleutel. Deel het met niemand, en gooi het uit je downloadmap als
+            je klaar bent.
+          </p>
+
           <div style={T.kaart}>
-            <div style={T.label}>Adres (POST) — alles achter de URL</div>
+            <div style={T.label}>Of met de hand — adres (POST)</div>
             <code style={S.code}>{`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`}</code>
             <button style={{ ...T.secundair, marginTop: 8 }}
               onClick={() => kopieer(`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`, "adres")}>
@@ -233,6 +253,10 @@ const S: Record<string, React.CSSProperties> = {
     borderRadius: 8, padding: "8px 10px", fontSize: 11.5, lineHeight: 1.5,
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     wordBreak: "break-all", color: "var(--ink)",
+  },
+  bestand: {
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: "0.92em", background: "var(--bg)", padding: "1px 5px", borderRadius: 5,
   },
 };
 

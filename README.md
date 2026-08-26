@@ -1178,6 +1178,37 @@ een hash zou hem na één keer tonen onleesbaar maken. Wat hij kan is beperkt to
 Sleutels gaan niet mee in de back-up — het is een toegangsmiddel, en die horen
 niet in een bestand dat in je downloadmap belandt.
 
+### Het Tasker-bestand
+
+`GET /api/koppeling/tasker` levert een kant-en-klare Tasker-taak als
+`.tsk.xml`, met het adres en de sleutel er al in. Wat bij het instellen telkens
+misgaat is niet de logica maar het overtypen: een URL van tachtig tekens en een
+sleutel van tweeëndertig, op een telefoon, in een veld zonder plakknop.
+
+Twee dingen bepalen de opzet:
+
+1. **Alles wat de app aanlevert staat in losse `Variable Set`-acties**, niet
+   verstopt in de HTTP-actie. Het XML-formaat van die actie (code 547) is
+   eenvoudig en goed gedocumenteerd; dat van `HTTP Request` (code 339) is dat
+   minder — de argumentvolgorde is niet publiek vastgelegd. Zou Tasker die actie
+   anders inlezen dan bedoeld, dan staan de URL en de sleutel er nog steeds goed
+   in en is het een kwestie van twee velden aanwijzen in plaats van overtypen.
+2. **De taak begint in de proefstand** (`%kb_proef` op 1). Een eerste run die je
+   logboek volzet met testritjes is vervelender dan een eerste run die niets
+   doet.
+
+Elke actie krijgt een `<label>`, want dat label is wat je in Tasker ziet staan.
+De vier velden die jij invult heten `VUL IN — …`; de rest `Niet aanpassen — …`.
+De instructie hoort in het scherm zelf, niet in een handleiding ernaast.
+
+De vier waarden blijven met opzet leeg: welke variabelen jouw plug-in oplevert
+weet alleen jij, en raden zou een taak opleveren die stilletjes het verkeerde
+verstuurt.
+
+Het bestand bevat de sleutel, dus het komt alleen langs een ingelogde sessie
+naar buiten en wordt niet gecachet. Is er nog geen sleutel, dan wordt er een
+gemaakt — het bestand zonder sleutel downloaden heeft geen zin.
+
 ### Wat er binnenkomt, en waarom dat mis kan gaan
 
 De route leest drie vormen: JSON, een formulierbody, en gewone
@@ -1465,6 +1496,7 @@ app/
     bon/route.ts            POST kassabon of productfoto lezen / PUT prijzen opnemen
     prijzen/route.ts        GET het prijsboek, voor de raming op de lijst
     koppeling/route.ts      GET/POST/DELETE de sleutel voor je horloge
+    koppeling/tasker/route.ts  GET de Tasker-taak als .tsk.xml, sleutel erin
     tracker/beweging/extern/route.ts   POST vanaf je horloge, met eigen sleutel
     tracker/beweging/plakken/route.ts  POST een geplakte lijst uit Garmin Connect
     push/route.ts           GET sleutel+voorkeur / POST aanmelden / DELETE afmelden
@@ -1549,6 +1581,7 @@ lib/
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
   prijsboek.ts          Het prijsboek bewaren en bonnen erin opnemen (Redis)
   koppelsleutel.ts      De sleutel waarmee je horloge mag insturen
+  tasker.ts             De Tasker-taak als XML samenstellen (puur, getest)
   tracker/
     types.ts            Datamodel van de tracker
     points.ts           De puntenformule
