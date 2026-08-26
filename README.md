@@ -1178,6 +1178,51 @@ een hash zou hem na één keer tonen onleesbaar maken. Wat hij kan is beperkt to
 Sleutels gaan niet mee in de back-up — het is een toegangsmiddel, en die horen
 niet in een bestand dat in je downloadmap belandt.
 
+### Vier vormen naar binnen, en waarom
+
+`POST /api/tracker/beweging/extern` accepteert vier vormen. Niet uit
+gemakzucht: elke bron levert iets anders aan, en het is niet de bedoeling dat de
+gebruiker dat verschil moet oplossen.
+
+| vorm | voorbeeld | waarvoor |
+|---|---|---|
+| platte tekst | `Hardlopen 2026-08-24 45:12` | een notificatie, het deelmenu — **geen plug-in nodig** |
+| losse velden | `?soort=RUNNING&minuten=42` | een plug-in met variabelen per activiteit |
+| blok JSON | `{"records":[…]}` | een Health Connect-plug-in |
+| formulier | `soort=RUNNING&minuten=42` | clients die alleen dat kunnen |
+
+De tekstvorm is er gekomen nadat drie pogingen met plug-ins doodliepen. Hij
+leunt op `leesGeplakteLijst()`, dezelfde getoetste parser die het plakveld in
+Instellingen gebruikt — er kwam dus geen nieuwe leeslogica bij, alleen een
+nieuwe deur naar dezelfde.
+
+Eén valkuil zit in de afhandeling: veel clients sturen een losse zin met
+`Content-Type: x-www-form-urlencoded`, want dat is hun standaard. Zonder
+tegenmaatregel wordt `Wandeling voltooid 1:05:00` dan één veldnaam met een lege
+waarde. Daarom telt een formulierbody alleen als formulier wanneer er ook een
+veldnaam in zit die de app kent; anders is het gewoon tekst.
+
+Een body die met `{` of `[` begint was als JSON bedoeld; gaat die stuk, dan is
+dat een leesfout en geen tekst. Dat onderscheid houdt de melding over kapotte
+JSON overeind, die er is omdat `{"minuten":%duur}` met een lege variabele
+`{"minuten":}` wordt.
+
+### Eén plek waar geboekt wordt
+
+Vier wegen naar binnen deden alle vier hetzelfde: profiel ophalen, punten
+uitrekenen, dubbele eruit, opslaan. Vier kopieën van diezelfde lus lopen na twee
+wijzigingen gegarandeerd uit elkaar, en dan boekt de ene weg anders dan de
+andere. Dat staat nu in `lib/tracker/beweging-opslag.ts`, en het plakveld
+gebruikt hem ook.
+
+### Delen vanuit Garmin Connect
+
+Het deelmenu van Android komt binnen op `/tracker/import`. Die pagina keek al of
+er een recept of een product in zat; nu kijkt hij er ook of het een training is,
+met dezelfde parser. Is dat zo, dan verschijnt er een kaart met wat hij eruit
+las en een knop om het te boeken — en wordt de gedeelde tekst níét als
+receptpagina opgehaald, want dat zou een modelaanroep kosten voor niets.
+
 ### De ketting heeft drie schakels
 
 Garmin Connect → **Health Sync** → Health Connect → **een Tasker-plug-in voor
@@ -1218,9 +1263,9 @@ formaat.
 ### Het Tasker-bestand
 
 `GET /api/koppeling/tasker` levert een kant-en-klaar Tasker-project als
-`.prj.xml`, met het adres en de sleutel er al in. Er zitten twee taken in: één
-die het hele JSON-blok doorstuurt (één veld invullen) en één met losse velden,
-voor het geval een plug-in die wél per activiteit levert. Wat bij het instellen telkens
+`.prj.xml`, met het adres en de sleutel er al in. Er zitten drie taken in, van
+"heeft het minste nodig" naar "heeft het meeste nodig": tekst (geen plug-in),
+een JSON-blok, en losse velden. Wat bij het instellen telkens
 misgaat is niet de logica maar het overtypen: een URL van tachtig tekens en een
 sleutel van tweeëndertig, op een telefoon, in een veld zonder plakknop.
 
@@ -1658,6 +1703,7 @@ lib/
     herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
     meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
     koppeling.ts        Externe activiteiten en geplakte lijsten lezen (puur)
+    beweging-opslag.ts  Activiteiten boeken; de enige plek waar dat gebeurt
     gezondheidjson.ts   Een blok Health Connect-sessies uitlezen (puur, getest)
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)
     data.ts             Redis-bewerkingen onder de prefix wl:

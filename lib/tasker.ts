@@ -30,8 +30,9 @@ const HTTP_REQUEST = 339;
 /** Methode-keuze van HTTP Request: 0=GET, 1=POST, ... */
 const POST = 1;
 
-const TAAK_JSON = 10;
-const TAAK_VELDEN = 11;
+const TAAK_TEKST = 10;
+const TAAK_JSON = 11;
+const TAAK_VELDEN = 12;
 
 export interface TaskerOpties {
   /** Volledig adres van het endpoint, zonder queryparameters. */
@@ -121,11 +122,13 @@ ${str(0, tekst)}
 /**
  * Bouwt het project.
  *
- * Twee taken, want er zijn twee soorten plug-ins:
+ * Drie taken, van "heeft het minste nodig" naar "heeft het meeste nodig":
  *
+ *   TEKST    — stuurt gewoon een stuk tekst door; de app leest er zelf een
+ *              sport en een duur uit. Werkt zonder enige plug-in, bijvoorbeeld
+ *              met een notificatieprofiel op Garmin Connect.
  *   JSON     — een plug-in voor Health Connect geeft één blok JSON terug met
- *              alle sessies erin. Dat stuur je in zijn geheel door; de app
- *              haalt eruit wat hij nodig heeft. Eén veld invullen, klaar.
+ *              alle sessies erin. Dat stuur je in zijn geheel door.
  *   VELDEN   — heb je wél losse variabelen per activiteit, dan is dit de weg.
  *
  * De waarden blijven leeg. Welke variabelen jouw plug-in oplevert weet alleen
@@ -138,7 +141,27 @@ export function taskerProject(opties: TaskerOpties): string {
   const nu = Date.now();
   const header = `Authorization: Bearer ${opties.sleutel}`;
 
-  // -- taak 1: het hele blok JSON doorsturen --------------------------------
+  // -- taak 1: gewone tekst, zonder enige plug-in ---------------------------
+  // Dit is de weg die het minste nodig heeft: wat er ook aan tekst binnenkomt,
+  // de app probeert er een sport en een duur uit te lezen. Koppel hem aan een
+  // profiel Event → UI → Notificatie met Garmin Connect als app, en stuur
+  // %evtprm2 (de tekst van de melding) door.
+  const tekstActies = [
+    zetVariabele(0, "%kb_proef", "1",
+      "PROEFSTAND — 1 = alleen controleren, 0 = echt in je logboek zetten"),
+    zetVariabele(1, "%kb_tekst", "%evtprm2",
+      "VUL IN — de tekst met de training erin. Bij een notificatieprofiel is dat "
+      + "%evtprm2; anders de variabele die jouw trigger vult."),
+    flash(2, "[%kb_tekst]",
+      "KIJK — staat er tussen de haken een sport en een duur? Dan kan de app hem lezen."),
+    httpRequest(3, `${opties.adres}?proef=%kb_proef`,
+      `${header}\nContent-Type: text/plain`, "%kb_tekst",
+      "Versturen — Method POST, de tekst gaat mee als Body."),
+    flash(4, "%http_data",
+      "ANTWOORD — wat er geboekt is, of waarom er niets uit de tekst te halen viel."),
+  ];
+
+  // -- taak 2: het hele blok JSON doorsturen --------------------------------
   const jsonActies = [
     zetVariabele(0, "%kb_proef", "1",
       "PROEFSTAND — 1 = alleen controleren, 0 = echt in je logboek zetten"),
@@ -183,10 +206,11 @@ export function taskerProject(opties: TaskerOpties): string {
 	<Project sr="proj1" ve="2">
 		<cdate>${nu}</cdate>
 		<name>${esc(projectNaam)}</name>
-		<tids>${TAAK_JSON},${TAAK_VELDEN}</tids>
+		<tids>${TAAK_TEKST},${TAAK_JSON},${TAAK_VELDEN}</tids>
 	</Project>
-${taak(TAAK_JSON, "1 Beweging via JSON (begin hier)", jsonActies, nu)}
-${taak(TAAK_VELDEN, "2 Beweging via losse velden", veldActies, nu)}
+${taak(TAAK_TEKST, "1 Beweging via tekst (geen plug-in nodig)", tekstActies, nu)}
+${taak(TAAK_JSON, "2 Beweging via JSON van een plug-in", jsonActies, nu)}
+${taak(TAAK_VELDEN, "3 Beweging via losse velden", veldActies, nu)}
 </TaskerData>
 `;
 }

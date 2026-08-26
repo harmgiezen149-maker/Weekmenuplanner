@@ -153,11 +153,10 @@ export default function Koppeling() {
       ) : !sleutel ? (
         <>
           <p style={T.hint}>
-            Garmin heeft geen koppeling voor particulieren, maar via je telefoon kan het wel. De
-            ketting heeft drie schakels: <strong>Health Sync</strong> haalt je activiteiten uit
-            Garmin Connect en zet ze in Health Connect; een <strong>Tasker-plug-in voor Health
-            Connect</strong> leest ze daar uit; <strong>Tasker</strong> stuurt ze hierheen. Die
-            middelste is makkelijk te vergeten — Health Sync praat zelf niet met Tasker.
+            Garmin heeft geen koppeling voor particulieren, dus het gaat via je telefoon. De
+            eenvoudigste weg heeft géén plug-in nodig: laat Tasker afgaan op een melding van Garmin
+            Connect en stuur de tekst van die melding hierheen — de app zoekt er zelf een sport en
+            een duur uit. Lukt dat niet, dan is er de omweg via Health Connect met een plug-in.
           </p>
           <button style={{ ...T.primair, opacity: bezig ? 0.6 : 1 }} onClick={nieuweSleutel} disabled={bezig}>
             <Watch size={15} /> Sleutel aanmaken
@@ -174,13 +173,18 @@ export default function Koppeling() {
             <span style={S.bestand}>kookboek-beweging.tsk.xml</span> uit je downloadmap.
           </p>
           <p style={T.hint}>
-            Er zitten twee taken in. Begin met <strong>1 Beweging via JSON</strong>: een plug-in voor
-            Health Connect geeft één blok JSON terug met alle sessies erin, en dat stuur je in zijn
-            geheel door — uit elkaar peuteren in Tasker hoeft niet. Je vult daar één veld in.
-            Taak 2 is voor het geval je wél losse variabelen per activiteit hebt.
+            Er zitten drie taken in, van "heeft het minste nodig" naar "heeft het meeste nodig".
+            Begin met <strong>1 Beweging via tekst</strong>: die heeft géén plug-in nodig. Maak in
+            Tasker een profiel <span style={S.bestand}>Event → UI → Notificatie</span> met Garmin
+            Connect als app, koppel deze taak eraan, en de tekst van de melding gaat naar de app.
+            Die zoekt er zelf een sport en een duur uit.
           </p>
           <p style={T.hint}>
-            Beide taken staan in de <strong>proefstand</strong>: de eerste keer controleren ze alles
+            Taak 2 is voor een plug-in die JSON teruggeeft, taak 3 voor een plug-in met losse
+            variabelen per activiteit. Werkt taak 1, dan heb je die twee niet nodig.
+          </p>
+          <p style={T.hint}>
+            Alle drie staan in de <strong>proefstand</strong>: de eerste keer controleren ze alles
             en zetten ze nog niets in je logboek. Werkt het, zet dan de eerste actie
             {" "}<span style={S.bestand}>%kb_proef</span> op 0.
           </p>
@@ -190,7 +194,16 @@ export default function Koppeling() {
           </p>
 
           <div style={T.kaart}>
-            <div style={T.label}>Of met de hand — adres (POST)</div>
+            <div style={T.label}>De eenvoudigste vorm — stuur gewoon tekst</div>
+            <code style={S.code}>{adres}</code>
+            <p style={T.hint}>
+              Method POST, Body = een stuk tekst met een sport en een duur erin. Bijvoorbeeld
+              {" "}<span style={S.bestand}>Hardlopen 2026-08-24 45:12</span> of gewoon
+              {" "}<span style={S.bestand}>Wandeling voltooid 1:05:00</span>. Meerdere regels mag
+              ook. Wat de app niet kan lezen zegt hij, in plaats van te gokken.
+            </p>
+
+            <div style={{ ...T.label, marginTop: 16 }}>Of met losse velden — adres (POST)</div>
             <code style={S.code}>{`${adres}?soort=&minuten=&datum=&id=`}</code>
             <button style={{ ...T.secundair, marginTop: 8 }}
               onClick={() => kopieer(`${adres}?soort=&minuten=&datum=&id=`, "adres")}>

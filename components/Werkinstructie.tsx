@@ -592,11 +592,10 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             Dezelfde regel twee keer plakken levert één activiteit op.
           </p>
           <p style={{ margin: "0 0 8px" }}>
-            Wil je het automatisch, dan heb je drie schakels nodig: <strong>Health Sync</strong>
-            haalt je activiteiten uit Garmin Connect naar Health Connect, een
-            <strong> Tasker-plug-in voor Health Connect</strong> leest ze daar uit, en Tasker stuurt
-            ze hierheen. Die middelste vergeet je makkelijk — Health Sync praat zelf niet met
-            Tasker. Garmin heeft geen koppeling voor particulieren; vandaar de omweg.
+            Wil je het automatisch, dan is de eenvoudigste weg een Tasker-profiel dat afgaat op een
+            melding van Garmin Connect: de tekst van die melding gaat naar de app, en die zoekt er
+            zelf een sport en een duur uit. Geen plug-in nodig. Lukt dat niet, dan is er de omweg
+            via Health Connect met een plug-in — die staat als taak 2 en 3 in het bestand.
           </p>
           <p style={{ margin: "0 0 8px" }}>
             Bij de sleutel staat een knop <strong>Tasker-taak downloaden</strong>: een kant-en-klaar

@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Check, ClipboardPaste, Link2, Loader2 } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Activity, AlertTriangle, Check, ClipboardPaste, Link2, Loader2 } from "lucide-react";
+import { leesGeplakteLijst } from "@/lib/tracker/koppeling";
+import { datumSleutel } from "@/lib/tracker/datum";
 import { T } from "./stijl";
 import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
@@ -69,6 +71,46 @@ export default function Import({
   const [uitslag, setUitslag] = useState<Uitslag | null>(null);
   const [porties, setPorties] = useState("1");
   const [maal, setMaal] = useState<Maaltijd>("diner");
+  const [beweging, setBeweging] = useState<{ geboekt: number; melding: string } | null>(null);
+  const [bewegingBezig, setBewegingBezig] = useState(false);
+
+  /**
+   * Ziet de gedeelde tekst eruit als een training?
+   *
+   * Wordt hier gedaan en niet op de server: dan verschijnt de knop meteen, en
+   * er gaat pas iets naar de app als je erop drukt. De herkenning is dezelfde
+   * functie die het plakveld in Instellingen gebruikt.
+   */
+  const alsBeweging = useMemo(() => {
+    const tekst = (gedeeldeUrl || url).trim();
+    if (!tekst || tekst.length > 2000) return null;
+    const { herkend } = leesGeplakteLijst(tekst, datumSleutel());
+    return herkend.length > 0 ? herkend : null;
+  }, [gedeeldeUrl, url]);
+
+  const boekBeweging = async () => {
+    if (!alsBeweging || bewegingBezig) return;
+    setBewegingBezig(true); setEigenFout("");
+    try {
+      const res = await fetch("/api/tracker/beweging/plakken", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tekst: (gedeeldeUrl || url).trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Er ging iets mis");
+      const n = (data.geboekt ?? []).length;
+      setBeweging({
+        geboekt: n,
+        melding: n > 0
+          ? `${n === 1 ? "Eén activiteit" : `${n} activiteiten`} toegevoegd aan je logboek.`
+          : data.overgeslagen > 0
+            ? "Deze stond er al in."
+            : "Er viel niets te boeken.",
+      });
+    } catch (e) {
+      setEigenFout(e instanceof Error ? e.message : "Er ging iets mis");
+    } finally { setBewegingBezig(false); }
+  };
 
   const haalOp = useCallback(async (adres: string) => {
     if (!adres.trim()) return;
@@ -90,9 +132,14 @@ export default function Import({
     } finally { setLaadt(false); }
   }, []);
 
-  // Kwam de link via het deelmenu binnen, dan meteen ophalen.
+  // Kwam er iets via het deelmenu binnen, dan meteen ophalen — tenzij het een
+  // training blijkt te zijn. Die hoort niet als receptpagina opgehaald te
+  // worden, en zeker geen modelaanroep te kosten.
   useEffect(() => {
-    if (gedeeldeUrl) { setUrl(gedeeldeUrl); haalOp(gedeeldeUrl); }
+    if (!gedeeldeUrl) return;
+    setUrl(gedeeldeUrl);
+    const { herkend } = leesGeplakteLijst(gedeeldeUrl, datumSleutel());
+    if (herkend.length === 0) haalOp(gedeeldeUrl);
   }, [gedeeldeUrl, haalOp]);
 
   const plak = async () => {
@@ -112,6 +159,37 @@ export default function Import({
   return (
     <>
       {(fout || eigenFout) && <div style={T.fout}>{fout || eigenFout}</div>}
+
+      {alsBeweging && !beweging && (
+        <div style={{ ...T.kaart, borderColor: "var(--accent)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Activity size={16} style={{ color: "var(--accent)" }} />
+            <strong style={{ fontSize: 14.5 }}>Dit lijkt een training</strong>
+          </div>
+          {alsBeweging.map((r, i) => (
+            <div key={i} style={T.uitslagRij}>
+              <span style={T.uitslagLabel}>{r.datum} · {r.soort.naam}</span>
+              <span style={T.uitslagWaarde}>{r.minuten} min</span>
+            </div>
+          ))}
+          <button
+            style={{ ...T.primair, opacity: bewegingBezig ? 0.6 : 1 }}
+            onClick={boekBeweging} disabled={bewegingBezig}
+          >
+            {bewegingBezig
+              ? <><Loader2 size={15} className="spin" /> Toevoegen...</>
+              : <><Check size={15} /> Bij mijn beweging zetten</>}
+          </button>
+          <p style={T.hint}>
+            Klopt dit niet, negeer deze kaart dan — hieronder kun je gewoon een recept of product
+            ophalen.
+          </p>
+        </div>
+      )}
+
+      {beweging && (
+        <div style={{ ...T.melding, marginBottom: 12 }}>{beweging.melding}</div>
+      )}
 
       <div style={T.veldVak}>
         <label style={T.label} htmlFor="im-url">Link naar een recept of product</label>
