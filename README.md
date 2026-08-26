@@ -1180,22 +1180,37 @@ niet in een bestand dat in je downloadmap belandt.
 
 ### Het Tasker-bestand
 
-`GET /api/koppeling/tasker` levert een kant-en-klare Tasker-taak als
-`.tsk.xml`, met het adres en de sleutel er al in. Wat bij het instellen telkens
+`GET /api/koppeling/tasker` levert een kant-en-klaar Tasker-project als
+`.prj.xml`, met het adres en de sleutel er al in. Wat bij het instellen telkens
 misgaat is niet de logica maar het overtypen: een URL van tachtig tekens en een
 sleutel van tweeëndertig, op een telefoon, in een veld zonder plakknop.
 
-Twee dingen bepalen de opzet:
+Drie dingen bepalen de opzet, alle drie geleerd van een import die faalde:
 
-1. **Alles wat de app aanlevert staat in losse `Variable Set`-acties**, niet
-   verstopt in de HTTP-actie. Het XML-formaat van die actie (code 547) is
-   eenvoudig en goed gedocumenteerd; dat van `HTTP Request` (code 339) is dat
-   minder — de argumentvolgorde is niet publiek vastgelegd. Zou Tasker die actie
-   anders inlezen dan bedoeld, dan staan de URL en de sleutel er nog steeds goed
-   in en is het een kwestie van twee velden aanwijzen in plaats van overtypen.
-2. **De taak begint in de proefstand** (`%kb_proef` op 1). Een eerste run die je
+1. **Het is een project, geen losse taak.** Tasker weigert een bestand met
+   alleen een `<Task>` erin, met de melding *"Import failed … no Project
+   found"*. Er hoort een `<Project>` bij met een `<tids>` die naar de taak
+   verwijst. Een test controleert dat die verwijzing klopt.
+2. **De URL staat voluit in de HTTP-actie, niet in een tussenvariabele.**
+   Tasker vult variabelen één laag diep in: stond de URL in `%kb_url` en bevatte
+   die zelf weer `%kb_soort`, dan verstuurt Tasker de letterlijke tekst
+   `%kb_soort`. De eerste versie deed precies dat.
+3. **De taak begint in de proefstand** (`%kb_proef` op 1). Een eerste run die je
    logboek volzet met testritjes is vervelender dan een eerste run die niets
    doet.
+
+### Geen voorbeeldvariabelen
+
+Er staat nergens een naam als `%hc_type` — niet in het bestand en niet in het
+instellingenscherm. Zo'n naam ziet eruit als een bestaande variabele, wordt
+letterlijk overgenomen, bestaat dan niet, en levert een fout op die naar de
+verkeerde kant wijst. Dat is precies één keer gebeurd, en één keer is genoeg.
+
+In plaats daarvan herkent de app het patroon: komt er `hc_type` of `%hs_duration`
+binnen waar een sport of een getal hoort, dan zegt hij dat het de náám van een
+variabele is en dat Tasker hem niet heeft ingevuld. Dat is een heel andere
+aanwijzing dan "activiteit niet herkend", en wijst naar de plek waar de fout
+werkelijk zit.
 
 Elke actie krijgt een `<label>`, want dat label is wat je in Tasker ziet staan.
 De vier velden die jij invult heten `VUL IN — …`; de rest `Niet aanpassen — …`.

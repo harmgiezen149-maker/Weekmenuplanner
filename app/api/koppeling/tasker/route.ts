@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getKoppelsleutel, maakKoppelsleutel } from "@/lib/koppelsleutel";
 import { huidigePersoon } from "@/lib/persoon";
-import { taskerTaak } from "@/lib/tasker";
+import { taskerProject } from "@/lib/tasker";
 
 export const dynamic = "force-dynamic";
 
@@ -17,13 +17,14 @@ export async function GET(req: NextRequest) {
   const sleutel = (await getKoppelsleutel(persoon)) ?? (await maakKoppelsleutel(persoon));
 
   const adres = new URL("/api/tracker/beweging/extern", req.nextUrl.origin).toString();
-  const xml = taskerTaak({ adres, sleutel });
+  const xml = taskerProject({ adres, sleutel });
 
   return new NextResponse(xml, {
     headers: {
       "Content-Type": "text/xml; charset=utf-8",
-      // Tasker herkent een taakbestand aan .tsk.xml.
-      "Content-Disposition": 'attachment; filename="kookboek-beweging.tsk.xml"',
+      // Een project en niet een losse taak: Tasker weigert een bestand met
+      // alleen een <Task> erin met "no Project found".
+      "Content-Disposition": 'attachment; filename="kookboek.prj.xml"',
       "Cache-Control": "no-store",
     },
   });

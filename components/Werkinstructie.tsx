@@ -599,8 +599,8 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
           <p style={{ margin: "0 0 8px" }}>
             Bij de sleutel staat een knop <strong>Tasker-taak downloaden</strong>: een kant-en-klaar
-            bestand met je adres en sleutel er al in, dat je in Tasker importeert via Taken → menu →
-            Importeer taak. De taak begint in de proefstand, dus de eerste keer zet hij nog niets in
+            bestand met je adres en sleutel er al in, dat je in Tasker importeert via Profielen → menu →
+            Gegevens → Importeer project. De taak begint in de proefstand, dus de eerste keer zet hij nog niets in
             je logboek. Bovenaan staan vier acties met <strong>VUL IN</strong> in het label; daar
             zet je de variabelen van je eigen app neer.
           </p>

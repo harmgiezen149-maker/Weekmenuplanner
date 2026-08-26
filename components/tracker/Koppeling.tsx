@@ -185,14 +185,15 @@ export default function Koppeling() {
 
           <div style={T.kaart}>
             <div style={T.label}>Of met de hand — adres (POST)</div>
-            <code style={S.code}>{`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`}</code>
+            <code style={S.code}>{`${adres}?soort=&minuten=&datum=&id=`}</code>
             <button style={{ ...T.secundair, marginTop: 8 }}
-              onClick={() => kopieer(`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`, "adres")}>
+              onClick={() => kopieer(`${adres}?soort=&minuten=&datum=&id=`, "adres")}>
               {gekopieerd === "adres" ? <><Check size={14} /> Gekopieerd</> : <><Copy size={14} /> Adres kopiëren</>}
             </button>
             <p style={T.hint}>
-              Laat de Body in Tasker leeg. Zo kan een variabele die nog leeg is niets kapotmaken —
-              er komt dan gewoon een leeg veld binnen en de app zegt precies wélk veld.
+              Achter elk isgelijkteken zet je jouw eigen Tasker-variabele. Er staat hier met opzet
+              geen voorbeeldnaam: die wordt overgenomen, bestaat dan niet, en levert een fout op
+              die naar de verkeerde kant wijst. Laat de Body leeg.
             </p>
 
             <div style={{ ...T.label, marginTop: 16 }}>Header</div>
@@ -218,15 +219,16 @@ export default function Koppeling() {
             misgaat.
           </p>
           <p style={T.hint}>
-            <strong>De namen van de variabelen</strong> hangen af van je plug-in en zijn zelden
-            <code>%hc_...</code>. Kijk in het actiescherm van de plug-in welke variabelen hij
-            teruggeeft en gebruik die. Vertalen hoef je niet: Engelse namen uit Health Connect
+            <strong>De namen van de variabelen</strong> hangen af van je plug-in. Kijk in het
+            actiescherm van de plug-in zelf welke variabelen hij teruggeeft — die lijst staat daar,
+            en gokken kost je een avond. Vertalen hoef je niet: Engelse namen uit Health Connect
             worden herkend (RUNNING, WALKING, BIKING, MOUNTAIN_BIKING, STRENGTH_TRAINING,
             SWIMMING_POOL, HIKING), net als de Nederlandse.
           </p>
           <p style={T.hint}>
             Gaat er iets mis, dan staat in het antwoord welke velden er binnenkwamen en met welke
-            waarde. Dezelfde training twee keer insturen levert één regel op, dus een mislukte
+            waarde. Komt daar de naam van een variabele uit in plaats van een sport, dan zegt de
+            app dat ook met zoveel woorden — dan is die variabele niet ingevuld. Dezelfde training twee keer insturen levert één regel op, dus een mislukte
             poging mag je gerust overdoen.
           </p>
           <p style={T.hint}>

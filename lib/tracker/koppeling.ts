@@ -108,6 +108,24 @@ export function ontvangenVelden(body: unknown): Record<string, string> {
   return uit;
 }
 
+/**
+ * Ziet dit eruit als een variabelenaam die niet is ingevuld?
+ *
+ * Twee vormen komen voor: met de procent er nog aan (%hs_type), en zonder,
+ * doordat de procent onderweg is gesneuveld (hs_type). Die tweede is de
+ * gemene: dan staat er gewoon een woord en lijkt het net echte invoer.
+ *
+ * Alleen gebruikt wanneer de waarde toch al niet herkend werd, dus een
+ * activiteit die hier per ongeluk onder valt bestond sowieso niet.
+ */
+export function lijktOpVariabele(waarde: string): boolean {
+  const w = String(waarde ?? "").trim();
+  if (!w) return false;
+  if (w.startsWith("%")) return true;
+  // Een kort voorvoegsel plus liggend streepje: hc_type, hs_duration, kb_soort.
+  return /^[a-z]{1,4}_[a-z][a-z0-9_]*$/i.test(w);
+}
+
 function eersteVeld(b: Record<string, unknown>, velden: string[]): string {
   for (const v of velden) {
     const w = String(b[v] ?? "").trim();
@@ -144,6 +162,14 @@ export function leesExterneActiviteit(
 
   const soort = herkenSoort(ruweSoort);
   if (!soort) {
+    if (lijktOpVariabele(ruweSoort)) {
+      return {
+        fout: `Er kwam "${ruweSoort}" binnen, en dat is geen sport maar de náám van een `
+          + "variabele. Tasker heeft hem niet ingevuld, meestal omdat die variabele niet "
+          + "bestaat of anders heet. Kijk in het actiescherm van je plug-in welke variabelen "
+          + "hij precies teruggeeft en zet die naam in de actie 'VUL IN — de sport'.",
+      };
+    }
     return {
       fout: `Activiteit "${ruweSoort}" niet herkend. Engelse namen uit Health Connect werken `
         + "ook (RUNNING, WALKING, BIKING, STRENGTH_TRAINING, SWIMMING_POOL, HIKING, "
@@ -153,6 +179,14 @@ export function leesExterneActiviteit(
 
   const minuten = minutenUit(b);
   if (minuten == null) {
+    const ruweDuur = eersteVeld(b, ["minuten", "minutes", "seconden", "seconds", "duration"]);
+    if (lijktOpVariabele(ruweDuur)) {
+      return {
+        fout: `Bij de duur kwam "${ruweDuur}" binnen, en dat is de náám van een variabele, `
+          + "geen getal. Tasker heeft hem niet ingevuld — controleer hoe die variabele bij "
+          + "jouw plug-in heet.",
+      };
+    }
     return {
       fout: "Geen bruikbare duur gevonden. Geef 'minuten' mee, of 'seconden'. "
         + "Kwam het veld leeg binnen, kijk dan of de variabele in Tasker gevuld is.",

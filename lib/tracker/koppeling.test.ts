@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
 import {
-  herkenSoort, leesExterneActiviteit, leesGeplakteLijst, ontvangenVelden,
+  herkenSoort, leesExterneActiviteit, leesGeplakteLijst, lijktOpVariabele, ontvangenVelden,
 } from "./koppeling.ts";
 
 const VANDAAG = "2026-08-25";
@@ -93,6 +93,30 @@ test("een leeg soortveld levert een andere fout dan een onbekende soort", () => 
   assert.ok("fout" in onbekend);
   assert.match(onbekend.fout, /niet herkend/);
   assert.match(onbekend.fout, /RUNNING/, "de foutmelding hoort te zeggen dat Engels ook werkt");
+});
+
+test("een niet-ingevulde variabelenaam wordt als zodanig herkend", () => {
+  // Dit gebeurde echt: %hc_type kwam aan als "hc_type" en de melding zei
+  // "activiteit niet herkend", waarmee hij naar een vertaling wees die niet
+  // het probleem was.
+  for (const naam of ["hc_type", "%hc_type", "hs_duration", "%kb_soort", "at_type"]) {
+    assert.equal(lijktOpVariabele(naam), true, naam);
+    const uit = leesExterneActiviteit({ soort: naam, minuten: 30 }, VANDAAG);
+    assert.ok("fout" in uit, naam);
+    assert.match(uit.fout, /náám van een variabele/, naam);
+  }
+});
+
+test("een echte sportnaam wordt niet voor een variabele aangezien", () => {
+  for (const naam of ["padel", "kickboksen", "STRENGTH_TRAINING", "wandelen-stevig", "roeien"]) {
+    assert.equal(lijktOpVariabele(naam), false, naam);
+  }
+});
+
+test("een variabelenaam bij de duur wijst ook naar de variabele", () => {
+  const uit = leesExterneActiviteit({ soort: "RUNNING", minuten: "hc_duration" }, VANDAAG);
+  assert.ok("fout" in uit);
+  assert.match(uit.fout, /náám van een variabele/);
 });
 
 test("de soort mag onder allerlei veldnamen binnenkomen", () => {

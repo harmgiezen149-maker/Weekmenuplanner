@@ -1,22 +1,25 @@
 // ---------------------------------------------------------------------------
-// Een kant-en-klare Tasker-taak als XML.
+// Een kant-en-klaar Tasker-project als XML.
 //
 // Wat er telkens misgaat bij het instellen is niet de logica maar het overtypen:
 // een URL van tachtig tekens en een sleutel van tweeëndertig, op een telefoon,
 // in een veld zonder plakknop. Dit bestand haalt precies dát weg.
 //
-// Twee dingen die de opzet bepalen:
+// Drie dingen die de opzet bepalen, alle drie geleerd van een import die faalde:
 //
-//   1. Alles wat de app aanlevert staat in losse "Variable Set"-acties, niet
-//      verstopt in de HTTP-actie. Het formaat van die actie is eenvoudig en
-//      goed gedocumenteerd; dat van HTTP Request is dat minder. Zou Tasker de
-//      HTTP-actie anders inlezen dan bedoeld, dan staan de URL en de sleutel er
-//      nog steeds goed in en is het een kwestie van twee velden aanwijzen.
-//   2. De taak begint in de proefstand. Een eerste run die je logboek volzet
-//      met testritjes is vervelender dan een eerste run die niets doet.
+//   1. Het moet een PROJECT zijn, niet een losse taak. Tasker weigert een
+//      bestand met alleen een <Task> erin: "no Project found".
+//   2. De URL staat voluit in de HTTP-actie, niet in een tussenvariabele.
+//      Tasker vult variabelen één laag diep in: zou %kb_url zélf weer
+//      %kb_soort bevatten, dan wordt de letterlijke tekst "%kb_soort"
+//      verstuurd.
+//   3. De in te vullen waarden staan in losse "Variable Set"-acties bovenaan,
+//      met een label dat zegt wat erin hoort. Dat label is wat je in Tasker
+//      ziet staan; de instructie hoort in het scherm zelf, niet in een
+//      handleiding ernaast.
 //
-// Elke actie krijgt een label, want dat label is wat je in Tasker ziet staan.
-// De instructie hoort in het scherm zelf, niet in een handleiding ernaast.
+// En de taak begint in de proefstand: een eerste run die je logboek volzet met
+// testritjes is vervelender dan een eerste run die niets doet.
 // ---------------------------------------------------------------------------
 
 /** Actiecodes van Tasker. */
@@ -27,11 +30,15 @@ const HTTP_REQUEST = 339;
 /** Methode-keuze van HTTP Request: 0=GET, 1=POST, ... */
 const POST = 1;
 
+const TAAK_ID = 10;
+
 export interface TaskerOpties {
   /** Volledig adres van het endpoint, zonder queryparameters. */
   adres: string;
   sleutel: string;
-  /** Naam van de taak zoals hij in Tasker komt te staan. */
+  /** Naam van het project zoals het in Tasker komt te staan. */
+  project?: string;
+  /** Naam van de taak. */
   naam?: string;
 }
 
@@ -69,18 +76,22 @@ function flash(nummer: number, tekst: string, label: string): string {
 }
 
 /**
- * Bouwt de taak.
+ * Bouwt het project.
  *
- * De vier velden bovenaan zijn de enige die jij nog invult: welke variabelen je
- * plug-in oplevert weet alleen jij, en raden zou hier een taak opleveren die
- * stilletjes het verkeerde verstuurt.
+ * De vier waarden bovenaan blijven leeg: welke variabelen jouw plug-in oplevert
+ * weet alleen jij, en raden zou hier een taak opleveren die stilletjes het
+ * verkeerde verstuurt. Er staat met opzet ook geen voorbeeldnaam als
+ * `%hc_type` — dat ziet eruit als een echte variabele en wordt dan letterlijk
+ * overgenomen.
  */
-export function taskerTaak(opties: TaskerOpties): string {
-  const naam = opties.naam ?? "Kookboek beweging";
+export function taskerProject(opties: TaskerOpties): string {
+  const projectNaam = opties.project ?? "Kookboek";
+  const taakNaam = opties.naam ?? "Beweging naar Kookboek";
   const nu = Date.now();
 
   // De gegevens gaan achter de URL en niet in een body: een variabele die nog
-  // leeg is levert dan een leeg veld op in plaats van kapotte JSON.
+  // leeg is levert dan een leeg veld op in plaats van kapotte JSON. En de URL
+  // staat hier voluit, zodat Tasker de variabelen in één slag invult.
   const url = `${opties.adres}?proef=%kb_proef&soort=%kb_soort&minuten=%kb_minuten`
     + "&datum=%kb_datum&id=%kb_id";
 
@@ -89,29 +100,25 @@ export function taskerTaak(opties: TaskerOpties): string {
       "PROEFSTAND — 1 = alleen controleren, 0 = echt in je logboek zetten"),
 
     zetVariabele(1, "%kb_soort", "",
-      "VUL IN — de variabele van Health Sync met de sport, bijvoorbeeld %hs_type. "
-      + "Engelse namen zoals RUNNING of WALKING worden herkend."),
+      "VUL IN — hier hoort de variabele van je eigen app die de sport bevat. "
+      + "Engelse namen als RUNNING of WALKING worden herkend."),
     zetVariabele(2, "%kb_minuten", "",
-      "VUL IN — de duur in minuten. Heb je alleen seconden, gebruik dan &seconden= in de URL."),
+      "VUL IN — de duur in minuten. Alleen seconden? Vervang in de HTTP-actie "
+      + "minuten= door seconden=."),
     zetVariabele(3, "%kb_datum", "",
       "VUL IN — de datum als 2026-08-26. Laat leeg voor vandaag."),
     zetVariabele(4, "%kb_id", "",
       "VUL IN — een uniek kenmerk van de activiteit. Leeg mag; dan maakt de app er zelf een."),
 
-    flash(5, "soort=%kb_soort duur=%kb_minuten datum=%kb_datum",
-      "KIJK — wat zit er werkelijk in je variabelen? Zet deze actie uit zodra het klopt."),
+    flash(5, "soort=[%kb_soort] duur=[%kb_minuten] datum=[%kb_datum]",
+      "KIJK — staat er tussen de haken iets? Zo niet, dan klopt de variabelenaam hierboven niet."),
 
-    zetVariabele(6, "%kb_url", url,
-      "Niet aanpassen — adres van de app, met je gegevens erachter"),
-    zetVariabele(7, "%kb_header", `Authorization: Bearer ${opties.sleutel}`,
-      "Niet aanpassen — je persoonlijke sleutel. Deel dit bestand met niemand."),
-
-    `	<Action sr="act8" ve="7">
+    `	<Action sr="act6" ve="7">
 		<code>${HTTP_REQUEST}</code>
-		<label>Versturen — controleer dat Method op POST staat en de Body leeg is</label>
+		<label>Versturen — Method POST, Body leeg. Adres en sleutel staan er al in.</label>
 		<Int sr="arg0" val="${POST}"/>
-		<Str sr="arg1" ve="3">%kb_url</Str>
-		<Str sr="arg2" ve="3">%kb_header</Str>
+		<Str sr="arg1" ve="3">${esc(url)}</Str>
+		<Str sr="arg2" ve="3">Authorization: Bearer ${esc(opties.sleutel)}</Str>
 		<Str sr="arg3" ve="3"/>
 		<Str sr="arg4" ve="3"/>
 		<Str sr="arg5" ve="3"/>
@@ -122,17 +129,22 @@ export function taskerTaak(opties: TaskerOpties): string {
 		<Int sr="arg10" val="0"/>
 	</Action>`,
 
-    flash(9, "%http_data",
+    flash(7, "%http_data",
       "ANTWOORD — hier staat of het gelukt is, en anders welk veld leeg binnenkwam."),
   ];
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <TaskerData sr="" dvi="1" tv="6.3.13">
-	<Task sr="task1">
+	<Project sr="proj1" ve="2">
+		<cdate>${nu}</cdate>
+		<name>${esc(projectNaam)}</name>
+		<tids>${TAAK_ID}</tids>
+	</Project>
+	<Task sr="task${TAAK_ID}">
 		<cdate>${nu}</cdate>
 		<edate>${nu}</edate>
-		<id>1</id>
-		<nme>${esc(naam)}</nme>
+		<id>${TAAK_ID}</id>
+		<nme>${esc(taakNaam)}</nme>
 		<pri>100</pri>
 ${acties.join("\n")}
 	</Task>
