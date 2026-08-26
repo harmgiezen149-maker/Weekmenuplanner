@@ -597,6 +597,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             sturen. Eenmalig instellen, daarna gaat het vanzelf. Garmin zelf heeft geen koppeling
             voor particulieren — vandaar de omweg.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Zet in Tasker alles áchter de URL en laat de body leeg; dan kan een variabele die nog
+            leeg is niets kapotmaken. Met <span style={S.route}>?proef=1</span> erbij controleert de
+            app alles en zegt hij wat hij zou boeken, zonder het te boeken. Gaat er iets mis, dan
+            staat in het antwoord welk veld leeg binnenkwam — daar zit de fout vrijwel altijd.
+          </p>
           <p style={{ margin: 0 }}>
             De punten worden altijd door de app zelf berekend, uit je gewicht en je basaal
             metabolisme. Wat je horloge als verbranding meestuurt telt niet mee: die getallen zijn

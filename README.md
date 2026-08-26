@@ -1178,6 +1178,37 @@ een hash zou hem na één keer tonen onleesbaar maken. Wat hij kan is beperkt to
 Sleutels gaan niet mee in de back-up — het is een toegangsmiddel, en die horen
 niet in een bestand dat in je downloadmap belandt.
 
+### Wat er binnenkomt, en waarom dat mis kan gaan
+
+De route leest drie vormen: JSON, een formulierbody, en gewone
+queryparameters. Die laatste is voor Tasker de veiligste weg, en daar staat de
+instructie in de app dan ook op.
+
+De reden is een valkuil die in de praktijk meteen toesloeg. Een JSON-body als
+`{"minuten":%duur}` met een lege `%duur` wordt `{"minuten":}` — en dat is geen
+geldige JSON. De eerste versie ving die leesfout stil op en behandelde het
+bericht als leeg, waarna de foutmelding "Onbekende activiteit" luidde. Die wees
+naar de verkeerde plek: het probleem zat niet in de soort maar in een héél
+andere lege variabele. Nu wordt een leesfout apart gemeld, met de ruwe tekst
+erbij.
+
+Verder:
+
+- **Leeg is iets anders dan onbekend.** "Het veld soort kwam leeg binnen" wijst
+  naar een variabele die niet bestaat; "activiteit X niet herkend" naar een
+  ontbrekende vertaling. Bij het instellen bepaalt dat verschil waar je zoekt.
+- **De soort mag onder allerlei namen binnenkomen** (`soort`, `type`,
+  `activity`, `exerciseType`, `sport`, `workout`, …). Elke Health
+  Connect-plug-in verzint zijn eigen variabelenamen; die uitzoeken hoort niet
+  het werk van de gebruiker te zijn. Een leeg veld wordt overgeslagen ten
+  gunste van een gevuld veld.
+- **Elke fout geeft terug wat er binnenkwam**, veld voor veld, behalve de
+  sleutel. Zonder dat sta je in het Tasker-log te raden welke variabele gevuld
+  is.
+- **`?proef=1`** controleert alles en geeft terug wat er geboekt zóu worden,
+  zonder te boeken. Zo stel je de koppeling in zonder je logboek vol te zetten
+  met testritjes.
+
 ### Niet twee keer boeken
 
 Tasker vuurt bij een wankele verbinding zonder blikken of blozen drie keer, en

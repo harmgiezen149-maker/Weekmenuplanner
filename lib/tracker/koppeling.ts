@@ -91,11 +91,41 @@ export interface ExterneActiviteit {
   bron: string;
 }
 
+/** Veldnamen waaronder de soort binnen kan komen. */
+const SOORT_VELDEN = [
+  "soort", "type", "activity", "activiteit", "activityType", "exerciseType",
+  "sport", "workout", "naam", "name",
+];
+
+/** Wat er in het bericht stond, om in een foutmelding te kunnen tonen. */
+export function ontvangenVelden(body: unknown): Record<string, string> {
+  if (!body || typeof body !== "object") return {};
+  const uit: Record<string, string> = {};
+  for (const [k, v] of Object.entries(body as Record<string, unknown>)) {
+    if (k === "sleutel" || k === "token") continue;   // nooit teruggeven
+    uit[k] = String(v ?? "").slice(0, 60);
+  }
+  return uit;
+}
+
+function eersteVeld(b: Record<string, unknown>, velden: string[]): string {
+  for (const v of velden) {
+    const w = String(b[v] ?? "").trim();
+    if (w) return w;
+  }
+  return "";
+}
+
 /**
  * Leest wat er binnenkomt van het horloge.
  *
  * Alles wordt gecontroleerd: dit is de enige route in de app die van buiten de
  * browser bereikbaar is, en wat er binnenkomt is een tekstveld uit Tasker.
+ *
+ * De foutmeldingen maken met opzet onderscheid tussen "het veld was leeg" en
+ * "de waarde ken ik niet". Dat is bij het instellen precies het verschil tussen
+ * een variabele die niet bestaat en een vertaling die ontbreekt, en zonder dat
+ * onderscheid zoek je op de verkeerde plek.
  */
 export function leesExterneActiviteit(
   body: unknown, vandaag: string
@@ -103,17 +133,30 @@ export function leesExterneActiviteit(
   if (!body || typeof body !== "object") return { fout: "Geen leesbare gegevens" };
   const b = body as Record<string, unknown>;
 
-  const soort = herkenSoort(String(b.soort ?? b.type ?? b.activity ?? ""));
+  const ruweSoort = eersteVeld(b, SOORT_VELDEN);
+  if (!ruweSoort) {
+    return {
+      fout: "Het veld 'soort' kwam leeg binnen. In Tasker betekent dat meestal dat de "
+        + "variabele niet bestaat of nog niet gevuld is op het moment dat de HTTP Request "
+        + "afgaat. Zet er een Flash-actie voor om te zien wat de variabele werkelijk bevat.",
+    };
+  }
+
+  const soort = herkenSoort(ruweSoort);
   if (!soort) {
     return {
-      fout: `Onbekende activiteit "${String(b.soort ?? b.type ?? "")}". Bekende soorten: `
-        + ACTIVITEITEN.map((a) => a.id).join(", "),
+      fout: `Activiteit "${ruweSoort}" niet herkend. Engelse namen uit Health Connect werken `
+        + "ook (RUNNING, WALKING, BIKING, STRENGTH_TRAINING, SWIMMING_POOL, HIKING, "
+        + `MOUNTAIN_BIKING). Onze eigen namen zijn: ${ACTIVITEITEN.map((a) => a.id).join(", ")}.`,
     };
   }
 
   const minuten = minutenUit(b);
   if (minuten == null) {
-    return { fout: "Geef een duur mee: minuten, of seconden in het veld 'seconden'." };
+    return {
+      fout: "Geen bruikbare duur gevonden. Geef 'minuten' mee, of 'seconden'. "
+        + "Kwam het veld leeg binnen, kijk dan of de variabele in Tasker gevuld is.",
+    };
   }
 
   const datum = String(b.datum ?? b.date ?? "").slice(0, 10);

@@ -164,11 +164,16 @@ export default function Koppeling() {
       ) : (
         <>
           <div style={T.kaart}>
-            <div style={T.label}>Adres (POST)</div>
-            <code style={S.code}>{adres}</code>
-            <button style={{ ...T.secundair, marginTop: 8 }} onClick={() => kopieer(adres, "adres")}>
+            <div style={T.label}>Adres (POST) — alles achter de URL</div>
+            <code style={S.code}>{`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`}</code>
+            <button style={{ ...T.secundair, marginTop: 8 }}
+              onClick={() => kopieer(`${adres}?soort=%hc_type&minuten=%hc_duration&datum=%hc_date&id=%hc_id`, "adres")}>
               {gekopieerd === "adres" ? <><Check size={14} /> Gekopieerd</> : <><Copy size={14} /> Adres kopiëren</>}
             </button>
+            <p style={T.hint}>
+              Laat de Body in Tasker leeg. Zo kan een variabele die nog leeg is niets kapotmaken —
+              er komt dan gewoon een leeg veld binnen en de app zegt precies wélk veld.
+            </p>
 
             <div style={{ ...T.label, marginTop: 16 }}>Header</div>
             <code style={S.code}>Authorization: Bearer {sleutel}</code>
@@ -177,16 +182,32 @@ export default function Koppeling() {
               {gekopieerd === "header" ? <><Check size={14} /> Gekopieerd</> : <><Copy size={14} /> Header kopiëren</>}
             </button>
 
-            <div style={{ ...T.label, marginTop: 16 }}>Inhoud (JSON)</div>
-            <code style={S.code}>{"{\"soort\":\"%hc_type\",\"minuten\":%hc_duration,\"datum\":\"%hc_date\",\"id\":\"%hc_id\"}"}</code>
+            <div style={{ ...T.label, marginTop: 16 }}>Eerst proberen zonder te boeken</div>
+            <code style={S.code}>{`${adres}?proef=1&soort=RUNNING&minuten=42`}</code>
+            <button style={{ ...T.secundair, marginTop: 8 }}
+              onClick={() => kopieer(`${adres}?proef=1&soort=RUNNING&minuten=42`, "proef")}>
+              {gekopieerd === "proef" ? <><Check size={14} /> Gekopieerd</> : <><Copy size={14} /> Proefadres kopiëren</>}
+            </button>
           </div>
 
           <p style={T.hint}>
-            Zet in Tasker een profiel op dat afgaat bij een nieuwe activiteit in Health Connect, met
-            als actie een HTTP Request naar bovenstaand adres. De namen van de variabelen hangen af
-            van je Tasker-plug-in; wat de app verwacht is een soort, een duur in minuten en
-            een datum. Dezelfde training twee keer insturen levert één regel op, dus een
-            mislukte poging mag je gerust overdoen.
+            <strong>Zo stel je het in.</strong> Maak in Tasker een taak met één actie: Net → HTTP
+            Request, Method POST, bovenstaande URL, de header erbij, Body leeg. Zet er daarvoor
+            tijdelijk een Flash-actie met <code>%hc_type %hc_duration</code> erin, zodat je ziet
+            of die variabelen werkelijk gevuld zijn — dat is negen van de tien keer waar het
+            misgaat.
+          </p>
+          <p style={T.hint}>
+            <strong>De namen van de variabelen</strong> hangen af van je plug-in en zijn zelden
+            <code>%hc_...</code>. Kijk in het actiescherm van de plug-in welke variabelen hij
+            teruggeeft en gebruik die. Vertalen hoef je niet: Engelse namen uit Health Connect
+            worden herkend (RUNNING, WALKING, BIKING, MOUNTAIN_BIKING, STRENGTH_TRAINING,
+            SWIMMING_POOL, HIKING), net als de Nederlandse.
+          </p>
+          <p style={T.hint}>
+            Gaat er iets mis, dan staat in het antwoord welke velden er binnenkwamen en met welke
+            waarde. Dezelfde training twee keer insturen levert één regel op, dus een mislukte
+            poging mag je gerust overdoen.
           </p>
           <p style={T.hint}>
             De app rekent de punten zelf uit je gewicht en je basaal metabolisme. Een verbranding
