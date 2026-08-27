@@ -8,6 +8,8 @@ import type { BonKeuze } from "./Bonscanner";
 import { euroTekst, raamLijst } from "@/lib/prijzen";
 import { verschuifWeek, weekLabel, weekVan } from "@/lib/weeksleutel";
 import Weekvoorstel from "./Weekvoorstel";
+import Weekfoto, { legeWeekfotoStaat } from "./Weekfoto";
+import type { WeekfotoStaat } from "./Weekfoto";
 import type { Prijsboek } from "@/lib/prijzen";
 import {
   Search, Plus, Star, Calendar, ShoppingCart, BookOpen, Camera, Link2,
@@ -206,6 +208,12 @@ export default function App() {
   // De weegdag uit de tracker: daar begint de trackerweek. Null zonder profiel.
   const [weegdag, setWeegdag] = useState<number | null>(null);
   const [tab, setTab] = useState("recepten");
+  // Het gefotografeerde briefje. Staat hier en niet in het weekmenu omdat je er
+  // halverwege vandaan loopt om een ontbrekend gerecht aan te maken: dan mag de
+  // lijst niet weg zijn als je terugkomt.
+  const [weekfoto, setWeekfoto] = useState<WeekfotoStaat | null>(null);
+  // Naam die het invoerscherm alvast invult, van een briefje dat je overneemt.
+  const [nieuwTitel, setNieuwTitel] = useState("");
   // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
   // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
   const [receptPunten, setReceptPunten] = useState<ReceptPuntenKaart>({});
@@ -403,8 +411,14 @@ export default function App() {
   const addRecept = async (r: Partial<Recept>) => {
     const saved = await api.addRecept(r);
     setRecepten((p) => [...p, saved].sort((a, b) => a.titel.localeCompare(b.titel)));
+    // Kwam je hier vanaf een gefotografeerd briefje, dan hoor je terug te komen
+    // waar je gebleven was — met het nieuwe recept er nu wel in.
+    if (nieuwTitel) { setNieuwTitel(""); setTab("week"); return; }
     setTab("recepten");
   };
+
+  /** Een gerecht van het briefje aanmaken: naar het invoerscherm, naam ingevuld. */
+  const maakGerechtVanBriefje = (titel: string) => { setNieuwTitel(titel); setTab("toevoegen"); };
   const updateRecept = async (id: string, patch: Partial<Recept>) => {
     const updated = await api.updateRecept(id, patch);
     setRecepten((p) => p.map((x) => (x.id === id ? updated : x)));
@@ -513,13 +527,15 @@ export default function App() {
                 onPuntenVeranderd={ververPunten}
               />
             )}
-            {tab === "toevoegen" && <Toevoegen onAdd={addRecept} />}
+            {tab === "toevoegen" && <Toevoegen onAdd={addRecept} startTitel={nieuwTitel} />}
             {tab === "week" && (
               <Weekmenu
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
                 onUpdateRecept={updateRecept}
                 weekSleutel={weekSleutel} onWisselWeek={wisselWeek} weekLaadt={weekLaadt}
                 weegdag={weegdag}
+                weekfoto={weekfoto} setWeekfoto={setWeekfoto}
+                onMaakRecept={maakGerechtVanBriefje}
               />
             )}
             {tab === "boodschappen" && (
@@ -1482,8 +1498,11 @@ function BewerkRecept({
 // ============================================================================
 // TOEVOEGEN
 // ============================================================================
-function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
-  const [modus, setModus] = useState("link");
+function Toevoegen({ onAdd, startTitel }: { onAdd: (r: Partial<Recept>) => void; startTitel?: string }) {
+  // Met een naam van een briefje in de hand is handmatig het snelste pad: de
+  // titel staat er al, jij vult de ingrediënten aan. Link en foto blijven staan
+  // voor als het recept ergens vandaan te halen is.
+  const [modus, setModus] = useState(startTitel ? "hand" : "link");
   return (
     <div>
       <div style={S.segWrap}>
@@ -1491,7 +1510,19 @@ function Toevoegen({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
         <SegBtn active={modus === "foto"} onClick={() => setModus("foto")} icon={Camera} label="Foto" />
         <SegBtn active={modus === "hand"} onClick={() => setModus("hand")} icon={PencilLine} label="Handmatig" />
       </div>
-      {modus === "hand" && <HandmatigForm onAdd={onAdd} />}
+      {startTitel && (
+        <p style={S.briefjeHint}>
+          Van je briefje: <strong>{startTitel}</strong>. Sla je het op, dan kom je terug bij het
+          weekmenu en staat de dag voor je ingevuld.
+        </p>
+      )}
+      {modus === "hand" && (
+        <HandmatigForm
+          key={startTitel || "leeg"}
+          onAdd={onAdd}
+          initial={startTitel ? { ...leegRecept(), titel: startTitel } : undefined}
+        />
+      )}
       {modus === "foto" && <FotoImport onAdd={onAdd} />}
       {modus === "link" && <LinkImport onAdd={onAdd} />}
     </div>
@@ -1903,6 +1934,7 @@ function normaliseer(p: any): Partial<Recept> {
 // ============================================================================
 function Weekmenu({
   recepten, week, setWeek, dagen, onUpdateRecept, weekSleutel, onWisselWeek, weekLaadt, weegdag,
+  weekfoto, setWeekfoto, onMaakRecept,
 }: {
   recepten: Recept[]; week: WeekState; setWeek: React.Dispatch<React.SetStateAction<WeekState>>; dagen: readonly string[];
   onUpdateRecept: (id: string, patch: Partial<Recept>) => Promise<void>;
@@ -1911,6 +1943,10 @@ function Weekmenu({
   weekLaadt: boolean;
   /** Op welke dag de trackerweek begint. Null zonder trackerprofiel. */
   weegdag: number | null;
+  /** Het gefotografeerde briefje; null als er geen bezig is. */
+  weekfoto: WeekfotoStaat | null;
+  setWeekfoto: React.Dispatch<React.SetStateAction<WeekfotoStaat | null>>;
+  onMaakRecept: (titel: string) => void;
 }) {
   const [kiesDag, setKiesDag] = useState<string | null>(null);
   const [voorstelOpen, setVoorstelOpen] = useState(false);
@@ -2034,8 +2070,40 @@ function Weekmenu({
     setVoorstelOpen(false);
   };
 
+  /**
+   * De dagen van een gefotografeerd briefje overnemen.
+   *
+   * Alleen de dagen die op het briefje stonden of die je zelf hebt ingevuld.
+   * Anders dan bij een voorstel wordt de rest van de week niet leeggemaakt: een
+   * half briefje hoort geen halve week op te leveren.
+   */
+  const neemFotoOver = (keuze: { dag: string; recipeId: string }[]) => {
+    setWeek((p) => {
+      const slots = { ...p.slots };
+      for (const k of keuze) {
+        const r = recepten.find((x) => x.id === k.recipeId);
+        if (!r) continue;
+        slots[slotKey(k.dag, HOOFD_MAALTIJD)] = { recipeId: r.id, personen: r.personen || 4 };
+      }
+      return { ...p, slots };
+    });
+    setWeekfoto(null);
+  };
+
   return (
     <div>
+      {weekfoto && (
+        <Weekfoto
+          recepten={recepten}
+          dagen={dagen}
+          staat={weekfoto}
+          setStaat={setWeekfoto}
+          onOvernemen={neemFotoOver}
+          onMaakRecept={onMaakRecept}
+          onSluiten={() => setWeekfoto(null)}
+        />
+      )}
+
       {voorstelOpen && (
         <Weekvoorstel
           dagen={dagen}
@@ -2073,6 +2141,9 @@ function Weekmenu({
           )}
         </div>
         <div style={S.weekKnoppen}>
+          <button onClick={() => setWeekfoto(legeWeekfotoStaat())} style={S.voorstelBtn}>
+            <Camera size={14} /> Van een briefje
+          </button>
           <button onClick={() => setVoorstelOpen(true)} style={S.voorstelBtn}>
             <Sparkles size={14} /> Stel een week voor
           </button>
@@ -3694,6 +3765,7 @@ const S: Record<string, React.CSSProperties> = {
   voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
   boodWeek: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 10px" },
   weekKnoppen: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginLeft: "auto" },
+  briefjeHint: { background: "var(--accent-soft)", borderRadius: 12, padding: "10px 13px", fontSize: 12.5, lineHeight: 1.6, color: "var(--ink)", margin: "0 0 12px" },
   voorstelBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderRadius: 999, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
   weekGelijk: { display: "block", marginTop: 6, background: "none", border: "none", padding: 0, fontSize: 11.5, lineHeight: 1.4, color: "var(--accent)", textAlign: "left", cursor: "pointer", textDecoration: "underline" },
   weekKiezer: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "6px 8px", marginBottom: 12 },

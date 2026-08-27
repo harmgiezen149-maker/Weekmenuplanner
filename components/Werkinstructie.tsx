@@ -249,6 +249,30 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="briefje" titel="Het weekmenu van een briefje overnemen">
+          <p style={{ margin: "0 0 8px" }}>
+            Schrijf je de week liever eerst met de hand op? Op het weekmenu staat
+            <strong> Van een briefje</strong>. Fotografeer je lijstje met alle dagen in beeld; de app
+            leest per dag wat je opgeschreven hebt en zoekt er het recept bij.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Wat hij zeker weet vult hij in — daar staat een knop bij om er alsnog iets anders van te
+            maken. Twijfelt hij, dan vraagt hij het: "Bedoel je dit?", met de gerechten die er vlak
+            achter zitten ernaast. Dat gebeurt vooral als je een rijtje ingrediënten hebt
+            opgeschreven in plaats van een naam.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Staat een gerecht nog niet in je kookboek, dan kun je het uit de lijst kiezen of het
+            meteen aanmaken — dat brengt je naar het gewone invoerscherm met de naam al ingevuld.
+            Sla je het op, dan kom je terug bij je briefje en is die dag ingevuld. Dagen die je nog
+            open had staan mag je zo laten of door de app laten voorstellen.
+          </p>
+          <p style={{ margin: 0 }}>
+            Ook hier verandert er niets tot je onderaan bevestigt, en dan alleen de dagen met een
+            gerecht. De rest van je weekmenu blijft staan.
+          </p>
+        </H>
+
         <H id="voorstel" titel="Een week laten voorstellen">
           <p style={{ margin: "0 0 8px" }}>
             Op het weekmenu staat "Stel een week voor". De app zet zeven avonden voor je klaar uit

@@ -10,6 +10,8 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
   moeilijkheid, bereidingstijd en een eigen score (1–5 sterren).
 - **Filteren en zoeken** op al die kenmerken, zodat je gerechten die je lekker vond
   snel terugvindt.
+- **Weekmenu van een foto**: schrijf je week op papier, fotografeer het briefje en
+  neem het dag voor dag over — met een vraag waar de app twijfelt.
 - **Weekmenu** samenstellen met een vrij instelbare startdag, en per dag het aantal
   personen kiezen.
 - **Boodschappenlijst** die automatisch alle ingrediënten optelt en per recept
@@ -1543,6 +1545,78 @@ voorstel niets te maken.
 
 ---
 
+## Een weekmenu van een papieren briefje
+
+Het weekmenu wordt hier nog steeds eerst met de hand opgeschreven, aan de
+keukentafel, op een briefje. Dat is geen tekortkoming die de app moet oplossen —
+het is prettiger dan een telefoon. Wat het oplevert is alleen een briefje dat
+niemand daarna overtypt.
+
+`components/Weekfoto.tsx` neemt dat briefje over: foto erin, en per dag een
+regel met wat eraan gedaan wordt.
+
+### Lezen en koppelen zijn twee dingen
+
+De route `/api/week/foto` doet precies één ding: kijken wat er staat. Het model
+krijgt de opdracht letterlijk over te nemen wat er bij een dag geschreven is,
+niets aan te vullen en niets te corrigeren; `lib/weekfoto.ts` brengt dat terug
+tot de zeven dagen die de app kent. Lege dagen komen als lege regel terug — dat
+is informatie, geen ontbrekende regel.
+
+Het koppelen aan recepten gebeurt daarna in de browser, met
+`lib/receptmatch.ts` en de recepten die het scherm toch al geladen heeft. Dat is
+niet alleen goedkoper en beter te testen: het zorgt ervoor dat een dag zichzelf
+koppelt zodra je het ontbrekende gerecht alsnog aanmaakt, zonder de foto opnieuw
+te lezen.
+
+### Drie uitkomsten, niet twee
+
+Op een briefje staat zelden de titel van een recept. Er staat "pasta salade"
+terwijl het recept "Pastasalade met feta en olijven" heet, of er staat een rijtje
+ingrediënten — "spinazie, gehakt, pasta" — waar je zelf wel weet welk gerecht je
+bedoelt. Daarom scoort `zoekRecept` niet alleen, maar geeft ook aan hoe zeker het
+is:
+
+- **zeker** (70 punten of meer, én minstens 15 punten voor op de nummer twee) —
+  de dag wordt ingevuld, met een knop om er iets anders van te maken.
+- **misschien** — "Bedoel je X?", met de recepten die er vlak achter zitten
+  ernaast. Bij een rijtje ingrediënten passen er vaak twee even goed; dan is één
+  ervan noemen en de rest verzwijgen geen keuze maar een gok.
+- **niets** — dit staat niet in je kookboek.
+
+Het verschil tussen de eerste en de tweede is wat bepaalt of de app iets invult
+of iets vraagt. Een app die bij twijfel toch invult zet stilletjes het verkeerde
+gerecht op woensdag, en dat merk je pas in de winkel.
+
+Titelwoorden tellen zwaar (10), een titel die aaneengeschreven is wat op het
+briefje los staat iets minder (8, zodat "pasta salade" bij "Pastasalade"
+uitkomt), ingrediënten half (5). De som wordt gedeeld door het aantal gezochte
+woorden — anders wint een lang briefje altijd van een kort, ongeacht hoe goed het
+past. Alleen avondgerechten doen mee: zou een ontbijtrecept mogen winnen, dan
+komt "yoghurt met muesli" op woensdagavond te staan.
+
+### Wat er niet is, kun je maken
+
+Bij "misschien" en bij "niets" staat dezelfde knop: maak dit gerecht aan. Die
+brengt je naar het gewone invoerscherm — dezelfde link-, foto- en handmatige
+invoer als altijd — met de naam van het briefje alvast ingevuld. Sla je het op,
+dan kom je terug bij het weekmenu en heeft die dag zichzelf gekoppeld.
+
+Daarvoor staat de gelezen foto in `App` en niet in het weekmenu: je loopt er
+halverwege vandaan om een gerecht aan te maken, en dan mag het lijstje niet weg
+zijn als je terugkomt.
+
+### Lege dagen blijven leeg tot je iets kiest
+
+Een briefje is zelden compleet. Voor de dagen waar niets staat is er een knop die
+`/api/week/voorstel` alleen voor díe dagen aanroept — hetzelfde voorstel als
+hierboven, maar dan voor de gaten. En net als daar verandert er niets aan je
+weekmenu tot je onderaan bevestigt. Alleen de dagen met een gerecht worden gezet:
+een half briefje hoort geen halve week op te leveren, dus de rest van je weekmenu
+blijft staan.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1605,6 +1679,7 @@ app/
     recipes/[id]/route.ts   PUT / DELETE per recept
     week/route.ts           GET / PUT weekplanning per week
     week/voorstel/route.ts  POST een voorgesteld weekmenu
+    week/foto/route.ts      POST een gefotografeerd weekmenu uitlezen
     import/route.ts         Foto- en link-import via Anthropic API
     tracker/profiel/route.ts      GET / PUT profiel + berekend budget
     tracker/dag/[datum]/route.ts  GET dag, POST / PATCH / DELETE een regel
@@ -1629,6 +1704,7 @@ components/
   Login.tsx             Het loginscherm (staat los van de rest van de app)
   Bonscanner.tsx        Kassabon of productfoto omzetten in voorraadartikelen
   Weekvoorstel.tsx      Het voorgestelde weekmenu, met per dag waarom
+  Weekfoto.tsx          Een gefotografeerd briefje overnemen, dag voor dag
   ServiceWorker.tsx     Registreert public/sw.js; toont zelf niets
   KookboekApp.tsx       De volledige UI van het kookboek (client-component)
   Werkinstructie.tsx    De werkinstructie achter het info-knopje; gedeeld door
@@ -1675,6 +1751,8 @@ lib/
   push.ts               VAPID-sleutelpaar, abonnementen en versturen
   weeksleutel.ts        ISO-weken aanduiden en erdoorheen bladeren (puur)
   weekvoorstel.ts       Een weekmenu samenstellen uit je eigen recepten (puur)
+  weekfoto.ts           Een gefotografeerd weekmenu uitlezen (puur, getest)
+  receptmatch.ts        Wat op het briefje staat koppelen aan een recept (puur)
   afbeelding.ts         Foto's schalen en comprimeren (browser)
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
