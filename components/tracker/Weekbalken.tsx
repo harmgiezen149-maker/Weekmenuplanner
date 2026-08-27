@@ -12,6 +12,12 @@ import type { WeekSamenvatting } from "@/lib/tracker/week";
 //
 // Over budget krijgt een eigen kleur én een getal erbij, zodat het ook zonder
 // kleur te zien is.
+//
+// Bewegingspunten verruimen het budget van die dag. Zonder ze te tekenen klopt
+// het beeld niet: een dag van 48 punten met 6 punten uit beweging steekt boven
+// de budgetlijn uit terwijl hij binnen zijn eigen budget bleef. Daarom staat
+// onderaan de staaf in het groen hoeveel er die dag bij verdiend is, met een
+// groene ijkstreep op het verruimde budget.
 // ---------------------------------------------------------------------------
 
 const DAGLETTERS = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -24,7 +30,12 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
   const vlakH = B - MARGE.boven - MARGE.onder;
   const basis = MARGE.boven + vlakH;
 
-  const hoogsteWaarde = Math.max(week.dagbudget, ...week.dagen.map((d) => d.punten));
+  const hoogsteWaarde = Math.max(
+    week.dagbudget,
+    ...week.dagen.map((d) => d.punten),
+    // Anders valt de ijkstreep van een dag met veel beweging buiten beeld.
+    ...week.dagen.map((d) => week.dagbudget + d.bewegingspunten),
+  );
   const top = hoogsteWaarde * 1.1 || 1;
   const y = (punten: number) => basis - (punten / top) * vlakH;
 
@@ -41,7 +52,8 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
         aria-label={
           `Punten per dag tegen een dagbudget van ${week.dagbudget}. ` +
           week.dagen
-            .map((d) => `${DAGLETTERS[index(d.datum)]}: ${d.gelogd ? `${d.punten} punten` : "niet gelogd"}`)
+            .map((d) => `${DAGLETTERS[index(d.datum)]}: ${d.gelogd ? `${d.punten} punten` : "niet gelogd"}` +
+            (d.gelogd && d.bewegingspunten > 0 ? `, ${d.bewegingspunten} erbij uit beweging` : ""))
             .join(", ")
         }
       >
@@ -69,10 +81,29 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
           // Past het label in de balk, dan gaat het erin: erboven zou het bij
           // een dag vlak onder het budget op de budgetlijn belanden.
           const labelBinnen = hoogte >= 26;
+          // Het groene voetstuk is niet meer dan er die dag gegeten is: een
+          // wandeling van 8 punten op een dag van 5 punten zou anders een
+          // staaf opleveren die groter is dan wat er op tafel stond.
+          const groen = d.bewegingspunten > 0
+            ? Math.min(hoogte, basis - y(Math.min(d.bewegingspunten, d.punten)))
+            : 0;
+          const ruimBudget = week.dagbudget + d.bewegingspunten;
           return (
             <g key={d.datum}>
               <path d={balkPad(x, basis - hoogte, balkB, hoogte, 4)}
                 fill={over ? "var(--over)" : "var(--accent)"} />
+              {groen > 0 && (
+                <path
+                  d={groen >= hoogte
+                    ? balkPad(x, basis - groen, balkB, groen, 4)
+                    : voetPad(x, basis - groen, balkB, groen)}
+                  fill="var(--green)"
+                />
+              )}
+              {d.bewegingspunten > 0 && (
+                <line x1={x} x2={x + balkB} y1={y(ruimBudget)} y2={y(ruimBudget)}
+                  stroke="var(--green)" strokeWidth={1.5} strokeDasharray="4 3" />
+              )}
               <text
                 x={x + balkB / 2}
                 y={labelBinnen ? basis - hoogte + 13 : basis - hoogte - 5}
@@ -88,7 +119,10 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
                 {DAGLETTERS[index(d.datum)]}
               </text>
               <title>
-                {`${d.datum}: ${d.punten} punten${over ? `, ${d.overBudget} boven budget` : ""}`}
+                {`${d.datum}: ${d.punten} punten${over ? `, ${d.overBudget} boven budget` : ""}` +
+                 (d.bewegingspunten > 0
+                   ? `, ${d.bewegingspunten} punten erbij verdiend met bewegen (budget die dag ${ruimBudget})`
+                   : "")}
               </title>
             </g>
           );
@@ -102,6 +136,9 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
       <figcaption style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 10, fontSize: 11.5, fontWeight: 600, color: "var(--sub)" }}>
         <Merk kleur="var(--accent)" tekst="Binnen budget" />
         <Merk kleur="var(--over)" tekst="Uit de weekbuffer" />
+        {week.bewegingspuntenTotaal > 0 && (
+          <Merk kleur="var(--green)" tekst="Verdiend met bewegen" />
+        )}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <svg width="16" height="10" aria-hidden="true">
             <line x1="0" y1="5" x2="16" y2="5" stroke="var(--ink)" strokeWidth="1.5"
@@ -137,6 +174,17 @@ function balkPad(x: number, y: number, b: number, h: number, r: number): string 
     `L${x + b},${y + h}`,
     "Z",
   ].join(" ");
+}
+
+/**
+ * Het groene voetstuk van een staaf.
+ *
+ * Rechte bovenkant: het is een deel van dezelfde staaf, geen apart blokje.
+ * Vult het groen de hele staaf, dan tekent de aanroeper balkPad, zodat de
+ * afgeronde kop behouden blijft.
+ */
+function voetPad(x: number, y: number, b: number, h: number): string {
+  return `M${x},${y} L${x + b},${y} L${x + b},${y + h} L${x},${y + h} Z`;
 }
 
 /** 0 = maandag ... 6 = zondag. */

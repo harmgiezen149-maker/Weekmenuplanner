@@ -9,14 +9,17 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
 - **Recepten** opslaan met vaste, filterbare kenmerken: keuken, hoofdingrediënt,
   moeilijkheid, bereidingstijd en een eigen score (1–5 sterren).
 - **Filteren en zoeken** op al die kenmerken, zodat je gerechten die je lekker vond
-  snel terugvindt.
+  snel terugvindt. Het filterblok staat dicht tot je het nodig hebt.
+- **Recept van een bordfoto**: fotografeer wat er op tafel staat en de app maakt er
+  een receptvoorstel van.
 - **Weekmenu van een foto**: schrijf je week op papier, fotografeer het briefje en
   neem het dag voor dag over — met een vraag waar de app twijfelt.
 - **Weekmenu** samenstellen met een vrij instelbare startdag, en per dag het aantal
   personen kiezen.
 - **Boodschappenlijst** die automatisch alle ingrediënten optelt en per recept
   schaalt naar het gekozen aantal personen. Afvinkbaar tijdens het boodschappen doen.
-- **Importeren** van recepten op drie manieren: handmatig, via foto, of via een link.
+- **Importeren** van recepten op vier manieren: handmatig, via een foto van een
+  recept, via een foto van een opgediend bord, of via een link.
 - **Tracker** (`/tracker`) — een puntengebaseerde voedingstracker met een dagbudget
   dat wordt afgeleid van je lichaamsgegevens. Zie het hoofdstuk hieronder.
 - **Inzicht** (`/tracker/inzicht`) — je eetpatroon over twaalf weken, teruggerekend
@@ -1431,6 +1434,48 @@ Het recept met de meeste gaten staat bovenaan, want daar valt het meest te
 winnen. Een puntentotaal dat te laag uitvalt omdat er ingrediënten buiten vallen
 ziet er namelijk precies zo uit als een recept dat gewoon licht is.
 
+### Alle gaten in één keer dichten
+
+Aanwijzen waar de gaten zitten is niet genoeg. Bij zestig recepten is "open elk
+recept, druk op Aanvullen" werk dat niemand doet, en dan blijven de punten
+structureel te laag — met een paneel erbij dat dat elke dag herhaalt.
+
+In het paneel staat daarom één knop die alle onbekende ingrediënten van het hele
+kookboek laat schatten. `/api/tracker/ingredienten/schat-kookboek` doet twintig
+namen per aanroep, vier tegelijk, en zegt hoeveel er nog over is; het scherm
+roept net zo lang opnieuw aan tot er niets meer bijkomt en laat ondertussen zien
+hoe ver het is.
+
+Welke ingredienten dat zijn wordt op de server opnieuw bepaald en niet door het
+scherm aangeleverd: het scherm kent per recept hoogstens de eerste zes gaten, en
+dat is precies het verschil tussen "de gaten dichten" en "de eerste zes
+dichten".
+
+Namen waar het model op stukloopt gaan als *sla deze over* mee naar de volgende
+ronde. Zonder dat zou één ronde vol onbekende namen alles blokkeren wat erachter
+staat — en "sjalotjesconfituur van de buurman" blijft nu eenmaal onbekend.
+Daar wordt niet naar geraden: een verzonnen voedingswaarde is erger dan een
+ontbrekende, want je ziet er niets aan.
+
+Een maat die niet te lezen is ("een vleugje saffraan") wordt niet aangeraakt.
+Dat is geen ontbrekend product maar een onleesbare hoeveelheid, en die valt niet
+te schatten zonder te raden wat jij bedoelde. Het aantal staat wel in de melding
+achteraf, zodat je weet dat er nog iets te doen is.
+
+### Een nieuw recept wordt meteen doorgerekend
+
+Wat de knop hierboven achteraf repareert, hoort bij een nieuw recept niet te
+ontstaan. Elk recept dat je toevoegt — met de hand, uit een link, van een foto —
+gaat daarom meteen langs dezelfde schatting, op de achtergrond, met een balkje
+bovenin zolang het loopt. Zonder dat staat elk vers recept eerst met te weinig
+punten in de lijst tot je het toevallig opent.
+
+Het opslaan wacht er niet op, en een fout blijft stil: dit is een extraatje
+bovenop het opslaan, en een foutmelding over iets waar je niet om gevraagd hebt
+hoort niet over je scherm te komen. Wat niet lukt zie je terug in het paneel.
+Zonder trackerprofiel gebeurt het niet — dan worden er nergens punten getoond en
+zou het alleen een modelaanroep zonder doel zijn.
+
 ---
 
 ## Meerdere weken, delen en afdrukken
@@ -1617,6 +1662,50 @@ blijft staan.
 
 ---
 
+## Een recept van een bord, en een bord in het kookboek
+
+### Van een bordfoto een recept
+
+Naast "Foto" (een recept uit een tijdschrift of kookboek) staat "Bord". Daar
+fotografeer je wat er op tafel staat, en `/api/import` met `type: "bord"` maakt
+er een receptvoorstel van: een titel, de ingrediënten die te zien zijn en een
+korte werkwijze.
+
+Het verschil met de gewone foto-import is wezenlijk: daar staat het recept op de
+foto, hier wordt het gereconstrueerd. Aan een bord is niet te zien hoeveel er in
+de pan ging of hoe lang het op het vuur stond. De instructie vraagt daarom om
+ingrediënten die zichtbaar zijn of onmisbaar voor het gerecht, en verbiedt
+merken, garneringen en bijgerechten die er niet liggen. Hoeveelheden zijn voor
+twee personen — een recept voor één is zelden waar iemand naar zoekt.
+
+Dat het een aanname is staat in gewone taal op het scherm, en het voorstel gaat
+net als elke andere import langs het bevestigingsscherm. De foto zelf wordt de
+receptafbeelding: je hebt hem toch al gemaakt, en een foto van het echte
+resultaat is beter dan een lege kaart.
+
+### En andersom: een fotoschatting in het kookboek
+
+Wat je in de tracker fotografeert heb je vaak zelf gekookt. Na de schatting
+staat er daarom een vraag bij: *ook als recept in het kookboek?* Aanvinken vraagt
+om een naam en om waar het gerecht om draait, en dan worden de herkende
+onderdelen de ingrediënten en de foto de receptafbeelding.
+
+Standaard staat die vraag uit. Eén bord loggen is niet hetzelfde als een recept
+bewaren, en het tweede hoort niet als bijvangst van het eerste te gebeuren.
+
+Voor één persoon, want dit is één bord; doen alsof het een gezinsmaaltijd was
+zou de hoeveelheden verzinnen. Waar het gerecht om draait wordt gevraagd en niet
+geraden: dat veld stuurt mee wat het weekvoorstel doet — twee vleesavonden
+achter elkaar krijgen aftrek — en een gok van de app zou dat stil beïnvloeden.
+
+Het opslaan gaat eerst naar het kookboek en dan pas naar de dag, omdat het
+loggen het scherm verlaat. Lukt het recept niet, dan blijf je staan met de
+melding erbij en is er niets kwijt. Daarna worden de onderdelen nog op de
+achtergrond geschat: "geroosterde krieltjes" staat in geen enkele basislijst, en
+zonder die stap zou het verse recept met nul punten in je kookboek staan.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1695,6 +1784,7 @@ app/
     tracker/ingredienten/route.ts    Eigen ingrediëntenlijst beheren
     tracker/ingredienten/schat/route.ts  Voedingswaarden laten schatten
     tracker/ingredienten/schat-alles/route.ts  Een heel recept in een keer
+    tracker/ingredienten/schat-kookboek/route.ts  Alle gaten in het kookboek
     tracker/dagmenu/route.ts      Dagmenu uit de weekplanner in het logboek
     tracker/beweging/route.ts     Bewegingsactiviteiten en hun punten
     tracker/foto/route.ts         Foto-schatting via de Anthropic API
@@ -1778,6 +1868,7 @@ lib/
     ingredienten-opslag.ts  Die lijst bewaren onder wl:ingredienten
     schatting.ts        Een geschat ingrediënt uitlezen en melden
     schat-model.ts      De modelaanroep achter het schatten
+    schat-bulk.ts       Een reeks ingredienten schatten en bewaren
     herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
     meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
     koppeling.ts        Externe activiteiten en geplakte lijsten lezen (puur)

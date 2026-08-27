@@ -196,9 +196,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             gegeten hebt.
           </p>
           <p style={{ margin: "0 0 8px" }}>
-            Filter op elk kenmerk of op een minimale score, schuif de tijd-slider om lange recepten
-            weg te laten, en zoek op titel <em>of op ingrediënt</em> — "courgette" levert elk recept
-            op waar courgette in zit. Sorteren kan op naam, score of vaakst gegeten.
+            Het zoekveld staat altijd klaar; zoeken kan op titel <em>of op ingrediënt</em> —
+            "courgette" levert elk recept op waar courgette in zit. Alle filters zitten achter de
+            knop <strong>Filters en sorteren</strong>, die dicht staat tot je hem opent: filter op
+            elk kenmerk of op een minimale score, schuif de tijd-slider om lange recepten weg te
+            laten, en sorteer op naam, score of vaakst gegeten. Staat de knop dicht terwijl er iets
+            aanstaat, dan zie je het aantal in een bolletje op de knop.
           </p>
           <p style={{ margin: 0 }}>
             Tik een kaart aan voor het hele recept. Daar pas je de score aan, hoog je de
@@ -217,6 +220,10 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             over meerdere pagina's, voeg dan eerst álle pagina's toe en laat het daarna pas uitlezen.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            <strong>Bord</strong> — fotografeer een opgediend bord; de app maakt er een
+            receptvoorstel van. Zie het kopje hieronder.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             <strong>Handmatig</strong> — alles zelf invoeren, inclusief winkel en afdeling per
             ingrediënt.
           </p>
@@ -225,6 +232,11 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             Bevat het recept standaard kruiden zoals zout en peper, dan vraagt de app of je die wilt
             meenemen. Meestal weglaten — die staan al in je kast.
           </div>
+          <p style={{ margin: "8px 0 0" }}>
+            Zodra een recept is opgeslagen worden de ingrediënten die de app nog niet kent meteen
+            geschat, op de achtergrond. Bovenin staat zolang een balkje; daarna klopt het
+            puntengetal op het kaartje.
+          </p>
         </H>
 
         <H id="weekmenu" titel="Weekmenu">
@@ -246,6 +258,34 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           <p style={{ margin: 0 }}>
             Bij <strong>Leegmaken</strong> volgt eerst een korte evaluatie: per gerecht een score, en
             de gegeten-teller gaat omhoog. Daarna is de week klaar voor een nieuwe planning.
+          </p>
+        </H>
+
+        <H id="bordfoto" titel="Een recept maken van een foto van je bord">
+          <p style={{ margin: "0 0 8px" }}>
+            Op <strong>Toevoegen</strong> staat naast Foto ook <strong>Bord</strong>. Foto is voor
+            een recept uit een tijdschrift of kookboek; Bord is voor wat er op tafel staat. De app
+            maakt er een receptvoorstel van: de naam van het gerecht, de ingrediënten die te zien
+            zijn en een korte werkwijze.
+          </p>
+          <p style={{ margin: 0 }}>
+            Hoeveelheden en bereidingstijd zijn een aanname — aan een bord is niet te zien hoeveel
+            er in de pan ging. Ze staan voor twee personen klaar en je past ze aan in het
+            bevestigingsscherm, net als bij elke andere import. De foto wordt de receptafbeelding.
+          </p>
+        </H>
+
+        <H id="fotoscan-kookboek" titel="Een gefotografeerd bord ook bewaren als recept">
+          <p style={{ margin: "0 0 8px" }}>
+            Scan je in de tracker een foto van je bord, dan staat onder de schatting de vraag of
+            het gerecht ook <strong>in het kookboek</strong> moet. Vink je die aan, dan vraagt de
+            app om een naam en om waar het gerecht om draait, en worden de herkende onderdelen de
+            ingrediënten van een nieuw recept — met dezelfde foto erbij.
+          </p>
+          <p style={{ margin: 0 }}>
+            Het recept staat voor één persoon, want je fotografeerde één bord. Kook je vaker voor
+            meer mensen, pas het aantal dan aan in het kookboek; de hoeveelheden schalen mee op de
+            boodschappenlijst.
           </p>
         </H>
 
@@ -403,10 +443,16 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             ingrediënt buiten de puntentelling valt. Klap het open en je ziet per recept wélk
             ingrediënt het is.
           </p>
-          <p style={{ margin: 0 }}>
+          <p style={{ margin: "0 0 8px" }}>
             Zo'n recept telt te laag — en dat zie je aan het getal niet, want een licht recept ziet
             er hetzelfde uit. Vul het ingrediënt aan (potlood → Aanvullen) of zet er een maat bij
             die de app kent, en het klopt weer.
+          </p>
+          <p style={{ margin: 0 }}>
+            Staat er een hele rij, gebruik dan <strong>Alle ontbrekende ingrediënten schatten</strong>
+            in datzelfde balkje. Dat loopt je hele kookboek door. Wat het model niet kent blijft
+            onbekend en wordt bij naam gemeld — daar wordt niet naar geraden. Geschatte waarden zijn
+            door niemand nagekeken; ze blijven per recept aan te passen.
           </p>
         </H>
 
@@ -477,6 +523,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             De week loopt van weegdag tot weegdag, niet van maandag tot zondag: op de weegdag reset de
             buffer. Dagen zonder logging tellen niet mee in het weekgemiddelde — een dag die je vergat
             was geen dag zonder eten.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            In de grafiek staat onderaan een staaf <strong>in het groen</strong> wat je die dag met
+            bewegen hebt verdiend, met een groene streep op je budget van die dag. Zonder dat zou een
+            dag van 48 punten met 6 punten uit beweging boven de budgetlijn uitsteken terwijl hij
+            keurig binnen zijn eigen budget bleef.
           </p>
           <p style={{ margin: "0 0 8px" }}>
             <strong>Wegen</strong> — één getal is genoeg. De grafiek toont je metingen als punten en de

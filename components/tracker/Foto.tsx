@@ -1,15 +1,22 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, BookOpen, Camera, Check, Loader2, Trash2 } from "lucide-react";
 import { T } from "./stijl";
 import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
 import { CATEGORIE_LABEL, CATEGORIEEN, MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Category, Maaltijd, Nutrients } from "@/lib/tracker/types";
 import type { FotoItem } from "@/lib/tracker/foto";
+import { comprimeerAfbeelding } from "@/lib/afbeelding";
+import { HOOFDINGREDIENTEN } from "@/lib/types";
 
 const MAX_ZIJDE = 1400; // groot genoeg om porties te kunnen zien
+
+/** De maaltijdnamen van de tracker naar die van het kookboek. */
+const KOOKBOEK_MAALTIJD: Record<Maaltijd, string> = {
+  ontbijt: "Ontbijt", lunch: "Lunch", diner: "Avondeten", snack: "Toetje",
+};
 
 /**
  * Een foto van je bord laten schatten.
@@ -17,6 +24,11 @@ const MAX_ZIJDE = 1400; // groot genoeg om porties te kunnen zien
  * Het resultaat is altijd een BEWERKBAAR CONCEPT: een schatting uit een foto
  * is een startpunt, geen meting. Er wordt niets opgeslagen voordat je het hebt
  * nagekeken, en bij een lage zekerheid wordt de portiegrootte gemarkeerd.
+ *
+ * Wat je fotografeert heb je vaak zelf gekookt. Daarom staat de vraag erbij of
+ * het ook in het kookboek moet: dezelfde foto, dezelfde onderdelen, en dan
+ * hoef je het gerecht niet een tweede keer in te typen. Standaard staat die
+ * vraag uit — één handeling loggen is niet hetzelfde als een recept bewaren.
  */
 export default function Foto({
   maaltijd, datumLabel, schaal, bezig, fout, onOpslaan,
@@ -34,6 +46,10 @@ export default function Foto({
   const [items, setItems] = useState<FotoItem[] | null>(null);
   const [eigenFout, setEigenFout] = useState("");
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
+  const [naarKookboek, setNaarKookboek] = useState(false);
+  const [receptTitel, setReceptTitel] = useState("");
+  const [receptHoofd, setReceptHoofd] = useState<string>(HOOFDINGREDIENTEN[1]);
+  const [bewaartRecept, setBewaartRecept] = useState(false);
 
   const kiesFoto = async (bestand: File) => {
     setEigenFout(""); setItems(null);
@@ -48,6 +64,9 @@ export default function Foto({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "De foto kon niet worden verwerkt");
       setItems(data.items);
+      // Eén herkend gerecht is meteen een bruikbare naam; bij meer onderdelen
+      // weet alleen jij hoe het heet.
+      setReceptTitel(data.items?.length === 1 ? String(data.items[0].name ?? "") : "");
     } catch (e) {
       setEigenFout(e instanceof Error ? e.message : "Er ging iets mis");
     } finally { setAnalyseert(false); }
@@ -74,6 +93,78 @@ export default function Foto({
 
   const totaalRaw = componenten.reduce((s, c) => s + c.points_raw, 0);
   const punten = toonPunten(totaalRaw, schaal);
+
+  /**
+   * Het gerecht als recept in het kookboek zetten.
+   *
+   * De onderdelen van de foto worden de ingrediënten, voor één persoon: dit is
+   * één bord, en doen alsof het een gezinsmaaltijd was zou de hoeveelheden
+   * verzinnen. In het kookboek staan ze daarna gewoon te wijzigen.
+   */
+  const bewaarAlsRecept = async () => {
+    const titel = receptTitel.trim() || (items?.length === 1 ? items[0].name : "Bord van de foto");
+    const res = await fetch("/api/recipes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        titel,
+        hoofd: receptHoofd,
+        maaltijd: KOOKBOEK_MAALTIJD[maal],
+        personen: 1,
+        tijd: 30,
+        score: 0,
+        gegeten: 1,
+        // Kleiner dan de foto die het model kreeg: in het kookboek staat hij
+        // op een kaartje, en de opslag heeft een grens per waarde.
+        afbeelding: await comprimeerAfbeelding(voorbeeld).catch(() => ""),
+        ingredienten: (items ?? []).map((i) => ({
+          naam: i.name, hoev: i.amount, eenheid: i.unit,
+        })),
+        bereiding: "",
+      }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d?.error || "Het recept kon niet worden opgeslagen");
+    }
+
+    // De onderdelen van een bord zijn zelden bekende ingrediënten ("geroosterde
+    // krieltjes"). Zonder deze stap staat het verse recept meteen met nul
+    // punten in het kookboek. Op de achtergrond, en stil als het misgaat: het
+    // recept is opgeslagen, dat is wat je gevraagd had.
+    void fetch("/api/tracker/ingredienten/schat-alles", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ namen: (items ?? []).map((i) => i.name) }),
+    }).catch(() => {});
+  };
+
+  /**
+   * Opslaan: eerst het kookboek, dan de dag.
+   *
+   * In die volgorde omdat het loggen het scherm verlaat. Lukt het recept niet,
+   * dan blijf je hier staan met de melding erbij en is er niets kwijt — een
+   * gerecht dat je hebt aangevinkt hoort niet stilletjes te verdwijnen omdat
+   * het loggen wel lukte.
+   */
+  const bewaar = async () => {
+    setEigenFout("");
+    if (naarKookboek) {
+      setBewaartRecept(true);
+      try {
+        await bewaarAlsRecept();
+      } catch (e) {
+        setEigenFout(e instanceof Error ? e.message : "Het recept kon niet worden opgeslagen");
+        return;
+      } finally { setBewaartRecept(false); }
+    }
+    onOpslaan({
+      name: items && items.length === 1 ? items[0].name : "Bord van de foto",
+      meal: maal,
+      source: "photo",
+      amount: 1,
+      unit: "portie",
+      components: componenten,
+    }, false);
+  };
 
   const wijzig = (index: number, veld: keyof FotoItem, waarde: string) => {
     setItems((lijst) => (lijst ?? []).map((i, n) => {
@@ -208,16 +299,43 @@ export default function Foto({
             </div>
           </div>
 
-          <button style={{ ...T.primair, opacity: bezig ? 0.5 : 1 }} disabled={bezig}
-            onClick={() => onOpslaan({
-              name: items.length === 1 ? items[0].name : "Bord van de foto",
-              meal: maal,
-              source: "photo",
-              amount: 1,
-              unit: "portie",
-              components: componenten,
-            }, false)}>
-            {bezig
+          <div style={T.veldVak}>
+            <label style={T.aanvinkRij}>
+              <input type="checkbox" checked={naarKookboek}
+                onChange={(e) => setNaarKookboek(e.target.checked)} />
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <BookOpen size={14} /> Ook als recept in het kookboek
+              </span>
+            </label>
+            {naarKookboek && (
+              <>
+                <label style={T.label}>Naam van het gerecht</label>
+                <input style={T.veld} value={receptTitel}
+                  placeholder="bijv. Ovenschotel met spinazie"
+                  onChange={(e) => setReceptTitel(e.target.value)} />
+                <div style={{ marginTop: 10 }}>
+                  {/* Waar het gerecht om draait bepaalt in het kookboek mede wat
+                      er wordt voorgesteld — twee vleesavonden achter elkaar
+                      krijgen aftrek. Een gok van de app zou dat stil sturen. */}
+                  <label style={T.label}>Waar draait het om?</label>
+                  <select style={T.veld} value={receptHoofd}
+                    onChange={(e) => setReceptHoofd(e.target.value)}>
+                    {HOOFDINGREDIENTEN.map((h) => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+                <p style={T.aanvinkUitleg}>
+                  De onderdelen hierboven worden de ingrediënten en de foto wordt de
+                  receptafbeelding. Hoeveelheden gelden voor dit ene bord — pas ze in het
+                  kookboek aan als je voor meer mensen kookt.
+                </p>
+              </>
+            )}
+          </div>
+
+          <button style={{ ...T.primair, opacity: bezig || bewaartRecept ? 0.5 : 1 }}
+            disabled={bezig || bewaartRecept}
+            onClick={bewaar}>
+            {bezig || bewaartRecept
               ? <><Loader2 size={16} className="spin" /> Opslaan...</>
               : <><Check size={16} /> Toevoegen aan {datumLabel.toLowerCase()} ({nl(punten, 0)} pt)</>}
           </button>

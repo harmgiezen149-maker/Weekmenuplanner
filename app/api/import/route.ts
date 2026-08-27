@@ -13,6 +13,23 @@ const SYSTEM =
   ". maaltijd kies uit: " + MAALTIJDEN.join(", ") +
   ". moeilijkheid kies uit: " + MOEILIJKHEDEN.join(", ") + ". tijd in minuten. Alles in het Nederlands.";
 
+// Een bord eten is geen recept: er staat niet bij wat erin zit, hoeveel er in
+// de pan ging of hoe lang het op het vuur stond. Wat het model hier doet is
+// reconstrueren, en dat mag het weten — de instructie vraagt om herkenbare
+// ingrediënten met redelijke hoeveelheden, niet om een precieze uitslag.
+//
+// Twee personen, niet één: een recept voor één is zelden waar iemand naar
+// zoekt, en de gebruiker past het aantal daarna toch aan in het formulier.
+const SYSTEM_BORD =
+  SYSTEM +
+  " Je krijgt een foto van een OPGEDIEND BORD, geen recept. Reconstrueer welk gerecht dit is " +
+  "en hoe je het maakt. Noem alleen ingrediënten die je op het bord kunt zien of die " +
+  "onmisbaar zijn voor dit gerecht; verzin geen merken, garneringen of bijgerechten die er " +
+  "niet liggen. Geef de hoeveelheden voor 2 personen en zet personen op 2. " +
+  "De bereiding is een korte, praktische werkwijze in een paar zinnen. " +
+  "Kun je het gerecht niet plaatsen, kies dan een titel die beschrijft wat je ziet, " +
+  "bijvoorbeeld \"Pasta met tomatensaus en spinazie\".";
+
 function parseJson(text: string) {
   const clean = text.replace(/```json|```/g, "").trim();
   const start = clean.indexOf("{");
@@ -82,7 +99,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ opties });
     }
 
-    if (body.type === "foto") {
+    if (body.type === "foto" || body.type === "bord") {
       // Eén of meerdere foto's (recept kan over meerdere tijdschriftpagina's staan).
       const fotos: { mediaType: string; data: string }[] =
         Array.isArray(body.fotos) && body.fotos.length
@@ -99,8 +116,9 @@ export async function POST(req: NextRequest) {
         })),
         {
           type: "text",
-          text:
-            fotos.length > 1
+          text: body.type === "bord"
+            ? "Dit is een foto van een opgediend bord. Wat is dit voor gerecht en hoe maak je het? Geef het als JSON volgens het schema."
+            : fotos.length > 1
               ? "Lees het recept van deze foto's. Het recept staat verspreid over meerdere pagina's; combineer alles tot één volledig recept en geef het als JSON volgens het schema."
               : "Lees dit recept van de foto en geef het als JSON volgens het schema.",
         } as Anthropic.TextBlockParam,
@@ -130,7 +148,7 @@ export async function POST(req: NextRequest) {
     const res = await client.messages.create({
       model: "claude-sonnet-4-6",
       max_tokens: 1500,
-      system: SYSTEM,
+      system: body.type === "bord" ? SYSTEM_BORD : SYSTEM,
       messages: [{ role: "user", content }],
     });
     const text = res.content

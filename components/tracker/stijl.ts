@@ -70,6 +70,8 @@ export const T: Record<string, React.CSSProperties> = {
   veld: { width: "100%", padding: "10px 12px", border: "1px solid var(--line)", borderRadius: 10, fontSize: 15, background: "var(--surface)", color: "var(--ink)", outline: "none" },
   veldRij: { display: "flex", gap: 10, marginBottom: 12 },
   veldVak: { flex: 1, minWidth: 0, marginBottom: 12 },
+  aanvinkRij: { display: "flex", alignItems: "center", gap: 9, fontSize: 14, fontWeight: 700, color: "var(--ink)", cursor: "pointer", marginBottom: 10 },
+  aanvinkUitleg: { fontSize: 11.5, lineHeight: 1.6, color: "var(--sub)", margin: "8px 0 0" },
   hint: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "6px 0 0" },
   sectieKop: { fontSize: 12, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent)", margin: "18px 0 10px" },
   subKop: { fontSize: 14, fontWeight: 800, letterSpacing: "-0.01em", color: "var(--ink)", margin: "18px 0 6px" },

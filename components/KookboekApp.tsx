@@ -16,7 +16,7 @@ import {
   PencilLine, X, Trash2, ChevronLeft, ChevronRight, Clock, ChefHat, Check, Loader2,
   Minus, CalendarPlus, ArrowRightLeft, RefreshCw, Eye, EyeOff, ArrowDown, Store, GripVertical,
   Utensils, Repeat, ArrowDownNarrowWide, Image as ImageIcon, ZoomIn, Package, Sparkles, Info,
-  Activity, ClipboardCheck, WifiOff, Receipt, Euro, Share2, Printer,
+  Activity, ClipboardCheck, WifiOff, Receipt, Euro, Share2, Printer, SlidersHorizontal,
 } from "lucide-react";
 import {
   KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN, DAGEN, WINKELS, GEEN_WINKEL,
@@ -214,6 +214,8 @@ export default function App() {
   const [weekfoto, setWeekfoto] = useState<WeekfotoStaat | null>(null);
   // Naam die het invoerscherm alvast invult, van een briefje dat je overneemt.
   const [nieuwTitel, setNieuwTitel] = useState("");
+  // Welk zojuist toegevoegd recept op dit moment wordt doorgerekend.
+  const [schatRecept, setSchatRecept] = useState("");
   // Punten per portie, doorgerekend door de tracker. Los opgehaald zodat het
   // kookboek zonder ingevuld trackerprofiel gewoon blijft werken.
   const [receptPunten, setReceptPunten] = useState<ReceptPuntenKaart>({});
@@ -411,10 +413,44 @@ export default function App() {
   const addRecept = async (r: Partial<Recept>) => {
     const saved = await api.addRecept(r);
     setRecepten((p) => [...p, saved].sort((a, b) => a.titel.localeCompare(b.titel)));
+    // Meteen doorrekenen, op de achtergrond: het opslaan hoeft er niet op te
+    // wachten. Zonder dit staat elk nieuw recept eerst met te weinig punten in
+    // de lijst tot je het toevallig opent en op Aanvullen drukt.
+    void reken(saved);
     // Kwam je hier vanaf een gefotografeerd briefje, dan hoor je terug te komen
     // waar je gebleven was — met het nieuwe recept er nu wel in.
     if (nieuwTitel) { setNieuwTitel(""); setTab("week"); return; }
     setTab("recepten");
+  };
+
+  /**
+   * De onbekende ingrediënten van een nieuw recept laten schatten.
+   *
+   * Stil als er niets te doen is, en stil als het misgaat: dit is een extraatje
+   * bovenop het opslaan, en een foutmelding over iets waar je niet om gevraagd
+   * hebt hoort niet over je scherm te komen. Wat er níet lukt zie je terug in
+   * het paneel "recepten tellen nog niet alles mee".
+   *
+   * Zonder trackerprofiel worden er nergens punten getoond; dan is dit alleen
+   * een modelaanroep zonder doel.
+   */
+  const reken = async (recept: Recept) => {
+    if (puntenStatus === "geen-profiel") return;
+    const namen = (recept.ingredienten ?? [])
+      .map((i) => (i.naam || "").trim())
+      .filter((n) => n.length > 0);
+    if (namen.length === 0) return;
+
+    setSchatRecept(recept.titel);
+    try {
+      const res = await fetch("/api/tracker/ingredienten/schat-alles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ namen }),
+      });
+      if (res.ok) ververPunten();
+    } catch {
+      /* stil: het recept staat er, de punten volgen later of via Aanvullen */
+    } finally { setSchatRecept(""); }
   };
 
   /** Een gerecht van het briefje aanmaken: naar het invoerscherm, naam ingevuld. */
@@ -512,6 +548,13 @@ export default function App() {
       </header>
 
       {infoOpen && <Werkinstructie onClose={() => setInfoOpen(false)} />}
+
+      {schatRecept && (
+        <div style={S.rekenBalk} role="status" aria-live="polite">
+          <Loader2 size={13} className="spin" />
+          De ingrediënten van &ldquo;{schatRecept}&rdquo; worden doorgerekend...
+        </div>
+      )}
 
       <main style={S.main}>
         {laden ? (
@@ -729,6 +772,10 @@ function ReceptenLijst({
   const [fTijdMin, setFTijdMin] = useState(MIN_TIJD);
   const [fTijd, setFTijd] = useState(MAX_TIJD);
   const [sortering, setSortering] = useState<"naam" | "gegeten" | "score">("naam");
+  // Het filterblok is standaard dicht. Vier rijen chips en twee schuiven zijn
+  // een gereedschapskist, geen kop van een pagina: normaal wil je je recepten
+  // zien. Wat er wél aanstaat blijft zichtbaar in de knop zelf.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
   const [bewerk, setBewerk] = useState<Recept | null>(null);
@@ -760,7 +807,14 @@ function ReceptenLijst({
   });
 
   const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setFTijdMin(MIN_TIJD); setFTijd(MAX_TIJD); setZoek(""); };
-  const anyFilter = fKeuken || fHoofd || fMaaltijd || fMoeil || fScore || fTijdMin > MIN_TIJD || fTijd < MAX_TIJD || zoek;
+  // Het zoekveld telt niet mee: dat staat altijd in beeld en spreekt voor
+  // zichzelf. De rest zit straks achter een dichtgeklapt blok en moet dus
+  // ergens te zien zijn.
+  const actieveFilters = [
+    fKeuken, fHoofd, fMaaltijd, fMoeil, fScore ? "score" : "",
+    fTijdMin > MIN_TIJD || fTijd < MAX_TIJD ? "tijd" : "",
+  ].filter(Boolean).length;
+  const anyFilter = actieveFilters > 0 || zoek;
   const huidig = open ? recepten.find((r) => r.id === open.id) || open : null;
 
   return (
@@ -770,6 +824,22 @@ function ReceptenLijst({
         <input style={S.searchInput} placeholder="Zoek op naam, ingrediënt of bereiding..." value={zoek} onChange={(e) => setZoek(e.target.value)} />
       </div>
 
+      <div style={S.filterBalk}>
+        <button
+          style={{ ...S.filterKnop, ...(filtersOpen ? S.filterKnopOpen : {}) }}
+          onClick={() => setFiltersOpen((o) => !o)}
+          aria-expanded={filtersOpen}
+        >
+          <SlidersHorizontal size={14} />
+          Filters en sorteren
+          {actieveFilters > 0 && <span style={S.filterTeller}>{actieveFilters}</span>}
+          <ChevronRight size={14} style={{ transform: `rotate(${filtersOpen ? -90 : 90}deg)`, transition: "transform .15s" }} />
+        </button>
+        {anyFilter ? <button onClick={reset} style={S.resetBtn}><X size={13} /> Wissen</button> : null}
+      </div>
+
+      {filtersOpen && (
+      <>
       <div style={S.filterRow}><Chips opts={MAALTIJDEN} val={fMaaltijd} set={setFMaaltijd} /></div>
       <div style={S.filterRow}><Chips opts={KEUKENS} val={fKeuken} set={setFKeuken} /></div>
       <div style={S.filterRow}><Chips opts={HOOFDINGREDIENTEN} val={fHoofd} set={setFHoofd} /></div>
@@ -813,10 +883,13 @@ function ReceptenLijst({
         <button onClick={() => setSortering("score")} style={{ ...S.sorteerBtn, ...(sortering === "score" ? S.sorteerBtnOn : {}) }}>Score</button>
         <button onClick={() => setSortering("gegeten")} style={{ ...S.sorteerBtn, ...(sortering === "gegeten" ? S.sorteerBtnOn : {}) }}>Vaakst gegeten</button>
       </div>
+      </>
+      )}
 
-      {anyFilter ? <button onClick={reset} style={S.resetBtn}><X size={13} /> Filters wissen</button> : null}
-
-      <Onvolledig recepten={recepten} receptPunten={receptPunten} onOpen={setOpen} />
+      <Onvolledig
+        recepten={recepten} receptPunten={receptPunten} onOpen={setOpen}
+        onKlaar={onPuntenVeranderd}
+      />
 
       <div style={S.receptGrid}>
         {recepten.length === 0 && <p style={S.empty}>Nog geen recepten. Voeg er een toe via het tabblad Toevoegen.</p>}
@@ -905,13 +978,63 @@ function NaarLijstDialog({
  * Ingeklapt tenzij je hem opent: het is een controlemiddel, geen aansporing.
  */
 function Onvolledig({
-  recepten, receptPunten, onOpen,
+  recepten, receptPunten, onOpen, onKlaar,
 }: {
   recepten: Recept[];
   receptPunten: ReceptPuntenKaart;
   onOpen: (r: Recept) => void;
+  /** De punten opnieuw ophalen nadat er ingrediënten zijn bijgekomen. */
+  onKlaar: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [bezig, setBezig] = useState(false);
+  const [voortgang, setVoortgang] = useState<{ gedaan: number; over: number } | null>(null);
+  const [uitslag, setUitslag] = useState<{ gedaan: number; mislukt: string[]; maten: number } | null>(null);
+  const [fout, setFout] = useState("");
+
+  /**
+   * Alle gaten in het hele kookboek in één keer laten schatten.
+   *
+   * De server doet een ronde per aanroep en zegt hoeveel er nog over is; dit
+   * loopt door tot er niets meer bijkomt. Namen waar het model op stukliep gaan
+   * mee als "sla deze over", anders zou een ronde vol onbekende namen alles
+   * wat erachter staat blokkeren.
+   *
+   * De waarden gaan meteen de lijst in, gemerkt als schatting. Ze zijn per
+   * recept aan te passen — dat is de afspraak die overal in deze app geldt:
+   * een geschat getal blijft als schatting herkenbaar.
+   */
+  const schatAlles = async () => {
+    setBezig(true); setFout(""); setUitslag(null); setVoortgang(null);
+    const mislukt = new Set<string>();
+    let gedaan = 0;
+    let maten = 0;
+    try {
+      // Ruime bovengrens: elke ronde doet er twintig, dus dit is genoeg voor
+      // een kookboek van vierhonderd onbekende ingrediënten. Het is een
+      // noodrem, geen verwachting.
+      for (let ronde = 0; ronde < 20; ronde++) {
+        const res = await fetch("/api/tracker/ingredienten/schat-kookboek", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ overslaan: [...mislukt] }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(d.error || "Schatten mislukt");
+
+        gedaan += d.gelukt?.length ?? 0;
+        for (const m of d.mislukt ?? []) mislukt.add(m.naam);
+        maten = d.maatOnbekend ?? 0;
+        setVoortgang({ gedaan, over: d.resterend ?? 0 });
+        if ((d.resterend ?? 0) === 0) break;
+        // Een ronde die niets oplevert en niets meldt: doorgaan heeft geen zin.
+        if ((d.gelukt?.length ?? 0) === 0 && (d.mislukt?.length ?? 0) === 0) break;
+      }
+      setUitslag({ gedaan, mislukt: [...mislukt], maten });
+      if (gedaan > 0) onKlaar();
+    } catch (e) {
+      setFout(e instanceof Error ? e.message : "Schatten mislukt");
+    } finally { setBezig(false); setVoortgang(null); }
+  };
 
   const lijst = useMemo(() => recepten
     .map((r) => ({ r, info: receptPunten[r.id] }))
@@ -941,8 +1064,33 @@ function Onvolledig({
           <p style={S.onvolledigUitleg}>
             Bij deze recepten valt een ingrediënt buiten de puntentelling, dus het getal is te
             laag. Vul het ingrediënt aan in het recept — via het potlood, en dan Aanvullen — of
-            pas de maat aan naar iets dat de app kent.
+            pas de maat aan naar iets dat de app kent. Of laat ze hieronder in één keer schatten.
           </p>
+
+          <button style={S.schatAllesBtn} onClick={schatAlles} disabled={bezig}>
+            {bezig
+              ? <><Loader2 size={14} className="spin" /> Bezig{voortgang ? ` — ${voortgang.gedaan} gedaan, nog ${voortgang.over}` : "..."}</>
+              : <><Sparkles size={14} /> Alle ontbrekende ingrediënten schatten</>}
+          </button>
+
+          {fout && <p style={S.onvolledigMelding}>{fout}</p>}
+
+          {uitslag && (
+            <p style={S.onvolledigMelding}>
+              {uitslag.gedaan > 0
+                ? `${uitslag.gedaan} ingrediënt${uitslag.gedaan === 1 ? "" : "en"} geschat en bewaard. `
+                : "Er viel niets te schatten. "}
+              {uitslag.mislukt.length > 0 && (
+                <>Niet gelukt: {uitslag.mislukt.slice(0, 6).join(", ")}
+                  {uitslag.mislukt.length > 6 ? ` en ${uitslag.mislukt.length - 6} andere` : ""}. </>
+              )}
+              {uitslag.maten > 0 && (
+                <>{uitslag.maten} ingrediënt{uitslag.maten === 1 ? " heeft" : "en hebben"} een maat
+                  die de app niet kan lezen; die moet je zelf aanpassen. </>
+              )}
+              Geschatte waarden zijn niet nagekeken — open een recept om ze bij te stellen.
+            </p>
+          )}
           {lijst.map(({ r, info }) => (
             <button key={r.id} style={S.onvolledigRegel} onClick={() => onOpen(r)}>
               <span style={S.onvolledigNaam}>{r.titel}</span>
@@ -1508,6 +1656,7 @@ function Toevoegen({ onAdd, startTitel }: { onAdd: (r: Partial<Recept>) => void;
       <div style={S.segWrap}>
         <SegBtn active={modus === "link"} onClick={() => setModus("link")} icon={Link2} label="Link" />
         <SegBtn active={modus === "foto"} onClick={() => setModus("foto")} icon={Camera} label="Foto" />
+        <SegBtn active={modus === "bord"} onClick={() => setModus("bord")} icon={Utensils} label="Bord" />
         <SegBtn active={modus === "hand"} onClick={() => setModus("hand")} icon={PencilLine} label="Handmatig" />
       </div>
       {startTitel && (
@@ -1524,6 +1673,7 @@ function Toevoegen({ onAdd, startTitel }: { onAdd: (r: Partial<Recept>) => void;
         />
       )}
       {modus === "foto" && <FotoImport onAdd={onAdd} />}
+      {modus === "bord" && <BordImport onAdd={onAdd} />}
       {modus === "link" && <LinkImport onAdd={onAdd} />}
     </div>
   );
@@ -1733,6 +1883,82 @@ function FotoImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
             : <><Check size={16} /> Recept uitlezen ({fotos.length} {fotos.length === 1 ? "foto" : "foto's"})</>}
         </button>
       )}
+
+      {err && <p style={S.errText}>{err}</p>}
+    </div>
+  );
+}
+
+/**
+ * Een recept maken van een foto van een opgediend bord.
+ *
+ * Anders dan bij de foto-import staat het recept hier niet op de foto: het
+ * wordt gereconstrueerd uit wat er te zien is. Dat levert een bruikbaar
+ * beginpunt op — een titel, de ingrediënten die je herkent en een werkwijze —
+ * maar hoeveelheden en bereidingstijd zijn een aanname. Daarom staat dat er in
+ * gewone taal bij, en gaat het net als elke andere import langs het
+ * bevestigingsscherm voordat het je kookboek in mag.
+ */
+function BordImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [parsed, setParsed] = useState<Partial<Recept> | null>(null);
+  const [err, setErr] = useState("");
+  const [foto, setFoto] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const kies = async (file: File) => {
+    setErr(""); setParsed(null); setBusy(true);
+    try {
+      const ruw = await fileNaarDataUrl(file);
+      const groot = await comprimeerAfbeelding(ruw, 0.85, 1400);
+      setFoto(groot);
+      const res = await api.importRecept({
+        type: "bord",
+        fotos: [{ mediaType: "image/jpeg", data: groot.split(",")[1] }],
+      });
+      const recept = normaliseer(res.recept || res);
+      // Het bord wordt de receptafbeelding: je hebt hem toch al gemaakt, en
+      // een foto van het echte resultaat is beter dan een lege kaart.
+      recept.afbeelding = await comprimeerAfbeelding(groot).catch(() => "");
+      setParsed(recept);
+    } catch (e: any) {
+      setErr(e?.message || "Kon van deze foto geen recept maken.");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  if (parsed) return <BevestigImport parsed={parsed} onAdd={onAdd} onCancel={() => setParsed(null)} />;
+
+  return (
+    <div style={S.importBox}>
+      <Utensils size={36} style={{ color: "var(--accent)" }} />
+      <p style={S.importText}>
+        Maak een foto van het bord zoals het op tafel staat. De app maakt er een receptvoorstel
+        van: de gerechtnaam, de ingrediënten die te zien zijn en een korte werkwijze.
+      </p>
+      <input
+        ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+        onChange={(e) => e.target.files?.[0] && kies(e.target.files[0])}
+      />
+
+      {foto && (
+        <div style={S.bordVoorbeeldWrap}>
+          <img src={foto} alt="Je bord" style={S.bordVoorbeeld} />
+        </div>
+      )}
+
+      <button onClick={() => fileRef.current?.click()} style={S.primaryBtn} disabled={busy}>
+        {busy
+          ? <><Loader2 size={16} className="spin" /> Bezig met kijken...</>
+          : <><Camera size={16} /> {foto ? "Andere foto" : "Foto van je bord maken"}</>}
+      </button>
+
+      <p style={S.importKleinText}>
+        Hoeveelheden en bereidingstijd zijn een aanname — aan een bord is niet te zien hoeveel er
+        in de pan ging. Loop ze na voordat je opslaat.
+      </p>
 
       {err && <p style={S.errText}>{err}</p>}
     </div>
@@ -3546,6 +3772,10 @@ const S: Record<string, React.CSSProperties> = {
   searchWrap: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "10px 12px", marginBottom: 12 },
   searchInput: { border: "none", outline: "none", flex: 1, fontSize: 15, background: "none", color: "var(--ink)" },
 
+  filterBalk: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 },
+  filterKnop: { display: "inline-flex", alignItems: "center", gap: 7, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 999, padding: "7px 13px", fontSize: 13, fontWeight: 700, color: "var(--ink)", cursor: "pointer" },
+  filterKnopOpen: { background: "var(--accent-soft)", borderColor: "var(--accent)", color: "var(--accent)" },
+  filterTeller: { display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999, background: "var(--accent)", color: "#fff", fontSize: 11, fontWeight: 800 },
   filterRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 8, overflowX: "auto" },
   chips: { display: "flex", gap: 6, flexWrap: "nowrap" },
   chip: { whiteSpace: "nowrap", padding: "6px 12px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 13, fontWeight: 600, cursor: "pointer" },
@@ -3765,12 +3995,18 @@ const S: Record<string, React.CSSProperties> = {
   voorraadTelMee: { display: "inline-flex", alignItems: "center", gap: 3, marginTop: 5, padding: "2px 7px", border: "1px dashed var(--line)", borderRadius: 999, background: "transparent", color: "var(--sub)", fontSize: 11, cursor: "pointer" },
   boodWeek: { fontSize: 12, color: "var(--sub)", lineHeight: 1.5, margin: "0 0 10px" },
   weekKnoppen: { display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8, marginLeft: "auto" },
+  rekenBalk: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "7px 14px", background: "var(--accent-soft)", color: "var(--accent)", fontSize: 12.5, fontWeight: 700 },
+  bordVoorbeeldWrap: { width: "100%", borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)", marginBottom: 4 },
+  bordVoorbeeld: { display: "block", width: "100%", maxHeight: 260, objectFit: "cover" },
+  importKleinText: { fontSize: 11.5, lineHeight: 1.6, color: "var(--sub)", textAlign: "center", margin: "6px 0 0" },
   briefjeHint: { background: "var(--accent-soft)", borderRadius: 12, padding: "10px 13px", fontSize: 12.5, lineHeight: 1.6, color: "var(--ink)", margin: "0 0 12px" },
   voorstelBtn: { display: "inline-flex", alignItems: "center", gap: 6, background: "var(--accent-soft)", color: "var(--accent)", border: "none", borderRadius: 999, padding: "7px 13px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" },
   weekGelijk: { display: "block", marginTop: 6, background: "none", border: "none", padding: 0, fontSize: 11.5, lineHeight: 1.4, color: "var(--accent)", textAlign: "left", cursor: "pointer", textDecoration: "underline" },
   weekKiezer: { display: "flex", alignItems: "center", gap: 8, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12, padding: "6px 8px", marginBottom: 12 },
   weekKiezerLabel: { flex: 1, textAlign: "center", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minHeight: 22 },
   deelMelding: { background: "var(--accent-soft)", color: "var(--accent)", borderRadius: 10, padding: "8px 12px", fontSize: 12.5, margin: "0 0 10px" },
+  schatAllesBtn: { display: "flex", alignItems: "center", justifyContent: "center", gap: 7, width: "100%", padding: "9px 12px", background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, fontSize: 13, fontWeight: 700, color: "var(--ink)", cursor: "pointer", marginBottom: 8 },
+  onvolledigMelding: { fontSize: 11.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 10px" },
   onvolledigVak: { background: "var(--surface)", border: "1px solid var(--gold)", borderRadius: 14, marginBottom: 14, overflow: "hidden" },
   onvolledigKop: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: "11px 12px", background: "none", border: "none", color: "#7a4d09", fontSize: 13, fontWeight: 700, cursor: "pointer" },
   onvolledigUitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 10px" },
