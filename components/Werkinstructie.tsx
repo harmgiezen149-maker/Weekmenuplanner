@@ -534,6 +534,13 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             <strong>Wegen</strong> — één getal is genoeg. De grafiek toont je metingen als punten en de
             trendlijn als hoofdfiguur. Een kilo verschil van dag tot dag is vocht, geen vet.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Vergissing ingetikt, of een dag vergeten? Bij het invoerveld staat een <strong>datum</strong>,
+            zodat je een gemiste dag alsnog kunt invullen, en elke weging in de lijst heeft een
+            potlood waarmee je het gewicht én de datum aanpast. Verplaats je een weging naar een dag
+            waarop al gewogen is, dan vraagt de app eerst of die vervangen mag worden — er kan er
+            maar één per dag zijn.
+          </p>
           <div style={S.kader}>
             <strong>De app stuurt op de trend, niet op je laatste meting.</strong> Wijkt je trendgewicht
             meer dan een kilo af van het gewicht waarop je budget rust, dan wordt het budget

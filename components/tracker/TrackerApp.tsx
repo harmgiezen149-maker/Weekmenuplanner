@@ -117,14 +117,35 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     return () => { afgebroken = true; };
   }, [pagina, weekDatum, datum, dag]);
 
-  const weeg = async (kg: number, note?: string) => {
+  const weeg = async (kg: number, datum?: string, note?: string) => {
     setBezig(true); setFout(""); setHerberekend(false);
     try {
-      const g = await trackerApi.weeg(kg, note);
+      const g = await trackerApi.weeg(kg, datum, note);
       setGewicht(g);
       setHerberekend(g.herberekend);
       if (g.profiel) setProfiel(g.profiel);
     } catch (e) { setFout(bericht(e)); } finally { setBezig(false); }
+  };
+
+  /**
+   * Een weging aanpassen. Geeft de botsing terug als de nieuwe datum al bezet
+   * is, zodat het scherm daar een vraag van kan maken.
+   */
+  const wijzigWeging = async (v: {
+    van: string; naar: string; kg: number; vervang?: boolean;
+  }): Promise<{ botsing?: { datum: string; kg: number } }> => {
+    setBezig(true); setFout(""); setHerberekend(false);
+    try {
+      const uit = await trackerApi.wijzigWeging(v);
+      if (uit.botsing) return { botsing: uit.botsing };
+      setGewicht(uit.gegevens);
+      setHerberekend(uit.gegevens.herberekend);
+      if (uit.gegevens.profiel) setProfiel(uit.gegevens.profiel);
+      return {};
+    } catch (e) {
+      setFout(bericht(e));
+      return {};
+    } finally { setBezig(false); }
   };
 
   const voegBewegingToe = async (soort: string, minuten: number) => {
@@ -271,6 +292,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
               <Gewicht
                 gegevens={gewicht} vandaag={vandaag} bezig={bezig} fout={fout}
                 herberekend={herberekend} onWeeg={weeg} onWis={wisWeging}
+                onWijzig={wijzigWeging}
               />
             )}
 

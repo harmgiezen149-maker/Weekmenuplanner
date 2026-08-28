@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Loader2, Scale, Trash2, TrendingDown } from "lucide-react";
+import { Check, Loader2, Pencil, Scale, Trash2, TrendingDown, X } from "lucide-react";
 import { T } from "./stijl";
 import Trendgrafiek from "./Trendgrafiek";
 import { nl, nlKg } from "@/lib/tracker/datum";
@@ -17,22 +17,51 @@ export interface GewichtGegevens {
 }
 
 export default function Gewicht({
-  gegevens, vandaag, bezig, fout, herberekend, onWeeg, onWis,
+  gegevens, vandaag, bezig, fout, herberekend, onWeeg, onWis, onWijzig,
 }: {
   gegevens: GewichtGegevens;
   vandaag: string;
   bezig: boolean;
   fout: string;
   herberekend: boolean;
-  onWeeg: (kg: number, note?: string) => void;
+  onWeeg: (kg: number, datum?: string, note?: string) => void;
   onWis: (datum: string) => void;
+  /** Een bestaande weging aanpassen; geeft een botsing terug in plaats van te overschrijven. */
+  onWijzig: (v: { van: string; naar: string; kg: number; vervang?: boolean })
+    => Promise<{ botsing?: { datum: string; kg: number } }>;
 }) {
   const { wegingen, profiel, voortgang: v, tempoPerWeek: tempo } = gegevens;
   const laatste = wegingen.length > 0 ? wegingen[wegingen.length - 1] : null;
-  const alGewogen = laatste?.date === vandaag;
 
   const [kg, setKg] = useState("");
+  const [datum, setDatum] = useState(vandaag);
   const kilo = getal(kg);
+
+  // Op de gekozen dag staat al iets. Dat mag — een weging vervangen is de
+  // bedoelde manier om er een te corrigeren — maar je hoort het te zien
+  // voordat je op opslaan drukt, niet erna.
+  const opDieDag = wegingen.find((w) => w.date === datum);
+
+  // Welke weging op dit moment bewerkt wordt, en de vraag die openstaat als de
+  // nieuwe datum al bezet is.
+  const [bewerk, setBewerk] = useState<{ van: string; kg: string; datum: string } | null>(null);
+  const [botsing, setBotsing] = useState<{ datum: string; kg: number } | null>(null);
+
+  const beginBewerken = (w: WegingMetTrend) => {
+    setBotsing(null);
+    setBewerk({ van: w.date, kg: nlKg(w.kg), datum: w.date });
+  };
+
+  const bewaarBewerking = async (vervang = false) => {
+    if (!bewerk) return;
+    const nieuwKg = getal(bewerk.kg);
+    if (nieuwKg <= 0) return;
+    const uit = await onWijzig({
+      van: bewerk.van, naar: bewerk.datum, kg: nieuwKg, ...(vervang ? { vervang } : {}),
+    });
+    if (uit.botsing) { setBotsing(uit.botsing); return; }
+    setBewerk(null); setBotsing(null);
+  };
 
   return (
     <>
@@ -47,7 +76,7 @@ export default function Gewicht({
 
       <div style={T.kaart}>
         <h2 style={{ ...T.sectieKop, margin: "0 0 10px" }}>
-          {alGewogen ? "Weging van vandaag aanpassen" : "Wegen"}
+          {opDieDag ? "Weging aanpassen" : "Wegen"}
         </h2>
         <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
           <div style={{ flex: 1 }}>
@@ -56,18 +85,27 @@ export default function Gewicht({
               placeholder={laatste ? nlKg(laatste.kg) : "95,0"}
               onChange={(e) => setKg(e.target.value)} />
           </div>
-          <button
-            style={{ ...T.primair, width: "auto", marginTop: 0, padding: "12px 18px", opacity: kilo > 0 && !bezig ? 1 : 0.5 }}
-            disabled={kilo <= 0 || bezig}
-            onClick={() => { onWeeg(kilo); setKg(""); }}
-          >
-            {bezig ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
-            Opslaan
-          </button>
+          <div style={{ flex: 1 }}>
+            {/* Een dag overslaan en later invullen mag; vooruit wegen niet, want
+                de trendlijn rekent vanaf de laatste meting. */}
+            <label style={T.label} htmlFor="gw-datum">Datum</label>
+            <input id="gw-datum" type="date" style={T.veld} value={datum} max={vandaag}
+              onChange={(e) => setDatum(e.target.value || vandaag)} />
+          </div>
         </div>
+        <button
+          style={{ ...T.primair, opacity: kilo > 0 && !bezig ? 1 : 0.5 }}
+          disabled={kilo <= 0 || bezig}
+          onClick={() => { onWeeg(kilo, datum); setKg(""); setDatum(vandaag); }}
+        >
+          {bezig ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+          {opDieDag ? "Vervangen" : "Opslaan"}
+        </button>
         <p style={T.hint}>
-          Weeg steeds op hetzelfde moment, het liefst 's ochtends. Weeg je twee keer
-          op één dag, dan vervangt de nieuwe meting de oude.
+          {opDieDag
+            ? <>Op {korteDatum(datum)} staat al <strong>{nlKg(opDieDag.kg)} kg</strong>. Opslaan vervangt die meting.</>
+            : <>Weeg steeds op hetzelfde moment, het liefst &apos;s ochtends. Eén weging per dag: een
+              tweede op dezelfde dag vervangt de eerste.</>}
         </p>
       </div>
 
@@ -143,19 +181,62 @@ export default function Gewicht({
           <h2 style={T.lijstKop}>Alle wegingen</h2>
           <div style={T.kaartStrak}>
             {[...wegingen].reverse().map((w) => (
-              <div key={w.date} style={T.regel}>
-                <div style={T.regelTekst}>
-                  <div style={T.regelNaam}>{nlKg(w.kg)} kg</div>
-                  <div style={T.regelSub}>
-                    {korteDatum(w.date)} · trend {nlKg(w.trend_kg)} kg
-                    {w.delta_kg !== 0 && ` · ${w.delta_kg < 0 ? "−" : "+"}${nl(Math.abs(w.delta_kg), 2)}`}
+              bewerk?.van === w.date ? (
+                <div key={w.date} style={{ ...T.regel, display: "block" }}>
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={T.label}>Gewicht (kg)</label>
+                      <input style={T.veld} value={bewerk.kg} inputMode="decimal" autoFocus
+                        onChange={(e) => setBewerk({ ...bewerk, kg: e.target.value })} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={T.label}>Datum</label>
+                      <input type="date" style={T.veld} value={bewerk.datum} max={vandaag}
+                        onChange={(e) => setBewerk({ ...bewerk, datum: e.target.value || bewerk.van })} />
+                    </div>
+                  </div>
+
+                  {botsing && (
+                    <p style={{ ...T.hint, color: "var(--over)" }}>
+                      Op {korteDatum(botsing.datum)} staat al <strong>{nlKg(botsing.kg)} kg</strong>.
+                      Er kan er maar één per dag zijn — die meting wordt vervangen.
+                    </p>
+                  )}
+
+                  <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                    <button
+                      style={{ ...T.primair, marginTop: 0, opacity: getal(bewerk.kg) > 0 && !bezig ? 1 : 0.5 }}
+                      disabled={getal(bewerk.kg) <= 0 || bezig}
+                      onClick={() => bewaarBewerking(botsing != null)}
+                    >
+                      {bezig ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
+                      {botsing ? "Toch vervangen" : "Opslaan"}
+                    </button>
+                    <button style={{ ...T.secundair, marginTop: 0, width: "auto", padding: "12px 16px" }}
+                      onClick={() => { setBewerk(null); setBotsing(null); }}>
+                      <X size={15} /> Annuleren
+                    </button>
                   </div>
                 </div>
-                <button style={T.wisKnop} onClick={() => onWis(w.date)}
-                  aria-label={`Weging van ${w.date} verwijderen`}>
-                  <Trash2 size={15} />
-                </button>
-              </div>
+              ) : (
+                <div key={w.date} style={T.regel}>
+                  <div style={T.regelTekst}>
+                    <div style={T.regelNaam}>{nlKg(w.kg)} kg</div>
+                    <div style={T.regelSub}>
+                      {korteDatum(w.date)} · trend {nlKg(w.trend_kg)} kg
+                      {w.delta_kg !== 0 && ` · ${w.delta_kg < 0 ? "−" : "+"}${nl(Math.abs(w.delta_kg), 2)}`}
+                    </div>
+                  </div>
+                  <button style={T.wisKnop} onClick={() => beginBewerken(w)}
+                    aria-label={`Weging van ${w.date} aanpassen`}>
+                    <Pencil size={15} />
+                  </button>
+                  <button style={T.wisKnop} onClick={() => onWis(w.date)}
+                    aria-label={`Weging van ${w.date} verwijderen`}>
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )
             ))}
           </div>
         </>

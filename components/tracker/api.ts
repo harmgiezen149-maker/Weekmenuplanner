@@ -99,9 +99,33 @@ export const trackerApi = {
   getGewicht: () =>
     fetch("/api/tracker/gewicht", { cache: "no-store" }).then(lees<GewichtGegevens>),
 
-  weeg: (kg: number, note?: string) =>
-    fetch("/api/tracker/gewicht", { method: "POST", headers: json, body: JSON.stringify({ kg, note }) })
-      .then(lees<GewichtGegevens & { herberekend: boolean }>),
+  weeg: (kg: number, datum?: string, note?: string) =>
+    fetch("/api/tracker/gewicht", {
+      method: "POST", headers: json, body: JSON.stringify({ kg, date: datum, note }),
+    }).then(lees<GewichtGegevens & { herberekend: boolean }>),
+
+  /**
+   * Een bestaande weging aanpassen.
+   *
+   * Botst de nieuwe datum met een weging die er al staat, dan is dat geen fout
+   * maar een vraag: het antwoord komt terug als `botsing`, zodat het scherm kan
+   * vragen of die vervangen mag worden in plaats van hem weg te gooien.
+   */
+  wijzigWeging: async (v: {
+    van: string; naar: string; kg: number; note?: string; vervang?: boolean;
+  }): Promise<
+    | { gegevens: GewichtGegevens & { herberekend: boolean }; botsing?: undefined }
+    | { botsing: { datum: string; kg: number }; gegevens?: undefined }
+  > => {
+    const res = await fetch("/api/tracker/gewicht", {
+      method: "PUT", headers: json, body: JSON.stringify(v),
+    });
+    if (res.status === 409) {
+      const d = await res.json().catch(() => ({} as { botsing?: { datum: string; kg: number } }));
+      return { botsing: d.botsing ?? { datum: v.naar, kg: 0 } };
+    }
+    return { gegevens: await lees<GewichtGegevens & { herberekend: boolean }>(res) };
+  },
 
   wisWeging: (datum: string) =>
     fetch(`/api/tracker/gewicht?datum=${encodeURIComponent(datum)}`, { method: "DELETE" })

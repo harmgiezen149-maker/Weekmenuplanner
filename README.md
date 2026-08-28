@@ -246,6 +246,25 @@ meer dan een kilo af van het gewicht waarop je huidige budget rust, dan wordt he
 budget herberekend en zie je dat op het weegscherm terug. Zonder die dempingsstap
 zou een dag met vocht vasthouden je budget omhoog gooien.
 
+#### Een weging corrigeren
+
+Een verkeerd ingetikt getal of een dag die je pas 's avonds invoert, is niet iets
+om mee te leven: elke weging is aan te passen met het potlood ernaast, en het
+invoerveld bovenaan heeft een datumveld zodat je een gemiste dag alsnog kunt
+invullen. Zonder dat zou het weglopen van je trendlijn een fout zijn die je
+alleen nog kon verwijderen.
+
+Een datum wijzigen is verhuizen, want de datum ís de sleutel (`wl:weight:<datum>`
+plus een plek in de sorted set). Staat er op de nieuwe dag al een weging, dan
+geeft `PUT /api/tracker/gewicht` een **409** terug met wat er in de weg staat, en
+pas met `vervang: true` gebeurt het echt. Eén weging per dag is de regel die de
+trendlijn eerlijk houdt; hem stilzwijgend toepassen zou een meting weggooien die
+je niet zag.
+
+Een datum in de toekomst wordt geweigerd, ook bij het gewone opslaan. De trend
+rekent vooruit vanaf de laatste meting; een weging van volgende week zou die lijn
+laten kantelen op een getal dat nog niet bestaat.
+
 ### De weekbuffer
 
 Naast je dagbudget is er een vaste buffer van 28 punten per week. Ga je op een dag
