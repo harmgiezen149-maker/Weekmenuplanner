@@ -13,11 +13,10 @@ import type { WeekSamenvatting } from "@/lib/tracker/week";
 // Over budget krijgt een eigen kleur én een getal erbij, zodat het ook zonder
 // kleur te zien is.
 //
-// Bewegingspunten verruimen het budget van die dag. Zonder ze te tekenen klopt
-// het beeld niet: een dag van 48 punten met 6 punten uit beweging steekt boven
-// de budgetlijn uit terwijl hij binnen zijn eigen budget bleef. Daarom staat
-// onderaan de staaf in het groen hoeveel er die dag bij verdiend is, met een
-// groene ijkstreep op het verruimde budget.
+// Onderaan de staaf staat in het groen wat er die dag met bewegen verdiend is.
+// Dat is geen tweede budgetlijn: het dagbudget blijft wat het is, er komt
+// alleen ruimte bij. Een streep op "budget plus beweging" zou een budget
+// suggereren dat per dag verschuift, en dat is niet hoe het werkt.
 // ---------------------------------------------------------------------------
 
 const DAGLETTERS = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -30,12 +29,7 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
   const vlakH = B - MARGE.boven - MARGE.onder;
   const basis = MARGE.boven + vlakH;
 
-  const hoogsteWaarde = Math.max(
-    week.dagbudget,
-    ...week.dagen.map((d) => d.punten),
-    // Anders valt de ijkstreep van een dag met veel beweging buiten beeld.
-    ...week.dagen.map((d) => week.dagbudget + d.bewegingspunten),
-  );
+  const hoogsteWaarde = Math.max(week.dagbudget, ...week.dagen.map((d) => d.punten));
   const top = hoogsteWaarde * 1.1 || 1;
   const y = (punten: number) => basis - (punten / top) * vlakH;
 
@@ -87,7 +81,6 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
           const groen = d.bewegingspunten > 0
             ? Math.min(hoogte, basis - y(Math.min(d.bewegingspunten, d.punten)))
             : 0;
-          const ruimBudget = week.dagbudget + d.bewegingspunten;
           return (
             <g key={d.datum}>
               <path d={balkPad(x, basis - hoogte, balkB, hoogte, 4)}
@@ -99,10 +92,6 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
                     : voetPad(x, basis - groen, balkB, groen)}
                   fill="var(--green)"
                 />
-              )}
-              {d.bewegingspunten > 0 && (
-                <line x1={x} x2={x + balkB} y1={y(ruimBudget)} y2={y(ruimBudget)}
-                  stroke="var(--green)" strokeWidth={1.5} strokeDasharray="4 3" />
               )}
               <text
                 x={x + balkB / 2}
@@ -121,7 +110,7 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
               <title>
                 {`${d.datum}: ${d.punten} punten${over ? `, ${d.overBudget} boven budget` : ""}` +
                  (d.bewegingspunten > 0
-                   ? `, ${d.bewegingspunten} punten erbij verdiend met bewegen (budget die dag ${ruimBudget})`
+                   ? `, waarvan ${d.bewegingspunten} verdiend met bewegen`
                    : "")}
               </title>
             </g>

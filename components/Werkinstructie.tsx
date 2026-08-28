@@ -526,10 +526,9 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
           <p style={{ margin: "0 0 8px" }}>
             In de grafiek staat onderaan een staaf <strong>in het groen</strong> wat je die dag met
-            bewegen hebt verdiend, met een groene streep op je budget van die dag. Zonder dat zou een
-            dag van 48 punten met 6 punten uit beweging boven de budgetlijn uitsteken terwijl hij
-            keurig binnen zijn eigen budget bleef. Op Inzicht staat hetzelfde groen in "Punten per
-            weekdag", daar als gemiddelde over de twaalf weken.
+            bewegen hebt verdiend. Je dagbudget zelf verandert daar niet van — de stippellijn blijft
+            waar hij staat, er komt alleen ruimte bij. Op Inzicht staat hetzelfde groen in "Punten
+            per weekdag", daar als gemiddelde over de twaalf weken.
           </p>
           <p style={{ margin: "0 0 8px" }}>
             <strong>Wegen</strong> — één getal is genoeg. De grafiek toont je metingen als punten en de
