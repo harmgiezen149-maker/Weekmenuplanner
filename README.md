@@ -600,7 +600,11 @@ zonder database te testen op geseede data.
 Wat er te zien is:
 
 - **Punten per weekdag**, met het aantal gelogde dagen onder elke balk. Een
-  gemiddelde zonder dat getal is niet te wegen.
+  gemiddelde zonder dat getal is niet te wegen. Onderaan de balk staat in het
+  groen wat er op die weekdag gemiddeld met bewegen verdiend is, met een groene
+  ijkstreep op het verruimde budget: een zaterdag van 45 punten waarop gemiddeld
+  7 punten bewogen wordt steekt anders boven de budgetlijn uit terwijl hij
+  eronder bleef.
 - **Verdeling over de dag** in vijf blokken, als aandeel van de punten — niet van
   het aantal regels, want dan zou een dag met tien kleine dingen zwaarder wegen
   dan een dag met twee grote.

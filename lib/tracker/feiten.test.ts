@@ -118,6 +118,20 @@ test("bewegingspunten verruimen het budget van die dag", () => {
   assert.equal(bouw([dag(PEILDATUM, [regel(PEILDATUM, 12, 44)])]).budget.adherence_rate, 0);
 });
 
+test("bewegingspunten staan per weekdag in het pakket", () => {
+  // Elke dag 30 punten; op zaterdag een wandeling van 6 punten erbij. De
+  // grafiek op Inzicht tekent die als groen voetstuk, dus het gemiddelde moet
+  // per weekdag apart beschikbaar zijn — niet alleen als weektotaal.
+  const wandeling: Activity = { id: "w", ts: Date.now(), name: "Wandelen", met: 3.5, minutes: 60, points: 6 };
+  const dagen = vensterDatums(PEILDATUM).map((datum) => {
+    const zaterdag = (new Date(datum + "T12:00:00").getDay() + 6) % 7 === 5;
+    return dag(datum, [regel(datum, 12, 30)], zaterdag ? [{ ...wandeling, id: `w-${datum}` }] : []);
+  });
+  const p = bouw(dagen);
+  assert.equal(p.by_weekday.zaterdag.avg_bewegingspunten, 6);
+  assert.equal(p.by_weekday.maandag.avg_bewegingspunten, 0);
+});
+
 test("gemiddelde, mediaan en spreiding staan los van elkaar", () => {
   const punten = [10, 20, 30, 40, 100];
   const p = bouw(reeks((datum, i) => (i >= 79 ? [regel(datum, 12, punten[i - 79])] : null)));

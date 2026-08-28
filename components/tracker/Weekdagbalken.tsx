@@ -12,6 +12,12 @@ import { nl } from "@/lib/tracker/datum";
 // ijklijn, geen tweede as, en een weekdag waarop nooit gelogd is krijgt een
 // streepje in plaats van een balk van nul. Onder elke balk staat hoeveel dagen
 // er in dat gemiddelde zitten — zonder dat getal is een gemiddelde niet te wegen.
+//
+// Ook de bewegingspunten staan er, in het groen onderaan de staaf, met een
+// groene ijkstreep op het gemiddeld verruimde budget van die weekdag. Anders
+// klopt het beeld niet: een zaterdag van 45 punten waarop gemiddeld 7 punten
+// bewogen wordt steekt boven de budgetlijn uit terwijl hij binnen zijn eigen
+// budget bleef — en zo'n dag kleurt dan ten onrechte als "vaker over dan onder".
 // ---------------------------------------------------------------------------
 
 const LETTERS = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -27,7 +33,12 @@ export default function Weekdagbalken({ pakket }: { pakket: FactPack }) {
   const rijen = WEEKDAGEN.map((naam, i) => ({ naam, letter: LETTERS[i], ...pakket.by_weekday[naam] }));
   const budget = pakket.budget.current_daily_budget;
 
-  const top = Math.max(budget, ...rijen.map((r) => r.avg_points)) * 1.12 || 1;
+  const top = Math.max(
+    budget,
+    ...rijen.map((r) => r.avg_points),
+    // Anders valt de groene ijkstreep van een actieve weekdag buiten beeld.
+    ...rijen.map((r) => budget + (r.avg_bewegingspunten ?? 0)),
+  ) * 1.12 || 1;
   const y = (punten: number) => basis - (punten / top) * vlakH;
 
   const vak = breedte / 7;
@@ -41,6 +52,8 @@ export default function Weekdagbalken({ pakket }: { pakket: FactPack }) {
           `Gemiddelde punten per weekdag tegen een dagbudget van ${budget}. ` +
           rijen.map((r) => r.days_counted > 0
             ? `${r.naam}: ${nl(r.avg_points)} punten over ${r.days_counted} dagen`
+              + ((r.avg_bewegingspunten ?? 0) > 0
+                ? `, gemiddeld ${nl(r.avg_bewegingspunten)} erbij uit beweging` : "")
             : `${r.naam}: niet gelogd`).join(", ")
         }
       >
@@ -66,11 +79,32 @@ export default function Weekdagbalken({ pakket }: { pakket: FactPack }) {
           const vaakOver = r.over_budget_rate >= 0.5;
           const hoogte = Math.max(2, basis - y(r.avg_points));
           const labelBinnen = hoogte >= 26;
+          // Een pakket uit de cache van voor deze uitbreiding kent het veld
+          // niet; dan hoort er geen groen te staan, geen streepje op nul.
+          const beweging = r.avg_bewegingspunten ?? 0;
+          // Nooit hoger dan wat er gemiddeld gegeten is: het groen is een deel
+          // van deze staaf, geen los blokje dat erboven uit kan steken.
+          const groen = beweging > 0
+            ? Math.min(hoogte, basis - y(Math.min(beweging, r.avg_points)))
+            : 0;
+          const ruimBudget = budget + beweging;
 
           return (
             <g key={r.naam}>
               <path d={balkPad(x, basis - hoogte, balkB, hoogte, 4)}
                 fill={vaakOver ? "var(--over)" : "var(--accent)"} />
+              {groen > 0 && (
+                <path
+                  d={groen >= hoogte
+                    ? balkPad(x, basis - groen, balkB, groen, 4)
+                    : voetPad(x, basis - groen, balkB, groen)}
+                  fill="var(--green)"
+                />
+              )}
+              {beweging > 0 && (
+                <line x1={x} x2={x + balkB} y1={y(ruimBudget)} y2={y(ruimBudget)}
+                  stroke="var(--green)" strokeWidth={1.5} strokeDasharray="4 3" />
+              )}
               <text x={midden} y={labelBinnen ? basis - hoogte + 13 : basis - hoogte - 5} textAnchor="middle"
                 style={{
                   fontSize: 10.5, fontWeight: 800,
@@ -86,7 +120,10 @@ export default function Weekdagbalken({ pakket }: { pakket: FactPack }) {
               </text>
               <title>
                 {`${r.naam}: gemiddeld ${nl(r.avg_points)} punten over ${r.days_counted} gelogde dagen, ` +
-                 `${Math.round(r.over_budget_rate * 100)}% daarvan boven budget`}
+                 `${Math.round(r.over_budget_rate * 100)}% daarvan boven budget` +
+                 (beweging > 0
+                   ? `, gemiddeld ${nl(beweging)} punten verdiend met bewegen (budget die dag ${nl(ruimBudget)})`
+                   : "")}
               </title>
             </g>
           );
@@ -99,6 +136,9 @@ export default function Weekdagbalken({ pakket }: { pakket: FactPack }) {
       <figcaption style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8, fontSize: 11.5, fontWeight: 600, color: "var(--sub)" }}>
         <Merk kleur="var(--accent)" tekst="Meestal binnen budget" />
         <Merk kleur="var(--over)" tekst="Vaker over dan onder" />
+        {rijen.some((r) => (r.avg_bewegingspunten ?? 0) > 0) && (
+          <Merk kleur="var(--green)" tekst="Verdiend met bewegen" />
+        )}
         <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
           <svg width="16" height="10" aria-hidden="true">
             <line x1="0" y1="5" x2="16" y2="5" stroke="var(--ink)" strokeWidth="1.5" strokeDasharray="4 3" opacity="0.55" />
@@ -117,6 +157,17 @@ function Merk({ kleur, tekst }: { kleur: string; tekst: string }) {
       {tekst}
     </span>
   );
+}
+
+/**
+ * Het groene voetstuk van een staaf.
+ *
+ * Rechte bovenkant: het is een deel van dezelfde staaf, geen apart blokje.
+ * Vult het groen de hele staaf, dan tekent de aanroeper balkPad, zodat de
+ * afgeronde kop behouden blijft.
+ */
+function voetPad(x: number, y: number, b: number, h: number): string {
+  return `M${x},${y} L${x + b},${y} L${x + b},${y + h} L${x},${y + h} Z`;
 }
 
 /** Balk met alleen de bovenkant afgerond; de voet blijft op de nullijn staan. */

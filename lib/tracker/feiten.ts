@@ -76,7 +76,18 @@ export interface FactPack {
     sd_points_per_day: number;
   };
 
-  by_weekday: Record<string, { avg_points: number; days_counted: number; over_budget_rate: number }>;
+  by_weekday: Record<string, {
+    avg_points: number;
+    days_counted: number;
+    over_budget_rate: number;
+    /**
+     * Gemiddeld met bewegen verdiend op deze weekdag, over dezelfde gelogde
+     * dagen. Ruimte bovenop het dagbudget, geen gegeten punten — zonder dit
+     * getal lijkt een actieve zaterdag boven budget te zitten terwijl hij er
+     * onder bleef.
+     */
+    avg_bewegingspunten: number;
+  }>;
 
   by_time_of_day: Record<Dagblok, number>;
 
@@ -306,6 +317,7 @@ function bouwWeekdagen(gelogd: DagFeit[]): FactPack["by_weekday"] {
       avg_points: rond(gemiddelde(dagen.map((d) => d.punten)), 1),
       days_counted: dagen.length,
       over_budget_rate: rond(deel(dagen.filter((d) => d.overBudget > 0).length, dagen.length), 2),
+      avg_bewegingspunten: rond(gemiddelde(dagen.map((d) => d.bewegingspunten)), 1),
     };
   });
   return uit;
@@ -687,11 +699,22 @@ export function adviesDrempel(p: FactPack): AdviesDrempel {
  * pakket hergebruikt worden — dat is wat sectie 5.3 vraagt van de knop
  * "Analyseer mijn patroon".
  */
+/**
+ * Vorm van het pakket zelf.
+ *
+ * Verhoog dit zodra er een veld bijkomt of van betekenis verandert. Een
+ * gecachet pakket van vóór die wijziging heeft dat veld niet, en een scherm dat
+ * erop rekent tekent dan een gat — zonder dat er iets misgaat waar je het aan
+ * ziet. De vingerafdruk neemt dit mee, dus oude caches vallen vanzelf af.
+ */
+export const PAKKETVERSIE = 2;
+
 export function feitenVingerafdruk(invoer: Pick<FeitenInvoer, "peildatum" | "dagen" | "wegingen" | "profiel">): string {
   const regels = invoer.dagen.reduce((s, d) => s + d.entries.length + d.activity.length, 0);
   const laatste = invoer.dagen.map((d) => d.date).sort().at(-1) ?? "-";
   const laatsteWeging = invoer.wegingen.map((w) => w.date).sort().at(-1) ?? "-";
   return [
+    `v${PAKKETVERSIE}`,
     invoer.peildatum, invoer.dagen.length, regels, laatste,
     invoer.wegingen.length, laatsteWeging,
     invoer.profiel.daily_budget, invoer.profiel.points_scale, invoer.profiel.weigh_day,
