@@ -170,18 +170,52 @@ export function metricLabel(sleutel: string): string {
 // -- het feitenpakket uitlezen ----------------------------------------------
 
 /**
- * Leest een puntsleutel als `budget.adherence_rate` of
- * `by_weekday.zaterdag.avg_points` uit het pakket. Geeft null als de sleutel
- * niet bestaat of niet op een getal uitkomt.
+ * Loopt een pad door het pakket.
+ *
+ * Puntsleutels als `budget.adherence_rate`, en lijsten met een index:
+ * `top_contributors[2].total_points` of `weight.entries[0].kg`. Zonder die
+ * index is een deel van het pakket onbereikbaar — en juist de lijst met
+ * grootste bijdragers is waar een advies vaak over gaat. Een advies dat die
+ * netjes citeerde werd dan afgekeurd als "onbekende sleutel", twee keer, en
+ * daarna kwam er niets.
  */
-export function leesFeit(pakket: FactPack, sleutel: string): number | null {
-  if (!sleutel || typeof sleutel !== "string") return null;
+function loopPad(pakket: FactPack, sleutel: string): unknown {
+  if (!sleutel || typeof sleutel !== "string") return undefined;
   let huidig: unknown = pakket;
   for (const stap of sleutel.split(".")) {
-    if (huidig == null || typeof huidig !== "object") return null;
-    huidig = (huidig as Record<string, unknown>)[stap];
+    const deel = /^([A-Za-z_][A-Za-z0-9_]*)((?:\[\d+\])*)$/.exec(stap);
+    if (!deel) return undefined;
+    if (huidig == null || typeof huidig !== "object") return undefined;
+    huidig = (huidig as Record<string, unknown>)[deel[1]];
+    for (const index of deel[2].match(/\d+/g) ?? []) {
+      if (!Array.isArray(huidig)) return undefined;
+      huidig = huidig[Number(index)];
+    }
   }
-  return typeof huidig === "number" && Number.isFinite(huidig) ? huidig : null;
+  return huidig;
+}
+
+/**
+ * Leest een sleutel uit het pakket als getal. Null als de sleutel niet bestaat
+ * of niet op een getal uitkomt.
+ */
+export function leesFeit(pakket: FactPack, sleutel: string): number | null {
+  const waarde = loopPad(pakket, sleutel);
+  return typeof waarde === "number" && Number.isFinite(waarde) ? waarde : null;
+}
+
+/**
+ * Of een sleutel ergens in het pakket op uitkomt.
+ *
+ * Ruimer dan `leesFeit`, want niet elke sleutel die je noemt is een getal:
+ * `top_contributors[0].name` zegt wélk product de cijfers eronder betreft, en
+ * dat hoort erbij te mogen staan. Het levert alleen niets op om de getallen in
+ * de tekst aan te toetsen, en telt daarom niet mee als onderbouwing.
+ */
+export function bestaatFeit(pakket: FactPack, sleutel: string): boolean {
+  const waarde = loopPad(pakket, sleutel);
+  if (typeof waarde === "number") return Number.isFinite(waarde);
+  return typeof waarde === "string";
 }
 
 /**
@@ -320,8 +354,12 @@ export function valideerAdvies(
   const waarden: number[] = [];
   for (const sleutel of payload.facts_used) {
     const waarde = leesFeit(pakket, sleutel);
-    if (waarde == null) redenen.push(`onbekende sleutel in facts_used: ${sleutel}`);
-    else waarden.push(waarde);
+    if (waarde != null) { waarden.push(waarde); continue; }
+    // Een sleutel die naar tekst wijst bestaat wél — hij levert alleen geen
+    // getal om de cijfers in de tekst aan te toetsen.
+    if (!bestaatFeit(pakket, sleutel)) {
+      redenen.push(`onbekende sleutel in facts_used: ${sleutel}`);
+    }
   }
   if (payload.facts_used.length === 0) {
     redenen.push("facts_used is leeg: geen enkel getal is onderbouwd");
@@ -689,6 +727,8 @@ export const ADVIES_SYSTEM = [
   "Gebruik uitsluitend getallen die letterlijk in het feitenpakket staan. Reken niet zelf,",
   "schat niets bij, en leid geen nieuwe getallen af. Elk getal dat je noemt, zet je in",
   "facts_used met de exacte sleutel, bijvoorbeeld by_weekday.zaterdag.avg_points.",
+  "Bij een lijst hoort de index erbij: top_contributors[0].total_points, weight.entries[3].kg.",
+  "Noem je een product uit een lijst bij naam, zet dan ook top_contributors[0].name erbij.",
   "Een getal zonder sleutel in facts_used wordt afgekeurd.",
   "",
   "WAT JE KIEST",

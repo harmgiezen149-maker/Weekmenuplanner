@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  leesFeit, getallenIn, leesAdviesJson, valideerAdvies, weegmomentOpen,
+  leesFeit, bestaatFeit, getallenIn, leesAdviesJson, valideerAdvies, weegmomentOpen,
   bouwAdviesBericht, adviesSysteem, VERBODEN_PATRONEN,
   evalueerAdvies, evaluatieVenster, moetHerzien, vastgelopen,
   detecteerAfwijking, afwijkingOpen, noteerAfwijking, LEGE_COOLDOWN,
@@ -99,6 +99,43 @@ test("leesFeit geeft null bij een sleutel die niet bestaat of geen getal is", ()
   assert.equal(leesFeit(p, "flags"), null);
   assert.equal(leesFeit(p, ""), null);
   assert.equal(leesFeit(p, "budget.adherence_rate.dieper"), null);
+});
+
+test("leesFeit volgt een index in een lijst", () => {
+  const p = pak();
+  // De grootste bijdrager is waar een advies vaak over gaat; zonder index is
+  // die hele lijst onbereikbaar en werd zo'n advies afgekeurd.
+  assert.equal(leesFeit(p, "top_contributors[0].total_points"), p.top_contributors[0].total_points);
+  assert.equal(leesFeit(p, "top_contributors[0].avg_points"), p.top_contributors[0].avg_points);
+  // Buiten de lijst blijft niets.
+  assert.equal(leesFeit(p, "top_contributors[99].total_points"), null);
+  // Een index op iets dat geen lijst is ook niet.
+  assert.equal(leesFeit(p, "budget[0].adherence_rate"), null);
+  assert.equal(leesFeit(p, "top_contributors[].name"), null);
+});
+
+test("bestaatFeit accepteert een naam, leesFeit niet", () => {
+  const p = pak();
+  const naam = "top_contributors[0].name";
+  // Welk product de cijfers betreft mag genoemd worden; het levert alleen geen
+  // getal op om de tekst aan te toetsen.
+  assert.equal(typeof p.top_contributors[0].name, "string");
+  assert.equal(leesFeit(p, naam), null);
+  assert.equal(bestaatFeit(p, naam), true);
+  assert.equal(bestaatFeit(p, "top_contributors[99].name"), false);
+  assert.equal(bestaatFeit(p, "budget.bestaat_niet"), false);
+});
+
+test("een advies dat een bijdrager bij naam citeert wordt niet afgekeurd", () => {
+  const p = pak();
+  const uitslag = valideerAdvies(
+    advies({
+      facts_used: ["top_contributors[0].name", "top_contributors[0].total_points"],
+      action: { ...advies().action, metric_key: "top_contributors[0].total_points" },
+    }),
+    p
+  );
+  assert.deepEqual(uitslag.redenen.filter((r) => r.includes("facts_used")), []);
 });
 
 test("getallenIn leest Nederlandse getallen, met komma en duizendtalpunt", () => {

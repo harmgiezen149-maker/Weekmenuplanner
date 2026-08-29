@@ -686,7 +686,11 @@ het pakket staan, elk met de sleutel waar het vandaan komt.
 
 **De validatielaag** loopt daarna alles na, server-side, vóór opslaan:
 
-1. Elke sleutel in `facts_used` moet in het feitenpakket bestaan.
+1. Elke sleutel in `facts_used` moet in het feitenpakket bestaan. Puntsleutels
+   én lijstindexen: `top_contributors[0].total_points`, `weight.entries[3].kg`.
+   Een sleutel die naar tekst wijst — `top_contributors[0].name`, welk product
+   de cijfers eronder betreft — bestaat ook; die levert alleen geen getal om de
+   tekst aan te toetsen.
 2. `metric_key` moet bestaan en een getal zijn — zonder meetbare actie is het
    advies niet te evalueren en hoort het er niet te zijn.
 3. Verboden taal wordt geweigerd. Woorden die van eten of van jou een morele
@@ -701,6 +705,14 @@ het pakket staan, elk met de sleutel waar het vandaan komt.
    **ongeverifieerd**. Het wordt dan wél getoond, met die markering en de
    betreffende getallen erbij. Stilzwijgend accepteren is geen optie, en
    weggooien om één getal ook niet.
+
+> **Wat hier eerder misging.** Het uitlezen van een sleutel splitste alleen op
+> punten, dus `top_contributors[5].name` kwam uit op een veld dat zo heet — en
+> dat bestaat niet. Elke lijst in het pakket was daarmee onciteerbaar, en juist
+> de grootste bijdragers zijn waar een advies vaak over gaat. Het model deed het
+> goed, de controle keurde het af, de herkansing kreeg dezelfde onmogelijke
+> opdracht, en er kwam geen advies. Een controlelaag die correcte antwoorden
+> afwijst is erger dan geen controlelaag: hij faalt stil en overtuigend.
 
 Een afgekeurd antwoord gaat één keer terug het gesprek in, mét de reden. Lukt het
 dan nog niet, dan komt er geen advies en staat er waarom. Twee pogingen, niet
