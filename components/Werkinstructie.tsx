@@ -199,9 +199,15 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             Het zoekveld staat altijd klaar; zoeken kan op titel <em>of op ingrediënt</em> —
             "courgette" levert elk recept op waar courgette in zit. Alle filters zitten achter de
             knop <strong>Filters en sorteren</strong>, die dicht staat tot je hem opent: filter op
-            elk kenmerk of op een minimale score, schuif de tijd-slider om lange recepten weg te
-            laten, en sorteer op naam, score of vaakst gegeten. Staat de knop dicht terwijl er iets
-            aanstaat, dan zie je het aantal in een bolletje op de knop.
+            elk kenmerk of op een minimale score, schuif met de <strong>bereidingstijd</strong> en
+            met de <strong>punten per portie</strong> (van–tot), en sorteer op naam, score of vaakst
+            gegeten. Staat de knop dicht terwijl er iets aanstaat, dan zie je het aantal in een
+            bolletje op de knop.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            De puntenschuif is er alleen als je een trackerprofiel hebt — anders heeft geen enkel
+            recept een puntenaantal. Helemaal rechts betekent géén maximum. Recepten waarvan de
+            punten nog niet bekend zijn vallen buiten dit filter; er staat bij hoeveel dat er zijn.
           </p>
           <p style={{ margin: 0 }}>
             Tik een kaart aan voor het hele recept. Daar pas je de score aan, hoog je de

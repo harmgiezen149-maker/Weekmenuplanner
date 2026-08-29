@@ -8,8 +8,8 @@ receptpagina. Gebouwd met Next.js 15, Upstash Redis en de Anthropic API.
 
 - **Recepten** opslaan met vaste, filterbare kenmerken: keuken, hoofdingrediënt,
   moeilijkheid, bereidingstijd en een eigen score (1–5 sterren).
-- **Filteren en zoeken** op al die kenmerken, zodat je gerechten die je lekker vond
-  snel terugvindt. Het filterblok staat dicht tot je het nodig hebt.
+- **Filteren en zoeken** op al die kenmerken, plus twee schuiven: bereidingstijd en
+  punten per portie. Het filterblok staat dicht tot je het nodig hebt.
 - **Recept van een bordfoto**: fotografeer wat er op tafel staat en de app maakt er
   een receptvoorstel van.
 - **Weekmenu van een foto**: schrijf je week op papier, fotografeer het briefje en
@@ -1454,6 +1454,27 @@ het is een controlemiddel, geen aansporing.
 Het recept met de meeste gaten staat bovenaan, want daar valt het meest te
 winnen. Een puntentotaal dat te laag uitvalt omdat er ingrediënten buiten vallen
 ziet er namelijk precies zo uit als een recept dat gewoon licht is.
+
+### Zoeken op punten
+
+Naast de tijdschuif staat een schuif voor **punten per portie**, met een
+ondergrens en een bovengrens. Handig aan het eind van de week, als de buffer op
+is en je iets van hooguit acht punten zoekt.
+
+Drie keuzes die eraan vastzitten:
+
+- **De schuif verschijnt alleen als er punten zijn.** Zonder trackerprofiel heeft
+  geen enkel recept een getal; een schuif die dan per ongeluk aanstaat zou de
+  lijst leegmaken zonder dat je ziet waarom.
+- **Helemaal rechts betekent geen maximum**, net als bij de tijd. De schaal loopt
+  tot 40, maar een recept van 45 punten valt er niet buiten omdat de schaal
+  eerder ophoudt.
+- **Recepten zonder puntenaantal vallen buiten het filter**, en daar staat hoeveel
+  dat er zijn. Op een getal dat er niet is valt niet te filteren, maar zo'n recept
+  stilzwijgend laten verdwijnen is het soort gat waar je pas achter komt als je
+  het gerecht mist. In dezelfde regel staat dat een getal met een `~` een
+  ondergrens is: daar valt nog een ingrediënt buiten de telling, dus het echte
+  aantal ligt hoger.
 
 ### Alle gaten in één keer dichten
 

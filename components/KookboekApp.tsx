@@ -771,6 +771,13 @@ function ReceptenLijst({
   const MAX_TIJD = 120; // rechter schuif helemaal rechts = geen maximum
   const [fTijdMin, setFTijdMin] = useState(MIN_TIJD);
   const [fTijd, setFTijd] = useState(MAX_TIJD);
+  // Punten per portie. Vaste grenzen, net als bij de tijd: aan de rechterkant
+  // betekent "helemaal open" géén maximum, dus een recept van 45 punten valt
+  // er niet buiten omdat de schaal bij 40 ophoudt.
+  const MIN_PUNT = 0;
+  const MAX_PUNT = 40;
+  const [fPuntMin, setFPuntMin] = useState(MIN_PUNT);
+  const [fPuntMax, setFPuntMax] = useState(MAX_PUNT);
   const [sortering, setSortering] = useState<"naam" | "gegeten" | "score">("naam");
   // Het filterblok is standaard dicht. Vier rijen chips en twee schuiven zijn
   // een gereedschapskist, geen kop van een pagina: normaal wil je je recepten
@@ -780,6 +787,16 @@ function ReceptenLijst({
   const [plaats, setPlaats] = useState<Recept | null>(null);
   const [bewerk, setBewerk] = useState<Recept | null>(null);
   const [naarLijst, setNaarLijst] = useState<Recept | null>(null);
+
+  // Alleen filteren als er punten zijn om op te filteren. Zonder trackerprofiel
+  // heeft geen enkel recept een getal; dan zou een schuif die per ongeluk
+  // aanstaat de hele lijst leegmaken zonder dat je ziet waarom.
+  const puntenBruikbaar = puntenStatus === "klaar";
+  const puntFilterAan = puntenBruikbaar && (fPuntMin > MIN_PUNT || fPuntMax < MAX_PUNT);
+  // Recepten die buiten het puntenfilter vallen omdat ze geen getal hebben.
+  const zonderPunten = puntFilterAan
+    ? recepten.filter((r) => receptPunten[r.id]?.punten == null).length
+    : 0;
 
   const gefilterd = recepten.filter((r) => {
     if (zoek) {
@@ -799,6 +816,15 @@ function ReceptenLijst({
     if (fScore && r.score < fScore) return false;
     if (fTijdMin > MIN_TIJD && (Number(r.tijd) || 0) < fTijdMin) return false;
     if (fTijd < MAX_TIJD && (Number(r.tijd) || 0) > fTijd) return false;
+    if (puntFilterAan) {
+      const p = receptPunten[r.id]?.punten;
+      // Zonder bekend puntenaantal valt er niet op te filteren. Dat is geen
+      // reden om het recept stilzwijgend te laten verdwijnen, dus staat er
+      // onder de schuif hoeveel er zo buiten vallen.
+      if (p == null) return false;
+      if (p < fPuntMin) return false;
+      if (fPuntMax < MAX_PUNT && p > fPuntMax) return false;
+    }
     return true;
   }).sort((a, b) => {
     if (sortering === "gegeten") return (b.gegeten ?? 0) - (a.gegeten ?? 0) || a.titel.localeCompare(b.titel);
@@ -806,13 +832,19 @@ function ReceptenLijst({
     return a.titel.localeCompare(b.titel);
   });
 
-  const reset = () => { setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0); setFTijdMin(MIN_TIJD); setFTijd(MAX_TIJD); setZoek(""); };
+  const reset = () => {
+    setFKeuken(""); setFHoofd(""); setFMaaltijd(""); setFMoeil(""); setFScore(0);
+    setFTijdMin(MIN_TIJD); setFTijd(MAX_TIJD);
+    setFPuntMin(MIN_PUNT); setFPuntMax(MAX_PUNT);
+    setZoek("");
+  };
   // Het zoekveld telt niet mee: dat staat altijd in beeld en spreekt voor
   // zichzelf. De rest zit straks achter een dichtgeklapt blok en moet dus
   // ergens te zien zijn.
   const actieveFilters = [
     fKeuken, fHoofd, fMaaltijd, fMoeil, fScore ? "score" : "",
     fTijdMin > MIN_TIJD || fTijd < MAX_TIJD ? "tijd" : "",
+    puntFilterAan ? "punten" : "",
   ].filter(Boolean).length;
   const anyFilter = actieveFilters > 0 || zoek;
   const huidig = open ? recepten.find((r) => r.id === open.id) || open : null;
@@ -849,12 +881,12 @@ function ReceptenLijst({
         <ScoreFilter val={fScore} set={setFScore} />
       </div>
 
-      <div style={S.tijdRij}>
-        <span style={S.tijdLabel}><Clock size={13} /> Bereidingstijd</span>
-        <div className="dubbelSlider" style={S.tijdDubbel}>
-          <div style={S.tijdSpoor} />
+      <div style={S.schuifRij}>
+        <span style={S.schuifLabel}><Clock size={13} /> Bereidingstijd</span>
+        <div className="dubbelSlider" style={S.schuifDubbel}>
+          <div style={S.schuifSpoor} />
           <div style={{
-            ...S.tijdVulling,
+            ...S.schuifVulling,
             left: `${(fTijdMin / MAX_TIJD) * 100}%`,
             width: `${((fTijd - fTijdMin) / MAX_TIJD) * 100}%`,
           }} />
@@ -869,13 +901,56 @@ function ReceptenLijst({
             aria-label="Maximale bereidingstijd"
           />
         </div>
-        <span style={S.tijdWaarde}>
+        <span style={S.schuifWaarde}>
           {fTijdMin <= MIN_TIJD && fTijd >= MAX_TIJD ? "alle"
             : fTijdMin <= MIN_TIJD ? `≤ ${fTijd} min`
             : fTijd >= MAX_TIJD ? `≥ ${fTijdMin} min`
             : `${fTijdMin}–${fTijd} min`}
         </span>
       </div>
+
+      {puntenBruikbaar && (
+        <>
+          <div style={S.schuifRij}>
+            <span style={S.schuifLabel}><Activity size={13} /> Punten</span>
+            <div className="dubbelSlider" style={S.schuifDubbel}>
+              <div style={S.schuifSpoor} />
+              <div style={{
+                ...S.schuifVulling,
+                left: `${(fPuntMin / MAX_PUNT) * 100}%`,
+                width: `${((fPuntMax - fPuntMin) / MAX_PUNT) * 100}%`,
+              }} />
+              <input
+                type="range" min={MIN_PUNT} max={MAX_PUNT} step={1} value={fPuntMin}
+                onChange={(e) => setFPuntMin(Math.min(Number(e.target.value), fPuntMax - 1))}
+                aria-label="Minimaal aantal punten"
+              />
+              <input
+                type="range" min={MIN_PUNT} max={MAX_PUNT} step={1} value={fPuntMax}
+                onChange={(e) => setFPuntMax(Math.max(Number(e.target.value), fPuntMin + 1))}
+                aria-label="Maximaal aantal punten"
+              />
+            </div>
+            <span style={S.schuifWaarde}>
+              {fPuntMin <= MIN_PUNT && fPuntMax >= MAX_PUNT ? "alle"
+                : fPuntMin <= MIN_PUNT ? `≤ ${fPuntMax} pt`
+                : fPuntMax >= MAX_PUNT ? `≥ ${fPuntMin} pt`
+                : `${fPuntMin}–${fPuntMax} pt`}
+            </span>
+          </div>
+
+          {puntFilterAan && (
+            <p style={S.schuifHint}>
+              {zonderPunten > 0 && (
+                <>{zonderPunten} recept{zonderPunten === 1 ? "" : "en"} zonder puntenaantal
+                  {zonderPunten === 1 ? " valt" : " vallen"} hierbuiten. </>
+              )}
+              Staat er een <strong>~</strong> voor het getal, dan is het een ondergrens: er valt nog
+              een ingrediënt buiten de telling.
+            </p>
+          )}
+        </>
+      )}
 
       <div style={S.sorteerRij}>
         <span style={S.sorteerLabel}><ArrowDownNarrowWide size={13} /> Sorteer</span>
@@ -3839,12 +3914,13 @@ const S: Record<string, React.CSSProperties> = {
   dialogHint: { fontSize: 13, color: "var(--sub)", margin: "0 0 14px", lineHeight: 1.5 },
   scoreEdit: { display: "flex", alignItems: "center", justifyContent: "space-between", margin: "16px 0", padding: "12px 14px", background: "var(--surface)", borderRadius: 12, border: "1px solid var(--line)" },
   sorteerRij: { display: "flex", alignItems: "center", gap: 6, marginTop: 4, marginBottom: 4, overflowX: "auto" },
-  tijdRij: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
-  tijdLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0 },
-  tijdDubbel: { position: "relative", flex: 1, minWidth: 0, height: 26 },
-  tijdSpoor: { position: "absolute", top: 11, left: 0, right: 0, height: 4, borderRadius: 2, background: "var(--line)" },
-  tijdVulling: { position: "absolute", top: 11, height: 4, borderRadius: 2, background: "var(--accent)" },
-  tijdWaarde: { fontSize: 12, fontWeight: 700, color: "var(--ink)", flexShrink: 0, minWidth: 62, textAlign: "right" },
+  schuifHint: { fontSize: 11.5, lineHeight: 1.6, color: "var(--sub)", margin: "2px 0 6px" },
+  schuifRij: { display: "flex", alignItems: "center", gap: 10, marginTop: 6, marginBottom: 2 },
+  schuifLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0 },
+  schuifDubbel: { position: "relative", flex: 1, minWidth: 0, height: 26 },
+  schuifSpoor: { position: "absolute", top: 11, left: 0, right: 0, height: 4, borderRadius: 2, background: "var(--line)" },
+  schuifVulling: { position: "absolute", top: 11, height: 4, borderRadius: 2, background: "var(--accent)" },
+  schuifWaarde: { fontSize: 12, fontWeight: 700, color: "var(--ink)", flexShrink: 0, minWidth: 62, textAlign: "right" },
   sorteerLabel: { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, marginRight: 2 },
   sorteerBtn: { whiteSpace: "nowrap", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--sub)", fontSize: 12, fontWeight: 600, cursor: "pointer" },
   sorteerBtnOn: { background: "var(--ink)", color: "#fff", borderColor: "var(--ink)" },
