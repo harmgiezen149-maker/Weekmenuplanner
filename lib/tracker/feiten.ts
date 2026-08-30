@@ -1,4 +1,5 @@
-import type { Day, Entry, EntrySource, Profile } from "./types";
+import type { Activity, Day, Entry, EntrySource, Maaltijd, Profile } from "./types";
+import { MAALTIJDEN_TRACKER } from "./types.ts";
 import { effectiveSugar, toonPunten } from "./points.ts";
 import { dagBewegingspunten } from "./activiteit.ts";
 import { dagenTussen, verschuifDatum } from "./datum.ts";
@@ -106,6 +107,13 @@ export interface FactPack {
 
   by_time_of_day: Record<Dagblok, number>;
 
+  /**
+   * Aandeel van de punten per maaltijd. Naast `by_time_of_day`, want die twee
+   * zeggen iets anders: een laat diner en een avondsnack vallen in hetzelfde
+   * tijdblok, terwijl het advies dat eraan hangt tegenovergesteld is.
+   */
+  by_meal: Record<Maaltijd, number>;
+
   buffer: {
     avg_weekly_used: number;
     /** 1 = maandag ... 7 = zondag. Null als de buffer zelden opgaat. */
@@ -135,7 +143,23 @@ export interface FactPack {
     freestyle_days: { count: number; avg_points: number };
   };
 
-  activity: { avg_weekly_points: number; sessions_per_week: number };
+  activity: {
+    avg_weekly_points: number;
+    sessions_per_week: number;
+    /**
+     * Welke beweging, hoe vaak en hoeveel het opleverde. Zonder deze lijst weet
+     * een advies alleen dát er bewogen is, niet wát — en "wandel een half uur
+     * meer" is een ander advies aan iemand die alleen wandelt dan aan iemand
+     * die twee keer per week hardloopt.
+     */
+    top_activities: Array<{
+      name: string;
+      sessions: number;
+      total_minutes: number;
+      total_points: number;
+      avg_minutes: number;
+    }>;
+  };
 
   weight: {
     entries: Array<{ date: string; kg: number; trend_kg: number }>;
@@ -283,18 +307,24 @@ export function buildFactPack(invoer: FeitenInvoer): FactPack {
 
   const gelogd = dagFeiten.filter((d) => d.gelogd);
   const alleEntries = gelogd.flatMap((d) => d.entries);
+  // Beweging telt over álle dagen van het venster, ook dagen zonder logboek:
+  // een wandeling op een dag die je vergat te loggen heb je wel gemaakt.
+  const alleActiviteiten = invoer.dagen
+    .filter((d) => datums.includes(d.date))
+    .flatMap((d) => d.activity ?? []);
 
   const pakket: FactPack = {
     meta: bouwMeta(dagFeiten, gelogd, peildatum, invoer.nu),
     budget: bouwBudget(gelogd, profiel),
     by_weekday: bouwWeekdagen(gelogd),
     by_time_of_day: bouwDagblokken(alleEntries),
+    by_meal: bouwMaaltijden(alleEntries),
     buffer: bouwBuffer(dagFeiten, profiel),
     nutrition: bouwVoeding(gelogd, profiel),
     top_contributors: bouwBijdragers(alleEntries, schaal),
     source_mix: bouwBronmix(alleEntries),
     recipe_vs_freestyle: bouwReceptVergelijking(gelogd),
-    activity: bouwBeweging(dagFeiten),
+    activity: bouwBeweging(dagFeiten, alleActiviteiten),
     weight: bouwGewicht(invoer.wegingen, datums, profiel),
     current_week: bouwLopendeWeek(dagFeiten, profiel),
     energy_reconciliation: { tdee_kcal: 0, avg_logged_kcal: 0, expected_change_kg_per_week: null, actual_change_kg_per_week: null, gap_kg_per_week: null },
@@ -368,6 +398,30 @@ function bouwWeekdagen(gelogd: DagFeit[]): FactPack["by_weekday"] {
  * dag met twee grote. Regels die onder nul uitkomen (mager eiwit) tellen als
  * nul mee — negatieve gewichten zouden het aandeel onleesbaar maken.
  */
+/**
+ * Aandeel van de punten per maaltijd.
+ *
+ * Zelfde vorm als de dagblokken: aandelen van het totaal, niet aantallen
+ * regels. Een maaltijd waar tien kleine dingen in zitten hoort niet zwaarder
+ * te wegen dan een maaltijd met twee grote.
+ */
+function bouwMaaltijden(entries: Entry[]): FactPack["by_meal"] {
+  const per = new Map<Maaltijd, number>(MAALTIJDEN_TRACKER.map((m) => [m, 0]));
+  let totaal = 0;
+
+  for (const e of entries) {
+    const gewicht = Math.max(0, e.points_raw);
+    if (gewicht === 0) continue;
+    const maaltijd = MAALTIJDEN_TRACKER.includes(e.meal) ? e.meal : "snack";
+    per.set(maaltijd, (per.get(maaltijd) ?? 0) + gewicht);
+    totaal += gewicht;
+  }
+
+  const uit = {} as FactPack["by_meal"];
+  for (const m of MAALTIJDEN_TRACKER) uit[m] = rond(deel(per.get(m) ?? 0, totaal), 2);
+  return uit;
+}
+
 function bouwDagblokken(entries: Entry[]): FactPack["by_time_of_day"] {
   const per = new Map<Dagblok, number>(DAGBLOKKEN.map((b) => [b.sleutel, 0]));
   let totaal = 0;
@@ -503,11 +557,12 @@ function bouwReceptVergelijking(gelogd: DagFeit[]): FactPack["recipe_vs_freestyl
  * Delen door de volle twaalf weken zou iemand die zes weken geleden begon de
  * helft van zijn beweging afpakken.
  */
-function bouwBeweging(alle: DagFeit[]): FactPack["activity"] {
+function bouwBeweging(alle: DagFeit[], activiteiten: Activity[]): FactPack["activity"] {
   const weken = wekenMetLogging(alle);
   const punten = alle.reduce((s, d) => s + d.bewegingspunten, 0);
   const sessies = alle.reduce((s, d) => s + d.sessies, 0);
   return {
+    top_activities: bouwActiviteiten(activiteiten),
     avg_weekly_points: rond(deel(punten, weken), 1),
     sessions_per_week: rond(deel(sessies, weken), 1),
   };
@@ -548,6 +603,37 @@ function bouwGewicht(wegingen: Weging[], datums: string[], profiel: Profile): Fa
       ).length,
     },
   };
+}
+
+/**
+ * Welke beweging, hoe vaak en wat het opleverde.
+ *
+ * Gegroepeerd op naam, zwaarste eerst. Zes is genoeg om het patroon te zien en
+ * kort genoeg om het pakket klein te houden.
+ */
+function bouwActiviteiten(activiteiten: Activity[]): FactPack["activity"]["top_activities"] {
+  const per = new Map<string, { naam: string; sessies: number; minuten: number; punten: number }>();
+
+  for (const a of activiteiten) {
+    const naam = String(a?.name ?? "").trim();
+    if (!naam) continue;
+    const rij = per.get(naam.toLowerCase()) ?? { naam, sessies: 0, minuten: 0, punten: 0 };
+    rij.sessies++;
+    rij.minuten += Math.max(0, Number(a.minutes) || 0);
+    rij.punten += Math.max(0, Number(a.points) || 0);
+    per.set(naam.toLowerCase(), rij);
+  }
+
+  return [...per.values()]
+    .sort((a, b) => b.punten - a.punten || b.sessies - a.sessies || a.naam.localeCompare(b.naam))
+    .slice(0, 6)
+    .map((r) => ({
+      name: r.naam,
+      sessions: r.sessies,
+      total_minutes: Math.round(r.minuten),
+      total_points: rond(r.punten, 1),
+      avg_minutes: rond(deel(r.minuten, r.sessies), 0),
+    }));
 }
 
 /**
@@ -774,7 +860,7 @@ export function adviesDrempel(p: FactPack): AdviesDrempel {
  * erop rekent tekent dan een gat — zonder dat er iets misgaat waar je het aan
  * ziet. De vingerafdruk neemt dit mee, dus oude caches vallen vanzelf af.
  */
-export const PAKKETVERSIE = 4;
+export const PAKKETVERSIE = 5;
 
 export function feitenVingerafdruk(invoer: Pick<FeitenInvoer, "peildatum" | "dagen" | "wegingen" | "profiel">): string {
   const regels = invoer.dagen.reduce((s, d) => s + d.entries.length + d.activity.length, 0);

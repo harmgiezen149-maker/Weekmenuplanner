@@ -137,6 +137,40 @@ test("het budgetblok noemt wat er met bewegen verdiend is", () => {
   assert.equal(bouw([dag(PEILDATUM, [regel(PEILDATUM, 12, 30)])]).budget.avg_activity_points_per_day, 0);
 });
 
+test("het aandeel per maaltijd staat naast dat per tijdblok", () => {
+  // Twee regels op dezelfde avond: een diner en een snack. In het tijdblok
+  // vallen ze samen, per maaltijd niet — en daar hangt een ander advies aan.
+  const dagen = [dag(PEILDATUM, [
+    regel(PEILDATUM, 19, 30, { meal: "diner" }),
+    regel(PEILDATUM, 20, 10, { meal: "snack" }),
+  ])];
+  const p = bouw(dagen);
+  assert.equal(p.by_meal.diner, 0.75);
+  assert.equal(p.by_meal.snack, 0.25);
+  assert.equal(p.by_meal.ontbijt, 0);
+  // Allebei in hetzelfde blok van 18 tot 21.
+  assert.equal(p.by_time_of_day.h18_21, 1);
+});
+
+test("het pakket zegt wélke beweging het was, niet alleen hoeveel", () => {
+  const wandeling = (n: number, min: number, punten: number): Activity =>
+    ({ id: `w${n}`, ts: Date.now(), name: "Wandelen", met: 3.5, minutes: min, points: punten });
+  const dagen = [
+    dag(PEILDATUM, [regel(PEILDATUM, 12, 30)], [wandeling(1, 60, 4), wandeling(2, 30, 2)]),
+    dag(verschuifDatum(PEILDATUM, -1), [regel(verschuifDatum(PEILDATUM, -1), 12, 30)],
+      [{ id: "h1", ts: Date.now(), name: "Hardlopen", met: 9, minutes: 40, points: 9 }]),
+  ];
+  const lijst = bouw(dagen).activity.top_activities;
+
+  // Zwaarste eerst: hardlopen levert meer punten dan twee wandelingen samen.
+  assert.equal(lijst[0].name, "Hardlopen");
+  assert.equal(lijst[0].sessions, 1);
+  assert.equal(lijst[1].name, "Wandelen");
+  assert.equal(lijst[1].sessions, 2);
+  assert.equal(lijst[1].total_minutes, 90);
+  assert.equal(lijst[1].avg_minutes, 45);
+});
+
 test("de lichaamssamenstelling komt van de laatste weging, met het verloop erbij", () => {
   const wegingen = [
     // Alle drie binnen het venster van twaalf weken (vanaf 3 juni).

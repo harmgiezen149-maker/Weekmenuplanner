@@ -583,6 +583,11 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             gemiddelde en de mediaan gaan alleen over wat je at.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            Het advies rekent met alles wat er staat: je beweging (die je dagbudget verruimt),
+            wélke beweging het was, de verdeling per maaltijd, en wat je weegschaal aan vet, spier
+            en vocht meegaf. Twee kilo eraf is iets anders als je spiermassa meezakt.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             Bovenaan staat één advies: eerst de waarneming, dan de uitleg, dan de achtergrond, en pas
             daarna de actie. Het verschijnt na je weging op de weegdag, en per weging precies één keer.
             Elk genoemd getal komt uit je eigen cijfers; kan de app er een niet terugvoeren, dan staat

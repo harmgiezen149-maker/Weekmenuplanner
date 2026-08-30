@@ -15,6 +15,7 @@ import {
   VLAG_LABEL, GUARDRAIL_VLAGGEN, WEEKDAGEN, VENSTER_WEKEN,
   type AdviesDrempel, type FactPack,
 } from "@/lib/tracker/feiten";
+import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 
 // ---------------------------------------------------------------------------
 // Inzicht — fase A: de feitenlaag, puur en grafisch. Nog geen advies.
@@ -34,6 +35,8 @@ const S: Record<string, React.CSSProperties> = {
   kaartTitel: { fontSize: 14.5, fontWeight: 800, letterSpacing: "-0.01em", margin: 0 },
   kaartSub: { fontSize: 11.5, color: "var(--sub)", fontWeight: 600, marginLeft: "auto" },
   uitleg: { fontSize: 12.5, color: "var(--sub)", lineHeight: 1.55, margin: "10px 0 0" },
+  maaltijdRij: { display: "flex", flexWrap: "wrap", gap: "4px 14px", marginTop: 12, fontSize: 12, color: "var(--sub)", fontWeight: 600 },
+  maaltijdDeel: { whiteSpace: "nowrap" },
 
   dekking: { display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 },
   dekkingGroot: { fontSize: 30, fontWeight: 800, lineHeight: 1, letterSpacing: "-0.03em" },
@@ -274,6 +277,17 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
           <span style={S.kaartSub}>aandeel van de punten</span>
         </div>
         <Dagverdeling pakket={pakket} />
+
+        {/* Naast het tijdblok ook de maaltijd zelf: een laat diner en een
+            avondsnack vallen in hetzelfde blok, terwijl er iets anders uit
+            volgt. */}
+        <div style={S.maaltijdRij}>
+          {MAALTIJDEN_TRACKER.filter((m) => pakket.by_meal[m] > 0).map((m) => (
+            <span key={m} style={S.maaltijdDeel}>
+              {MAALTIJD_LABEL[m]} <strong>{Math.round(pakket.by_meal[m] * 100)}%</strong>
+            </span>
+          ))}
+        </div>
       </section>
 
       {/* -- budget en spreiding -- */}
@@ -403,6 +417,14 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
           <Cijfer waarde={`${nl(pakket.activity.avg_weekly_points)} pt`}
             label={`beweging per week, ${nl(pakket.activity.sessions_per_week)} sessies`} />
         </div>
+
+        {pakket.activity.top_activities.length > 0 && (
+          <p style={S.uitleg}>
+            Waarmee: {pakket.activity.top_activities.map((a) =>
+              `${a.name.toLowerCase()} (${a.sessions}×, gemiddeld ${nl(a.avg_minutes, 0)} min)`
+            ).join(", ")}.
+          </p>
+        )}
       </section>
 
       {/* -- recept tegen vrij -- */}

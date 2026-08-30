@@ -138,6 +138,19 @@ test("een advies dat een bijdrager bij naam citeert wordt niet afgekeurd", () =>
   assert.deepEqual(uitslag.redenen.filter((r) => r.includes("facts_used")), []);
 });
 
+test("de systeeminstructie zegt wat de getallen betekenen", () => {
+  const sys = adviesSysteem(pak());
+  // Zonder deze uitleg leest het model naleving als "hoe vaak zat je boven je
+  // dagbudget" en blijft de beweging die dat budget verruimde onbenoemd.
+  assert.match(sys, /budget\.adherence_rate en by_weekday/);
+  assert.match(sys, /avg_activity_points_per_day/);
+  assert.match(sys, /top_activities/);
+  assert.match(sys, /weight\.body/);
+  assert.match(sys, /by_meal/);
+  // En hij vraagt om Nederlands in plaats van de sleutelnamen.
+  assert.match(sys, /Schrijf de sleutelnamen niet over/);
+});
+
 test("getallenIn leest Nederlandse getallen, met komma en duizendtalpunt", () => {
   assert.deepEqual(getallenIn("30 punten"), [30]);
   assert.deepEqual(getallenIn("1,19 g eiwit"), [1.19]);

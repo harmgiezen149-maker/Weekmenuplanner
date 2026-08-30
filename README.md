@@ -671,6 +671,9 @@ zonder database te testen op geseede data.
 
 Wat er te zien is:
 
+- **Verdeling over de dag** én **per maaltijd**. Die twee zeggen iets anders: een
+  laat diner en een avondsnack vallen in hetzelfde tijdblok, terwijl het advies
+  dat eraan hangt tegenovergesteld is.
 - **Punten per weekdag**, met het aantal gelogde dagen onder elke balk. Een
   gemiddelde zonder dat getal is niet te wegen. Onderaan de balk staat in het
   groen wat er op die weekdag gemiddeld met bewegen verdiend is. Geen tweede
@@ -747,6 +750,17 @@ dagen in de laatste twee weken. Het scherm zegt dan wat er nog nodig is.
 naam, de laatste drie adviezen met hun uitkomst, en welke trigger dit was. Het
 mag vrij interpreteren, maar niet vrij rekenen: alleen getallen die letterlijk in
 het pakket staan, elk met de sleutel waar het vandaan komt.
+
+**Het pakket krijgt een leeswijzer mee.** Het model kreeg een plat object zonder
+toelichting en las het daarom soms verkeerd: het schreef "de helft van de dagen
+zit je boven budget" zonder te noemen dat bewegen het budget van die dag
+verruimt en dat de naleving dat al meetelt. Een blok in de systeeminstructie
+zegt nu wat de sleutels betekenen — dat naleving en overschrijding de
+bewegingspunten al bevatten terwijl het gemiddelde alleen over eten gaat, dat
+het dagbudget geen harde grens is maar een weekbuffer heeft, dat dagen zonder
+logboek nergens als nul tellen, en dat `weight.body` en `activity.top_activities`
+er kunnen zijn. Plus: schrijf de sleutelnamen niet over in je tekst.
+"Adherence rate" is een veldnaam, geen Nederlands.
 
 **De validatielaag** loopt daarna alles na, server-side, vóór opslaan:
 
