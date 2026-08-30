@@ -19,6 +19,24 @@ test("de trend volgt het exponentieel voortschrijdend gemiddelde", () => {
   assert.ok(Math.abs(r[1].delta_kg - -0.25) < 1e-9);
 });
 
+test("het verschil op de weegschaal staat los van het verschil in de trend", () => {
+  // Precies het geval waar dit om begonnen is: 2,4 kilo lager op de weegschaal,
+  // terwijl de trend maar 0,6 zakt. Beide getallen horen er te staan.
+  const r = metTrend([w("2026-01-04", 100), w("2026-01-11", 97.6)]);
+  assert.equal(r[0].delta_meting_kg, null, "de eerste weging heeft niets om mee te vergelijken");
+  assert.ok(Math.abs(r[1].delta_meting_kg! - -2.4) < 1e-9);
+  // De trend beweegt een kwart mee: 0,25 * 2,4 = 0,6.
+  assert.ok(Math.abs(r[1].delta_kg - -0.6) < 1e-9);
+});
+
+test("het verschil op de weegschaal telt van meting tot meting, niet van trend tot trend", () => {
+  // Twee keer hetzelfde gewicht: op de weegschaal is er niets veranderd, ook al
+  // loopt de trend nog na te ijlen naar dat gewicht toe.
+  const r = metTrend([w("2026-01-04", 100), w("2026-01-11", 96), w("2026-01-18", 96)]);
+  assert.equal(r[2].delta_meting_kg, 0);
+  assert.ok(r[2].delta_kg < 0, "de trend zakt nog door");
+});
+
 test("de trend dempt een uitschieter van een kilo", () => {
   // Vier stabiele wegingen, dan een vochtdag van +1,5 kg.
   const r = metTrend([

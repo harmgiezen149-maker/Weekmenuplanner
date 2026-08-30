@@ -246,6 +246,23 @@ meer dan een kilo af van het gewicht waarop je huidige budget rust, dan wordt he
 budget herberekend en zie je dat op het weegscherm terug. Zonder die dempingsstap
 zou een dag met vocht vasthouden je budget omhoog gooien.
 
+#### Het echte verschil staat er ook
+
+Sturen op de trend is één ding; het verzwijgen van wat de weegschaal zei is iets
+anders. Sta je 2,4 kilo lager dan vorige week en zie je alleen een trendgewicht
+dat 0,9 zakte, dan lijkt de app je meting weg te moffelen — en dan geloof je het
+getal niet meer dat je wél moet volgen.
+
+`delta_meting_kg` staat daarom naast `delta_kg` in de reeks: het verschil met de
+vórige meting naast het verschil met de vorige trendwaarde. Onder je laatste
+weging staat "−2,4 kg op de weegschaal sinds 23 augustus (87,5 kg)", en in de
+lijst staat het verschil in het groen naast de meting waar het bij hoort, met de
+trendsprong tussen haakjes achter de trend.
+
+Dat laatste was daarvoor één los getal achter "trend 89,0 kg" dat de trendsprong
+was maar bij de meting leek te horen. Twee getallen zonder naam naast elkaar is
+erger dan één getal.
+
 #### Een weging corrigeren
 
 Een verkeerd ingetikt getal of een dag die je pas 's avonds invoert, is niet iets

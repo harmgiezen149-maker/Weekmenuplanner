@@ -541,6 +541,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             trendlijn als hoofdfiguur. Een kilo verschil van dag tot dag is vocht, geen vet.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            Onder je laatste weging staat wat de <strong>weegschaal</strong> deed sinds de vorige
+            keer, en in de lijst staat dat verschil naast elke meting. Het trendgewicht loopt daar
+            met opzet op achter: het beweegt maar een kwart van een uitschieter mee. Sta je 2,4 kilo
+            lager, dan zie je dat nu allebei — het echte verschil én wat de trend ervan maakt.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             Vergissing ingetikt, of een dag vergeten? Bij het invoerveld staat een <strong>datum</strong>,
             zodat je een gemiste dag alsnog kunt invullen, en elke weging in de lijst heeft een
             potlood waarmee je het gewicht én de datum aanpast. Verplaats je een weging naar een dag

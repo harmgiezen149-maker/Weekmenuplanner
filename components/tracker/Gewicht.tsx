@@ -32,6 +32,8 @@ export default function Gewicht({
 }) {
   const { wegingen, profiel, voortgang: v, tempoPerWeek: tempo } = gegevens;
   const laatste = wegingen.length > 0 ? wegingen[wegingen.length - 1] : null;
+  // De weging daarvoor, om het echte verschil aan op te hangen.
+  const vorige = wegingen.length > 1 ? wegingen[wegingen.length - 2] : null;
 
   const [kg, setKg] = useState("");
   const [datum, setDatum] = useState(vandaag);
@@ -125,12 +127,26 @@ export default function Gewicht({
               <div style={{ ...T.ringRegel, color: "var(--sub)" }}>
                 Laatst gewogen: {nlKg(laatste.kg)} kg op {korteDatum(laatste.date)}
               </div>
+              {vorige && laatste.delta_meting_kg != null && laatste.delta_meting_kg !== 0 && (
+                <div style={{
+                  ...T.ringRegel,
+                  fontWeight: 800,
+                  color: laatste.delta_meting_kg < 0 ? "var(--green)" : "var(--ink)",
+                }}>
+                  {laatste.delta_meting_kg < 0 ? "−" : "+"}
+                  {nlKg(Math.abs(laatste.delta_meting_kg))} kg
+                  <span style={{ fontWeight: 600, color: "var(--sub)" }}>
+                    {" "}op de weegschaal sinds {korteDatum(vorige.date)} ({nlKg(vorige.kg)} kg)
+                  </span>
+                </div>
+              )}
             </div>
             <Scale size={34} style={{ color: "var(--line)", flexShrink: 0 }} />
           </div>
           <p style={{ ...T.hint, marginTop: 12 }}>
             De app stuurt op de trend, niet op de losse meting. Een kilo verschil van
-            dag tot dag is vocht; de trendlijn haalt dat eruit.
+            dag tot dag is vocht; de trendlijn haalt dat eruit — daarom loopt het
+            trendgewicht achter op wat de weegschaal vanochtend zei.
           </p>
         </div>
       )}
@@ -221,10 +237,24 @@ export default function Gewicht({
               ) : (
                 <div key={w.date} style={T.regel}>
                   <div style={T.regelTekst}>
-                    <div style={T.regelNaam}>{nlKg(w.kg)} kg</div>
+                    {/* Het verschil op de weegschaal staat naast de meting waar
+                        het bij hoort; het verschil in de trend achter de trend.
+                        Eerst stond er één los getal achter "trend 89,0" dat de
+                        trendsprong was maar bij de meting leek te horen. */}
+                    <div style={T.regelNaam}>
+                      {nlKg(w.kg)} kg
+                      {w.delta_meting_kg != null && w.delta_meting_kg !== 0 && (
+                        <span style={{
+                          marginLeft: 7, fontSize: 12.5, fontWeight: 700,
+                          color: w.delta_meting_kg < 0 ? "var(--green)" : "var(--sub)",
+                        }}>
+                          {teken(w.delta_meting_kg)}
+                        </span>
+                      )}
+                    </div>
                     <div style={T.regelSub}>
                       {korteDatum(w.date)} · trend {nlKg(w.trend_kg)} kg
-                      {w.delta_kg !== 0 && ` · ${w.delta_kg < 0 ? "−" : "+"}${nl(Math.abs(w.delta_kg), 2)}`}
+                      {w.delta_kg !== 0 && ` (${teken(w.delta_kg)})`}
                     </div>
                   </div>
                   <button style={T.wisKnop} onClick={() => beginBewerken(w)}
@@ -243,6 +273,11 @@ export default function Gewicht({
       )}
     </>
   );
+}
+
+/** Een verschil met zijn teken ervoor, in kilo. */
+function teken(kg: number): string {
+  return `${kg < 0 ? "−" : "+"}${nl(Math.abs(kg), 2)}`;
 }
 
 function korteDatum(datum: string): string {

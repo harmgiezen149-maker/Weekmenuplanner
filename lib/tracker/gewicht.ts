@@ -20,6 +20,16 @@ export interface WegingMetTrend extends Weging {
   trend_kg: number;
   /** Verschil met de vorige trendwaarde. Negatief is afname. */
   delta_kg: number;
+  /**
+   * Verschil met de vórige meting, niet met de vorige trendwaarde. Null bij de
+   * eerste weging, want er is dan niets om mee te vergelijken.
+   *
+   * De app stuurt op de trend, en dat blijft zo — maar wie 2,4 kilo lager op de
+   * weegschaal staat wil dat getal zien, niet alleen de gedempte versie ervan.
+   * Beide naast elkaar tonen is eerlijker dan één van de twee weglaten: de
+   * trend zegt waar het heen gaat, de meting wat er vanochtend stond.
+   */
+  delta_meting_kg: number | null;
 }
 
 /**
@@ -41,6 +51,7 @@ export function metTrend(wegingen: Weging[]): WegingMetTrend[] {
       ...w,
       trend_kg: trend,
       delta_kg: i === 0 ? 0 : trend - uit[i - 1].trend_kg,
+      delta_meting_kg: i === 0 ? null : w.kg - oplopend[i - 1].kg,
     });
   });
 
