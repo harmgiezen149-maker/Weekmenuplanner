@@ -590,8 +590,9 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           <p style={{ margin: "0 0 8px" }}>
             Bovenaan staat één advies: eerst de waarneming, dan de uitleg, dan de achtergrond, en pas
             daarna de actie. Het verschijnt na je weging op de weegdag, en per weging precies één keer.
-            Elk genoemd getal komt uit je eigen cijfers; kan de app er een niet terugvoeren, dan staat
-            het advies er met de markering <em>niet volledig geverifieerd</em> bij.
+            Elk genoemd getal wordt nagerekend tegen je eigen cijfers. Lukt dat bij een getal niet,
+            dan staat dat er onder het advies bij: meestal een vuistregel van buiten of iets dat het
+            model zelf uitrekende. Het kan kloppen, maar de app kan het niet nakijken.
           </p>
           <p style={{ margin: 0 }}>
             Onder het advies staat <strong>Analyseer mijn patroon</strong> als je zelf iets wilt vragen,

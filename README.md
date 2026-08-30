@@ -784,6 +784,19 @@ er kunnen zijn. Plus: schrijf de sleutelnamen niet over in je tekst.
    betreffende getallen erbij. Stilzwijgend accepteren is geen optie, en
    weggooien om één getal ook niet.
 
+   Dat narekenen gebeurt tegen **het hele feitenpakket**, niet tegen alleen de
+   waarden achter `facts_used`. Eerst was dat andersom, en dan werd een getal
+   dat wél uit je gegevens kwam maar dat het model vergat aan te melden — je
+   weekbuffer van 2,3 — toch gemarkeerd. Zo'n vals alarm holt de markering uit:
+   wie hem drie keer ten onrechte ziet, kijkt er de vierde keer overheen.
+
+   Het maakt de controle iets ruimer; een gevuld pakket bevat zo'n tachtig
+   verschillende getallen, elk met 1% speling. Tandeloos wordt hij er niet van:
+   een vuistregel van buiten (7000 kcal per kilo vet), een zelf uitgerekend
+   verschil (156 kcal) en een getal dat er nét naast zit worden alle drie nog
+   aangewezen. `facts_used` blijft verplicht — een verzonnen sleutel keurt het
+   advies nog steeds af — maar dient nu als aangifte, niet als bewijsstuk.
+
 > **Wat hier eerder misging.** Het uitlezen van een sleutel splitste alleen op
 > punten, dus `top_contributors[5].name` kwam uit op een veld dat zo heet — en
 > dat bestaat niet. Elke lijst in het pakket was daarmee onciteerbaar, en juist

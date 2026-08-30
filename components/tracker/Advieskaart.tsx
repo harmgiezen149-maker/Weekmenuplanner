@@ -147,10 +147,16 @@ export default function Advieskaart({
       {!advies.verified && (
         <div style={{ ...S.voet, display: "flex", gap: 9 }}>
           <ShieldAlert size={16} style={{ color: "var(--gold)", flexShrink: 0, marginTop: 1 }} />
+          {/* Wat dit betekent hoort erbij te staan. "Niet terug te voeren op
+              het feitenpakket" is waar, maar zegt een lezer niets — en een
+              waarschuwing die je niet begrijpt lees je de volgende keer over. */}
           <span>
-            <strong>Niet volledig geverifieerd.</strong> Deze getallen uit de tekst waren niet
-            terug te voeren op het feitenpakket: {advies.onverklaarbare_getallen.map((n) => nl(n, 2)).join(", ")}.
-            De cijfers op deze pagina zijn wél nagerekend.
+            <strong>Niet elk getal komt uit je eigen cijfers.</strong>{" "}
+            {advies.onverklaarbare_getallen.map((n) => nl(n, 2)).join(", ")}
+            {advies.onverklaarbare_getallen.length === 1 ? " staat" : " staan"} niet in wat de app
+            over je heeft gemeten. Meestal is dat een vuistregel van buiten of iets dat het model
+            zelf heeft uitgerekend; het kan kloppen, maar de app kan het niet nakijken. De cijfers
+            in de grafieken hieronder zijn wél nagerekend.
           </span>
         </div>
       )}

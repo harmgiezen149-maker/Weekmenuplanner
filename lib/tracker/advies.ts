@@ -237,6 +237,34 @@ export function getallenIn(tekst: string): number[] {
 }
 
 /**
+ * Elk getal dat ergens in het feitenpakket staat.
+ *
+ * De controle op genoemde getallen vergelijkt hiermee, en niet met alleen de
+ * waarden achter `facts_used`. Dat verschil is klein in de code en groot op het
+ * scherm: noemde het model een getal dat wél uit je gegevens komt maar vergat
+ * het aan te melden — je weekbuffer van 2,3 bijvoorbeeld — dan stond het advies
+ * als "niet volledig geverifieerd" gemarkeerd terwijl er niets mis mee was.
+ * Zo'n vals alarm holt de markering uit: wie hem drie keer ten onrechte ziet,
+ * kijkt er de vierde keer overheen.
+ *
+ * Het maakt de controle iets ruimer — er staan zo'n tachtig verschillende
+ * getallen in een gevuld pakket — maar niet tandeloos: een vuistregel van
+ * buiten (7000 kcal per kilo vet) of een zelf uitgerekend verschil (156 kcal)
+ * komt in het pakket niet voor en wordt nog steeds aangewezen.
+ */
+function alleGetallen(pakket: FactPack): number[] {
+  const uit = new Set<number>();
+  const loop = (v: unknown, diep: number) => {
+    if (diep > 8 || uit.size > 5000) return;
+    if (typeof v === "number") { if (Number.isFinite(v)) uit.add(v); return; }
+    if (Array.isArray(v)) { for (const x of v) loop(x, diep + 1); return; }
+    if (v && typeof v === "object") { for (const x of Object.values(v)) loop(x, diep + 1); }
+  };
+  loop(pakket, 0);
+  return [...uit];
+}
+
+/**
  * Of een getal uit de tekst terug te voeren is op een waarde uit het pakket.
  *
  * Een waarde mag in meer vormen terugkomen dan hij is opgeslagen: een aandeel
@@ -350,13 +378,10 @@ export function valideerAdvies(
 ): Validatie {
   const redenen: string[] = [];
 
-  // 1. Elke sleutel in facts_used moet bestaan.
-  const waarden: number[] = [];
+  // 1. Elke sleutel in facts_used moet bestaan. Het blijft de opdracht om elk
+  //    genoemd getal aan te melden — een verzonnen sleutel keurt het advies af —
+  //    maar het narekenen hieronder gebeurt tegen het hele pakket.
   for (const sleutel of payload.facts_used) {
-    const waarde = leesFeit(pakket, sleutel);
-    if (waarde != null) { waarden.push(waarde); continue; }
-    // Een sleutel die naar tekst wijst bestaat wél — hij levert alleen geen
-    // getal om de cijfers in de tekst aan te toetsen.
     if (!bestaatFeit(pakket, sleutel)) {
       redenen.push(`onbekende sleutel in facts_used: ${sleutel}`);
     }
@@ -419,6 +444,7 @@ export function valideerAdvies(
   //    de doelwaarde van de actie is per definitie nieuw en hoort niet in het
   //    pakket te staan.
   const onverklaarbaar: number[] = [];
+  const waarden = alleGetallen(pakket);
   for (const veld of [payload.headline, payload.observation, payload.explanation, payload.background]) {
     for (const getal of getallenIn(veld)) {
       if (!herleidbaar(getal, waarden) && !onverklaarbaar.includes(getal)) {

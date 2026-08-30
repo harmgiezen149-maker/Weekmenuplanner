@@ -231,6 +231,39 @@ test("een getal dat nergens op terug te voeren is maakt het advies ongeverifieer
   assert.deepEqual(v.onverklaarbaar, [61]);
 });
 
+test("een getal uit het pakket telt ook zonder aanmelding in facts_used", () => {
+  const p = pak();
+  // De vezels staan in het pakket maar niet in facts_used van dit advies.
+  // Zo'n getal werd eerder gemarkeerd als niet-herleidbaar, terwijl het gewoon
+  // van de gebruiker was — en een waarschuwing die vaak onterecht is, wordt
+  // niet meer gelezen.
+  const vezels = p.nutrition.fiber_g;
+  assert.ok(vezels > 0, "de testdata moet vezels hebben");
+  assert.notEqual(vezels, p.by_weekday.zaterdag.avg_points);
+  const v = valideerAdvies(advies({
+    observation: `Je komt op ${nlGetal(vezels)} gram vezels per dag.`,
+    facts_used: ["by_weekday.zaterdag.avg_points"],
+  }), p);
+  assert.equal(v.geverifieerd, true);
+  assert.deepEqual(v.onverklaarbaar, []);
+});
+
+test("een vuistregel van buiten het pakket blijft aangewezen", () => {
+  // Precies wat er in de praktijk misging: 7000 kcal per kilo vet is algemene
+  // kennis, geen meting. Het pakket ruimer aftasten mag dat niet wegpoetsen.
+  const v = valideerAdvies(advies({
+    background: "Een kilo lichaamsvet komt overeen met ongeveer 7000 kcal.",
+  }), pak());
+  assert.equal(v.geldig, true);
+  assert.equal(v.geverifieerd, false);
+  assert.deepEqual(v.onverklaarbaar, [7000]);
+});
+
+/** Een getal zoals de app het schrijft: komma als decimaalteken. */
+function nlGetal(n: number): string {
+  return String(n).replace(".", ",");
+}
+
 test("een aandeel mag als percentage geschreven worden", () => {
   // adherence_rate staat als 1 in het pakket; "100%" hoort daar bij te horen.
   const v = valideerAdvies(advies({
