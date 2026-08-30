@@ -541,6 +541,14 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             trendlijn als hoofdfiguur. Een kilo verschil van dag tot dag is vocht, geen vet.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            Meet je weegschaal meer dan gewicht, klap dan <strong>Meer van je weegschaal</strong>
+            open: vetpercentage, spiermassa en vochtgehalte. Alles optioneel — leeg betekent niet
+            gemeten en telt nergens als nul mee. Bij spiermassa kies je kg of %, want die twee
+            getallen lijken te veel op elkaar om te raden. <strong>BMI</strong> vul je niet in: die
+            rekent de app uit je gewicht en je lengte, zodat er niet twee verschillende in omloop
+            zijn. Op Inzicht staat het verloop over twaalf weken.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             Onder je laatste weging staat wat de <strong>weegschaal</strong> deed sinds de vorige
             keer, en in de lijst staat dat verschil naast elke meting. Het trendgewicht loopt daar
             met opzet op achter: het beweegt maar een kwart van een uitschieter mee. Sta je 2,4 kilo

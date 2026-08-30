@@ -1,12 +1,47 @@
 "use client";
 
 import React, { useState } from "react";
-import { Check, Loader2, Pencil, Scale, Trash2, TrendingDown, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Loader2, Pencil, Scale, Trash2, TrendingDown, X } from "lucide-react";
 import { T } from "./stijl";
 import Trendgrafiek from "./Trendgrafiek";
 import { nl, nlKg } from "@/lib/tracker/datum";
+import { bmi, bmiKlasse } from "@/lib/tracker/gewicht";
 import type { WegingMetTrend, Voortgang } from "@/lib/tracker/gewicht";
+import type { Meting } from "./api";
 import type { Profile } from "@/lib/tracker/types";
+
+/** De extra velden zoals ze in het formulier staan: ruwe tekst. */
+interface Velden {
+  vet: string;
+  spier: string;
+  spierEenheid: "kg" | "pct";
+  vocht: string;
+}
+
+function legeVelden(): Velden {
+  return { vet: "", spier: "", spierEenheid: "kg", vocht: "" };
+}
+
+/**
+ * De velden omzetten naar wat de server verwacht.
+ *
+ * Een leeg veld wordt `null` en niet weggelaten: bij het aanpassen van een
+ * weging betekent weglaten "laat staan zoals het was", en dan zou een veld dat
+ * je bewust leeghaalt gewoon blijven staan.
+ */
+function meting(v: Velden): Meting {
+  return {
+    vet_pct: getalOfNull(v.vet),
+    vocht_pct: getalOfNull(v.vocht),
+    spier: getalOfNull(v.spier),
+    spier_eenheid: v.spierEenheid,
+  };
+}
+
+function getalOfNull(s: string): number | null {
+  const n = Number(String(s).replace(",", "."));
+  return s.trim() !== "" && Number.isFinite(n) && n > 0 ? n : null;
+}
 
 export interface GewichtGegevens {
   wegingen: WegingMetTrend[];
@@ -24,10 +59,10 @@ export default function Gewicht({
   bezig: boolean;
   fout: string;
   herberekend: boolean;
-  onWeeg: (kg: number, datum?: string, note?: string) => void;
+  onWeeg: (kg: number, datum?: string, meting?: Meting, note?: string) => void;
   onWis: (datum: string) => void;
   /** Een bestaande weging aanpassen; geeft een botsing terug in plaats van te overschrijven. */
-  onWijzig: (v: { van: string; naar: string; kg: number; vervang?: boolean })
+  onWijzig: (v: { van: string; naar: string; kg: number; vervang?: boolean } & Meting)
     => Promise<{ botsing?: { datum: string; kg: number } }>;
 }) {
   const { wegingen, profiel, voortgang: v, tempoPerWeek: tempo } = gegevens;
@@ -46,12 +81,26 @@ export default function Gewicht({
 
   // Welke weging op dit moment bewerkt wordt, en de vraag die openstaat als de
   // nieuwe datum al bezet is.
-  const [bewerk, setBewerk] = useState<{ van: string; kg: string; datum: string } | null>(null);
+  const [bewerk, setBewerk] = useState<
+    { van: string; kg: string; datum: string } & Velden | null
+  >(null);
+
+  // De extra metingen van een weegschaal met lichaamsanalyse. Dichtgeklapt,
+  // want de meeste wegingen zijn één getal en een rij lege velden maakt van
+  // wegen een formulier.
+  const [meerOpen, setMeerOpen] = useState(false);
+  const [velden, setVelden] = useState<Velden>(legeVelden());
   const [botsing, setBotsing] = useState<{ datum: string; kg: number } | null>(null);
 
   const beginBewerken = (w: WegingMetTrend) => {
     setBotsing(null);
-    setBewerk({ van: w.date, kg: nlKg(w.kg), datum: w.date });
+    setBewerk({
+      van: w.date, kg: nlKg(w.kg), datum: w.date,
+      vet: w.vet_pct != null ? nlKg(w.vet_pct) : "",
+      spier: w.spier_kg != null ? nlKg(w.spier_kg) : "",
+      spierEenheid: "kg",
+      vocht: w.vocht_pct != null ? nlKg(w.vocht_pct) : "",
+    });
   };
 
   const bewaarBewerking = async (vervang = false) => {
@@ -60,6 +109,7 @@ export default function Gewicht({
     if (nieuwKg <= 0) return;
     const uit = await onWijzig({
       van: bewerk.van, naar: bewerk.datum, kg: nieuwKg, ...(vervang ? { vervang } : {}),
+      ...meting(bewerk),
     });
     if (uit.botsing) { setBotsing(uit.botsing); return; }
     setBewerk(null); setBotsing(null);
@@ -95,10 +145,21 @@ export default function Gewicht({
               onChange={(e) => setDatum(e.target.value || vandaag)} />
           </div>
         </div>
+        <button style={T.meerKnop} onClick={() => setMeerOpen((o) => !o)} aria-expanded={meerOpen}>
+          {meerOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          Meer van je weegschaal
+          {!meerOpen && ingevuld(velden) > 0 && ` (${ingevuld(velden)} ingevuld)`}
+        </button>
+
+        {meerOpen && <MeerVelden waarden={velden} onWijzig={(v) => setVelden((p) => ({ ...p, ...v }))} />}
+
         <button
           style={{ ...T.primair, opacity: kilo > 0 && !bezig ? 1 : 0.5 }}
           disabled={kilo <= 0 || bezig}
-          onClick={() => { onWeeg(kilo, datum); setKg(""); setDatum(vandaag); }}
+          onClick={() => {
+            onWeeg(kilo, datum, meting(velden));
+            setKg(""); setDatum(vandaag); setVelden(legeVelden());
+          }}
         >
           {bezig ? <Loader2 size={16} className="spin" /> : <Check size={16} />}
           {opDieDag ? "Vervangen" : "Opslaan"}
@@ -143,6 +204,8 @@ export default function Gewicht({
             </div>
             <Scale size={34} style={{ color: "var(--line)", flexShrink: 0 }} />
           </div>
+          <Samenstelling weging={laatste} lengteCm={profiel?.height_cm} />
+
           <p style={{ ...T.hint, marginTop: 12 }}>
             De app stuurt op de trend, niet op de losse meting. Een kilo verschil van
             dag tot dag is vocht; de trendlijn haalt dat eruit — daarom loopt het
@@ -212,6 +275,11 @@ export default function Gewicht({
                     </div>
                   </div>
 
+                  <MeerVelden
+                    waarden={bewerk}
+                    onWijzig={(v) => setBewerk({ ...bewerk, ...v })}
+                  />
+
                   {botsing && (
                     <p style={{ ...T.hint, color: "var(--over)" }}>
                       Op {korteDatum(botsing.datum)} staat al <strong>{nlKg(botsing.kg)} kg</strong>.
@@ -256,6 +324,15 @@ export default function Gewicht({
                       {korteDatum(w.date)} · trend {nlKg(w.trend_kg)} kg
                       {w.delta_kg !== 0 && ` (${teken(w.delta_kg)})`}
                     </div>
+                    {(w.vet_pct != null || w.spier_kg != null || w.vocht_pct != null) && (
+                      <div style={T.regelSub}>
+                        {[
+                          w.vet_pct != null ? `vet ${nlKg(w.vet_pct)}%` : "",
+                          w.spier_kg != null ? `spier ${nlKg(w.spier_kg)} kg` : "",
+                          w.vocht_pct != null ? `vocht ${nlKg(w.vocht_pct)}%` : "",
+                        ].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                   </div>
                   <button style={T.wisKnop} onClick={() => beginBewerken(w)}
                     aria-label={`Weging van ${w.date} aanpassen`}>
@@ -272,6 +349,123 @@ export default function Gewicht({
         </>
       )}
     </>
+  );
+}
+
+/** Hoeveel van de extra velden is ingevuld. */
+function ingevuld(v: Velden): number {
+  return [v.vet, v.spier, v.vocht].filter((x) => x.trim() !== "").length;
+}
+
+/**
+ * De extra metingen van een weegschaal met lichaamsanalyse.
+ *
+ * Bij spiermassa staat een keuze tussen kilo en procent, want die twee reeksen
+ * overlappen bijna volledig: 38 kan 38 kilo spier zijn of 38 procent van je
+ * gewicht. Uit het getal alleen valt dat niet af te leiden, en fout opgeslagen
+ * is het jarenlang fout.
+ */
+function MeerVelden({
+  waarden, onWijzig,
+}: {
+  waarden: Velden;
+  onWijzig: (v: Partial<Velden>) => void;
+}) {
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={T.veldRij}>
+        <div style={{ flex: 1 }}>
+          <label style={T.label}>Vet (%)</label>
+          <input style={T.veld} value={waarden.vet} inputMode="decimal" placeholder="—"
+            onChange={(e) => onWijzig({ vet: e.target.value })} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={T.label}>Vocht (%)</label>
+          <input style={T.veld} value={waarden.vocht} inputMode="decimal" placeholder="—"
+            onChange={(e) => onWijzig({ vocht: e.target.value })} />
+        </div>
+      </div>
+      <div style={T.veldRij}>
+        <div style={{ flex: 1 }}>
+          <label style={T.label}>Spiermassa</label>
+          <input style={T.veld} value={waarden.spier} inputMode="decimal" placeholder="—"
+            onChange={(e) => onWijzig({ spier: e.target.value })} />
+        </div>
+        <div style={{ width: 104 }}>
+          <label style={T.label}>Eenheid</label>
+          <select style={T.veld} value={waarden.spierEenheid}
+            onChange={(e) => onWijzig({ spierEenheid: e.target.value as "kg" | "pct" })}>
+            <option value="kg">kg</option>
+            <option value="pct">%</option>
+          </select>
+        </div>
+      </div>
+      <p style={T.hint}>
+        Alles optioneel. Meet je weegschaal het niet, laat het leeg — een leeg veld
+        betekent &ldquo;niet gemeten&rdquo; en telt nergens als nul mee. BMI hoef je niet in te
+        vullen: die rekent de app uit je gewicht en je lengte.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * BMI en lichaamssamenstelling van de laatste weging.
+ *
+ * BMI komt uit je eigen lengte en niet van de weegschaal: die rekent met de
+ * lengte die in het apparaat staat, en twee BMI's die elkaar tegenspreken is
+ * erger dan één die je kunt narekenen.
+ */
+function Samenstelling({
+  weging, lengteCm,
+}: {
+  weging: WegingMetTrend; lengteCm?: number;
+}) {
+  const index = bmi(weging.kg, lengteCm);
+  const heeftIets = index != null || weging.vet_pct != null
+    || weging.spier_kg != null || weging.vocht_pct != null;
+  if (!heeftIets) return null;
+
+  return (
+    <div style={T.samenstelling}>
+      {index != null && (
+        <Meetwaarde label={`BMI · ${bmiKlasse(index)}`} waarde={nlKg(index)} verschil={null} />
+      )}
+      {weging.vet_pct != null && (
+        <Meetwaarde label="Vet" waarde={`${nlKg(weging.vet_pct)}%`} verschil={weging.delta_vet_pct} />
+      )}
+      {weging.spier_kg != null && (
+        <Meetwaarde label="Spiermassa" waarde={`${nlKg(weging.spier_kg)} kg`} verschil={weging.delta_spier_kg} />
+      )}
+      {weging.vocht_pct != null && (
+        <Meetwaarde label="Vocht" waarde={`${nlKg(weging.vocht_pct)}%`} verschil={weging.delta_vocht_pct} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Eén meetwaarde met het verschil sinds de vorige keer.
+ *
+ * Het verschil krijgt geen kleur. Bij gewicht is omlaag de bedoeling, maar bij
+ * spiermassa is omlaag juist ongewenst en bij vocht hangt het van de dag af —
+ * groen en rood zouden hier een oordeel geven dat er niet is.
+ */
+function Meetwaarde({
+  label, waarde, verschil,
+}: {
+  label: string; waarde: string; verschil: number | null;
+}) {
+  return (
+    <div style={T.meetVak}>
+      <div style={T.meetWaarde}>
+        {waarde}
+        {verschil != null && verschil !== 0 && (
+          <span style={T.meetVerschil}>{teken(verschil)}</span>
+        )}
+      </div>
+      <div style={T.meetLabel}>{label}</div>
+    </div>
   );
 }
 

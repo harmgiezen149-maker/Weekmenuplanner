@@ -3,7 +3,7 @@ import { effectiveSugar, toonPunten } from "./points.ts";
 import { dagBewegingspunten } from "./activiteit.ts";
 import { dagenTussen, verschuifDatum } from "./datum.ts";
 import { dagIndex, weekStart } from "./week.ts";
-import { metTrend, type Weging } from "./gewicht.ts";
+import { metTrend, bmi, type Weging, type WegingMetTrend } from "./gewicht.ts";
 import { bmr, leeftijd, tdee } from "./budget.ts";
 
 // ---------------------------------------------------------------------------
@@ -143,6 +143,26 @@ export interface FactPack {
     total_change_kg: number | null;
     current_trend_kg: number | null;
     goal_kg: number;
+    /**
+     * Wat een weegschaal met lichaamsanalyse erbij meet, van de laatste weging
+     * binnen het venster, met het verloop sinds de eerste weging die het ook
+     * had. Null waar niet gemeten is — nul zou "gemeten en het was nul" zeggen.
+     *
+     * Dit is wat gewicht alleen niet vertelt: twee kilo eraf is iets anders
+     * als de spiermassa meezakt dan als het vet eraf gaat.
+     */
+    body: {
+      bmi: number | null;
+      body_fat_pct: number | null;
+      muscle_kg: number | null;
+      water_pct: number | null;
+      /** Verandering over het venster; null als er te weinig metingen zijn. */
+      body_fat_pct_change: number | null;
+      muscle_kg_change: number | null;
+      water_pct_change: number | null;
+      /** Over hoeveel wegingen die verandering gaat. */
+      measurements_counted: number;
+    };
   };
 
   energy_reconciliation: {
@@ -501,6 +521,8 @@ function bouwGewicht(wegingen: Weging[], datums: string[], profiel: Profile): Fa
   const tot = datums[datums.length - 1];
   const inVenster = reeks.filter((w) => w.date >= van && w.date <= tot);
 
+  const laatste = inVenster[inVenster.length - 1];
+
   return {
     entries: inVenster.map((w) => ({
       date: w.date, kg: rond(w.kg, 1), trend_kg: rond(w.trend_kg, 2),
@@ -511,7 +533,35 @@ function bouwGewicht(wegingen: Weging[], datums: string[], profiel: Profile): Fa
       : null,
     current_trend_kg: reeks.length > 0 ? rond(reeks[reeks.length - 1].trend_kg, 2) : null,
     goal_kg: profiel.goal_weight_kg,
+    body: {
+      bmi: laatste ? bmi(laatste.kg, profiel.height_cm) : null,
+      body_fat_pct: laatste?.vet_pct ?? null,
+      muscle_kg: laatste?.spier_kg ?? null,
+      water_pct: laatste?.vocht_pct ?? null,
+      body_fat_pct_change: verloop(inVenster, "vet_pct"),
+      muscle_kg_change: verloop(inVenster, "spier_kg"),
+      water_pct_change: verloop(inVenster, "vocht_pct"),
+      // Het aantal wegingen waarin de weegschaal iets van de samenstelling
+      // meegaf. Zonder dat getal is een verandering van 1,2% niet te wegen.
+      measurements_counted: inVenster.filter(
+        (w) => w.vet_pct != null || w.spier_kg != null || w.vocht_pct != null
+      ).length,
+    },
   };
+}
+
+/**
+ * Verloop van één meetwaarde over het venster: laatste min eerste.
+ *
+ * Alleen over de wegingen waarin die waarde gemeten is. Meet je hem één keer,
+ * dan is er geen verloop — geen nul, want dat zou "onveranderd" zeggen.
+ */
+function verloop(
+  reeks: WegingMetTrend[], veld: "vet_pct" | "spier_kg" | "vocht_pct"
+): number | null {
+  const met = reeks.filter((w) => typeof w[veld] === "number");
+  if (met.length < 2) return null;
+  return rond((met[met.length - 1][veld] as number) - (met[0][veld] as number), 1);
 }
 
 /**
@@ -724,7 +774,7 @@ export function adviesDrempel(p: FactPack): AdviesDrempel {
  * erop rekent tekent dan een gat — zonder dat er iets misgaat waar je het aan
  * ziet. De vingerafdruk neemt dit mee, dus oude caches vallen vanzelf af.
  */
-export const PAKKETVERSIE = 3;
+export const PAKKETVERSIE = 4;
 
 export function feitenVingerafdruk(invoer: Pick<FeitenInvoer, "peildatum" | "dagen" | "wegingen" | "profiel">): string {
   const regels = invoer.dagen.reduce((s, d) => s + d.entries.length + d.activity.length, 0);

@@ -21,6 +21,20 @@ export interface AdviesAntwoord {
   afgekeurd?: string[];
 }
 
+/**
+ * Wat een weegschaal met lichaamsanalyse er verder bij geeft.
+ *
+ * Null betekent "gewist", niet meegestuurd betekent "laat staan zoals het was".
+ * Dat onderscheid is nodig bij het aanpassen van een weging: alleen het gewicht
+ * corrigeren hoort je vetpercentage van die dag niet weg te gooien.
+ */
+export interface Meting {
+  vet_pct?: number | null;
+  vocht_pct?: number | null;
+  spier?: number | null;
+  spier_eenheid?: "kg" | "pct";
+}
+
 export interface ProfielAntwoord {
   profiel: Profile | null;
   budget: BudgetResultaat | null;
@@ -99,9 +113,9 @@ export const trackerApi = {
   getGewicht: () =>
     fetch("/api/tracker/gewicht", { cache: "no-store" }).then(lees<GewichtGegevens>),
 
-  weeg: (kg: number, datum?: string, note?: string) =>
+  weeg: (kg: number, datum?: string, meting?: Meting, note?: string) =>
     fetch("/api/tracker/gewicht", {
-      method: "POST", headers: json, body: JSON.stringify({ kg, date: datum, note }),
+      method: "POST", headers: json, body: JSON.stringify({ kg, date: datum, note, ...meting }),
     }).then(lees<GewichtGegevens & { herberekend: boolean }>),
 
   /**
@@ -113,7 +127,7 @@ export const trackerApi = {
    */
   wijzigWeging: async (v: {
     van: string; naar: string; kg: number; note?: string; vervang?: boolean;
-  }): Promise<
+  } & Meting): Promise<
     | { gegevens: GewichtGegevens & { herberekend: boolean }; botsing?: undefined }
     | { botsing: { datum: string; kg: number }; gegevens?: undefined }
   > => {

@@ -18,7 +18,7 @@ import Import from "./Import";
 import Portiekiezer from "./Portiekiezer";
 import type { WeekSamenvatting } from "@/lib/tracker/week";
 import { trackerApi } from "./api";
-import type { Melding } from "./api";
+import type { Melding, Meting } from "./api";
 import { AFWIJKING_LABEL } from "@/lib/tracker/advies";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { toonPunten } from "@/lib/tracker/points";
@@ -117,10 +117,10 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     return () => { afgebroken = true; };
   }, [pagina, weekDatum, datum, dag]);
 
-  const weeg = async (kg: number, datum?: string, note?: string) => {
+  const weeg = async (kg: number, datum?: string, meting?: Meting, note?: string) => {
     setBezig(true); setFout(""); setHerberekend(false);
     try {
-      const g = await trackerApi.weeg(kg, datum, note);
+      const g = await trackerApi.weeg(kg, datum, meting, note);
       setGewicht(g);
       setHerberekend(g.herberekend);
       if (g.profiel) setProfiel(g.profiel);
@@ -133,7 +133,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
    */
   const wijzigWeging = async (v: {
     van: string; naar: string; kg: number; vervang?: boolean;
-  }): Promise<{ botsing?: { datum: string; kg: number } }> => {
+  } & Meting): Promise<{ botsing?: { datum: string; kg: number } }> => {
     setBezig(true); setFout(""); setHerberekend(false);
     try {
       const uit = await trackerApi.wijzigWeging(v);

@@ -57,6 +57,18 @@ const S: Record<string, React.CSSProperties> = {
   verversKnop: { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "var(--accent)", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: "4px 0" },
 };
 
+/** Of de weegschaal iets van de samenstelling meegaf. */
+function heeftSamenstelling(pakket: FactPack): boolean {
+  const b = pakket.weight.body;
+  return b.bmi != null || b.body_fat_pct != null || b.muscle_kg != null || b.water_pct != null;
+}
+
+/** Het verloop achter een label, of niets als er nog geen tweede meting is. */
+function verloopTekst(verandering: number | null, eenheid: string): string {
+  if (verandering == null || verandering === 0) return "";
+  return ` · ${verandering < 0 ? "−" : "+"}${nl(Math.abs(verandering))}${eenheid} sinds de eerste meting`;
+}
+
 export default function Inzicht({ peildatum }: { peildatum: string }) {
   const [pakket, setPakket] = useState<FactPack | null>(null);
   const [drempel, setDrempel] = useState<AdviesDrempel | null>(null);
@@ -312,6 +324,43 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
             label="moment waarop de buffer op was, geteld vanaf de weegdag" />
         </div>
       </section>
+
+      {/* -- lichaamssamenstelling -- */}
+      {heeftSamenstelling(pakket) && (
+        <section style={T.kaart}>
+          <div style={S.kaartKop}>
+            <h2 style={S.kaartTitel}>Lichaamssamenstelling</h2>
+            <span style={S.kaartSub}>
+              {pakket.weight.body.measurements_counted === 1
+                ? "1 meting"
+                : `${pakket.weight.body.measurements_counted} metingen`}
+            </span>
+          </div>
+          <div style={S.cijferRaster}>
+            {pakket.weight.body.bmi != null && (
+              <Cijfer waarde={nl(pakket.weight.body.bmi)} label="BMI, uit je lengte berekend" />
+            )}
+            {pakket.weight.body.body_fat_pct != null && (
+              <Cijfer waarde={`${nl(pakket.weight.body.body_fat_pct)}%`}
+                label={`vet${verloopTekst(pakket.weight.body.body_fat_pct_change, "%")}`} />
+            )}
+            {pakket.weight.body.muscle_kg != null && (
+              <Cijfer waarde={`${nl(pakket.weight.body.muscle_kg)} kg`}
+                label={`spiermassa${verloopTekst(pakket.weight.body.muscle_kg_change, " kg")}`} />
+            )}
+            {pakket.weight.body.water_pct != null && (
+              <Cijfer waarde={`${nl(pakket.weight.body.water_pct)}%`}
+                label={`vocht${verloopTekst(pakket.weight.body.water_pct_change, "%")}`} />
+            )}
+          </div>
+          <p style={S.uitleg}>
+            De laatste meting van je weegschaal, met het verloop over deze {VENSTER_WEKEN} weken.
+            Dit is wat gewicht alleen niet vertelt: twee kilo eraf is iets anders als je
+            spiermassa meezakt dan als het vet eraf gaat. Vocht schommelt van dag tot dag
+            en zegt over een enkele meting weinig.
+          </p>
+        </section>
+      )}
 
       {/* -- energiebalans -- */}
       <section style={T.kaart}>

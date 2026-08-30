@@ -313,6 +313,15 @@ function kiloTekst(kg: number): string {
   return kg.toFixed(1);
 }
 
+/** Wat er per weging naast het gewicht bewaard wordt. */
+interface WegingDetail {
+  kg: number;
+  note?: string;
+  vet_pct?: number;
+  spier_kg?: number;
+  vocht_pct?: number;
+}
+
 export async function getWegingen(): Promise<Weging[]> {
   const leden = (await redis.zrange<string[]>(await kWeegLog(), 0, -1)) ?? [];
   const wegingen: Weging[] = [];
@@ -324,14 +333,43 @@ export async function getWegingen(): Promise<Weging[]> {
     if (!geldigeDatum(datum) || !Number.isFinite(kg) || kg <= 0) continue;
     wegingen.push({ date: datum, kg });
   }
-  return wegingen.sort((a, b) => a.date.localeCompare(b.date));
+  wegingen.sort((a, b) => a.date.localeCompare(b.date));
+
+  // De gesorteerde set draagt alleen datum en gewicht; wat een weegschaal met
+  // lichaamsanalyse verder meet staat per dag apart. Eén mget in plaats van een
+  // aanvraag per weging — na een jaar wekelijks wegen zijn dat er vijftig.
+  if (wegingen.length === 0) return wegingen;
+  const sleutels = await Promise.all(wegingen.map((w) => kWeging(w.date)));
+  const details = await redis.mget<(WegingDetail | null)[]>(...sleutels);
+
+  return wegingen.map((w, i) => {
+    const d = details?.[i];
+    if (!d) return w;
+    return {
+      ...w,
+      ...(gemeten(d.vet_pct) != null ? { vet_pct: gemeten(d.vet_pct)! } : {}),
+      ...(gemeten(d.spier_kg) != null ? { spier_kg: gemeten(d.spier_kg)! } : {}),
+      ...(gemeten(d.vocht_pct) != null ? { vocht_pct: gemeten(d.vocht_pct)! } : {}),
+    };
+  });
+}
+
+/** Een getal dat er echt een is; alles anders telt als niet gemeten. */
+function gemeten(v: unknown): number | null {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
  * Slaat een weging op. Was er op dezelfde dag al gewogen, dan vervangt deze
  * die: één weging per dag houdt de trendlijn eerlijk.
  */
-export async function saveWeging(datum: string, kg: number, note?: string): Promise<Weging[]> {
+export async function saveWeging(
+  datum: string,
+  kg: number,
+  note?: string,
+  meting: Pick<Weging, "vet_pct" | "spier_kg" | "vocht_pct"> = {}
+): Promise<Weging[]> {
   const bestaand = await getWegingen();
   const oud = bestaand.find((w) => w.date === datum);
   if (oud) await redis.zrem(await kWeegLog(), `${datum}:${kiloTekst(oud.kg)}`);
@@ -340,7 +378,15 @@ export async function saveWeging(datum: string, kg: number, note?: string): Prom
     score: Date.parse(datum + "T00:00:00Z"),
     member: `${datum}:${kiloTekst(kg)}`,
   });
-  await redis.set(await kWeging(datum), { kg, ...(note ? { note } : {}) });
+  // Wat niet is meegegeven wordt niet bewaard: een leeg veld betekent "niet
+  // gemeten", en dat is iets anders dan nul.
+  await redis.set(await kWeging(datum), {
+    kg,
+    ...(note ? { note } : {}),
+    ...(gemeten(meting.vet_pct) != null ? { vet_pct: meting.vet_pct } : {}),
+    ...(gemeten(meting.spier_kg) != null ? { spier_kg: meting.spier_kg } : {}),
+    ...(gemeten(meting.vocht_pct) != null ? { vocht_pct: meting.vocht_pct } : {}),
+  });
 
   return getWegingen();
 }
@@ -354,7 +400,7 @@ export async function deleteWeging(datum: string): Promise<Weging[]> {
 }
 
 export async function getWegingNotitie(datum: string): Promise<string | undefined> {
-  const w = await redis.get<{ kg: number; note?: string }>(await kWeging(datum));
+  const w = await redis.get<WegingDetail>(await kWeging(datum));
   return w?.note;
 }
 

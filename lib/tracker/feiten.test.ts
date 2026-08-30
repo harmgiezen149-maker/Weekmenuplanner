@@ -137,6 +137,42 @@ test("het budgetblok noemt wat er met bewegen verdiend is", () => {
   assert.equal(bouw([dag(PEILDATUM, [regel(PEILDATUM, 12, 30)])]).budget.avg_activity_points_per_day, 0);
 });
 
+test("de lichaamssamenstelling komt van de laatste weging, met het verloop erbij", () => {
+  const wegingen = [
+    // Alle drie binnen het venster van twaalf weken (vanaf 3 juni).
+    { date: "2026-06-09", kg: 100, vet_pct: 30, spier_kg: 37, vocht_pct: 50 },
+    { date: "2026-07-07", kg: 97, vet_pct: 28.5 },
+    { date: "2026-08-04", kg: 95, vet_pct: 27.5, spier_kg: 38.2 },
+  ];
+  const b = bouw(vlakkeReeks(30), wegingen).weight.body;
+
+  // De laatste meting van elk onderdeel, niet die van de laatste weging: vocht
+  // is daarna niet meer gemeten en verdwijnt dus... maar wél expliciet null.
+  assert.equal(b.body_fat_pct, 27.5);
+  assert.equal(b.muscle_kg, 38.2);
+  assert.equal(b.water_pct, null);
+
+  // Verloop over het venster: van de eerste meting met dat veld tot de laatste.
+  assert.equal(b.body_fat_pct_change, -2.5);
+  assert.equal(b.muscle_kg_change, 1.2);
+  // Eén meting is geen verloop.
+  assert.equal(b.water_pct_change, null);
+
+  assert.equal(b.measurements_counted, 3);
+  // BMI uit de lengte van het profiel: 95 kg bij 1,80 m.
+  assert.equal(b.bmi, 29.3);
+});
+
+test("zonder weegschaalmetingen blijft de samenstelling leeg in plaats van nul", () => {
+  const b = bouw(vlakkeReeks(30), [{ date: "2026-08-04", kg: 95 }]).weight.body;
+  assert.equal(b.body_fat_pct, null);
+  assert.equal(b.muscle_kg, null);
+  assert.equal(b.water_pct, null);
+  assert.equal(b.measurements_counted, 0);
+  // De BMI kan wel: die heeft alleen gewicht en lengte nodig.
+  assert.equal(b.bmi, 29.3);
+});
+
 test("bewegingspunten staan per weekdag in het pakket", () => {
   // Elke dag 30 punten; op zaterdag een wandeling van 6 punten erbij. De
   // grafiek op Inzicht tekent die als groen voetstuk, dus het gemiddelde moet

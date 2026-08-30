@@ -160,10 +160,18 @@ async function leesPersoonlijk(): Promise<BackupBestand["persoonlijk"]> {
     const date = lid.slice(0, scheiding);
     const kg = Number(lid.slice(scheiding + 1));
     if (!Number.isFinite(kg) || kg <= 0) continue;
-    const regel = await redis.get<{ kg: number; note?: string }>(
-      await persoonlijk(`weight:${date}`)
-    );
-    wegingen.push({ date, kg, ...(regel?.note ? { note: regel.note } : {}) });
+    // Ook wat een weegschaal met lichaamsanalyse meegaf: een back-up die het
+    // gewicht bewaart en het vetpercentage laat vallen is geen back-up.
+    const regel = await redis.get<{
+      kg: number; note?: string; vet_pct?: number; spier_kg?: number; vocht_pct?: number;
+    }>(await persoonlijk(`weight:${date}`));
+    wegingen.push({
+      date, kg,
+      ...(regel?.note ? { note: regel.note } : {}),
+      ...(regel?.vet_pct != null ? { vet_pct: regel.vet_pct } : {}),
+      ...(regel?.spier_kg != null ? { spier_kg: regel.spier_kg } : {}),
+      ...(regel?.vocht_pct != null ? { vocht_pct: regel.vocht_pct } : {}),
+    });
   }
 
   const adviesIds = ((await redis.zrange<string[]>(kIndex, 0, -1)) ?? []);
@@ -278,7 +286,11 @@ async function herstelPersoonlijk(p: BackupBestand["persoonlijk"]): Promise<void
       member: `${w.date}:${w.kg.toFixed(1)}`,
     });
     await redis.set(await persoonlijk(`weight:${w.date}`), {
-      kg: w.kg, ...(w.note ? { note: w.note } : {}),
+      kg: w.kg,
+      ...(w.note ? { note: w.note } : {}),
+      ...(w.vet_pct != null ? { vet_pct: w.vet_pct } : {}),
+      ...(w.spier_kg != null ? { spier_kg: w.spier_kg } : {}),
+      ...(w.vocht_pct != null ? { vocht_pct: w.vocht_pct } : {}),
     });
   }
 

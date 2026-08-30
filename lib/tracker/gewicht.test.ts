@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { metTrend, huidigeTrend, voortgang, tempoPerWeek, TREND_ALFA } from "./gewicht.ts";
+import { metTrend, huidigeTrend, voortgang, tempoPerWeek, bmi, bmiKlasse, TREND_ALFA } from "./gewicht.ts";
 import type { Weging } from "./gewicht.ts";
 
 const w = (date: string, kg: number): Weging => ({ date, kg });
@@ -35,6 +35,33 @@ test("het verschil op de weegschaal telt van meting tot meting, niet van trend t
   const r = metTrend([w("2026-01-04", 100), w("2026-01-11", 96), w("2026-01-18", 96)]);
   assert.equal(r[2].delta_meting_kg, 0);
   assert.ok(r[2].delta_kg < 0, "de trend zakt nog door");
+});
+
+test("BMI komt uit gewicht en lengte, niet van de weegschaal", () => {
+  // 97,6 kg bij 1,83 m = 29,1.
+  assert.equal(bmi(97.6, 183), 29.1);
+  assert.equal(bmiKlasse(29.1), "overgewicht");
+  assert.equal(bmiKlasse(24.9), "normaal");
+  assert.equal(bmiKlasse(18.4), "ondergewicht");
+  assert.equal(bmiKlasse(30), "obesitas");
+  // Zonder bruikbare lengte geen BMI: raden hoort hier niet.
+  assert.equal(bmi(97.6, undefined), null);
+  assert.equal(bmi(97.6, 0), null);
+  assert.equal(bmi(97.6, 400), null);
+  assert.equal(bmi(0, 183), null);
+});
+
+test("de verschillen in samenstelling gaan van meting tot meting", () => {
+  const r = metTrend([
+    { date: "2026-01-04", kg: 100, vet_pct: 28, spier_kg: 38, vocht_pct: 52 },
+    { date: "2026-01-11", kg: 99, vet_pct: 27.2, spier_kg: 38.4 },
+  ]);
+  assert.equal(r[0].delta_vet_pct, null, "de eerste meting heeft niets om mee te vergelijken");
+  assert.ok(Math.abs(r[1].delta_vet_pct! - -0.8) < 1e-9);
+  assert.ok(Math.abs(r[1].delta_spier_kg! - 0.4) < 1e-9);
+  // Vocht is de tweede keer niet gemeten. Dan is er geen verschil te melden;
+  // nul zou "onveranderd" zeggen en dat is iets anders.
+  assert.equal(r[1].delta_vocht_pct, null);
 });
 
 test("de trend dempt een uitschieter van een kilo", () => {

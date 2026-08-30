@@ -246,6 +246,42 @@ meer dan een kilo af van het gewicht waarop je huidige budget rust, dan wordt he
 budget herberekend en zie je dat op het weegscherm terug. Zonder die dempingsstap
 zou een dag met vocht vasthouden je budget omhoog gooien.
 
+#### Wat je weegschaal verder meet
+
+Een weegschaal met lichaamsanalyse geeft naast het gewicht ook **vetpercentage**,
+**spiermassa** en **vochtgehalte**. Die drie staan als optionele velden bij het
+wegen, achter "Meer van je weegschaal" — de meeste wegingen zijn één getal, en
+een rij lege velden zou van wegen een formulier maken.
+
+Een leeg veld betekent **niet gemeten**, niet nul. Dat onderscheid loopt door tot
+in de berekening: een verschil met de vorige keer is `null` als een van de twee
+metingen ontbreekt, en het verloop over het venster wordt alleen bepaald over de
+wegingen waarin die waarde er ook was.
+
+**Spiermassa vraagt om zijn eenheid.** Weegschalen geven dit in kilo óf in
+procenten, en die twee reeksen overlappen bijna volledig: 38 kan 38 kilo spier
+zijn of 38 procent van je lichaamsgewicht. Uit het getal alleen is dat niet af te
+leiden, dus het scherm vraagt het en de server rekent procenten om vóór het
+opslaan. In de opslag staat altijd kilo. Zonder die vraag zou een verkeerd
+geraden eenheid jarenlang meelopen zonder dat er iets aan te zien is.
+
+**BMI wordt berekend, niet ingevoerd** — uit je gewicht en de lengte uit je
+profiel. Je weegschaal rekent met de lengte die in het apparaat staat; twee BMI's
+die elkaar tegenspreken is erger dan één die je kunt narekenen. Het getal staat
+er met zijn klasse bij (ondergewicht, normaal, overgewicht, obesitas), en dat is
+beschrijvend bedoeld: BMI weet niets van spier, dus een gespierd iemand komt er
+hoog uit zonder dat daar iets mis mee is.
+
+De verschillen bij deze drie krijgen **geen kleur**. Bij gewicht is omlaag de
+bedoeling, bij spiermassa juist niet, en bij vocht hangt het van de dag af —
+groen en rood zouden hier een oordeel geven dat er niet is.
+
+Op Inzicht staat een blok **Lichaamssamenstelling**: de laatste meting met het
+verloop over de twaalf weken, en het aantal metingen waar dat verloop op rust.
+Het staat ook in het feitenpakket onder `weight.body`, dus het advies mag het
+citeren. Dat is precies wat gewicht alleen niet vertelt: twee kilo eraf is iets
+anders als de spiermassa meezakt dan als het vet eraf gaat.
+
 #### Het echte verschil staat er ook
 
 Sturen op de trend is één ding; het verzwijgen van wat de weegschaal zei is iets
@@ -884,7 +920,10 @@ kookboek-keys:
   cache.
 - `wl:ingredienten` — je eigen ingrediëntenlijst voor recepten, met een
   revisienummer waarmee doorgerekende recepten vervallen.
-- `wl:weight:log` — sorted set met al je wegingen.
+- `wl:weight:log` — sorted set met al je wegingen (datum en gewicht).
+- `wl:weight:<datum>` — per weging de notitie en wat de weegschaal verder mat
+  (`vet_pct`, `spier_kg`, `vocht_pct`). Wordt in één `mget` opgehaald bij de
+  reeks; een aanvraag per weging zou er na een jaar wekelijks wegen vijftig zijn.
 - `wl:weight:<datum>` — een losse weging met eventuele notitie.
 - `wl:meals` — je vaste, samengestelde maaltijden.
 - `wl:recipe:points:<id>` — een doorgerekend kookboekrecept, met de
