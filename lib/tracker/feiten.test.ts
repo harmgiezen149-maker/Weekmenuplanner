@@ -5,6 +5,7 @@ import {
   VENSTER_DAGEN,
 } from "./feiten.ts";
 import { berekenTotalen } from "./points.ts";
+import { verschuifDatum } from "./datum.ts";
 import type { Activity, Day, Entry, Nutrients, Profile } from "./types.ts";
 import type { Weging } from "./gewicht.ts";
 
@@ -116,6 +117,24 @@ test("bewegingspunten verruimen het budget van die dag", () => {
   assert.equal(bouw(dagen).budget.adherence_rate, 1);
   // Zonder de beweging valt dezelfde dag erbuiten.
   assert.equal(bouw([dag(PEILDATUM, [regel(PEILDATUM, 12, 44)])]).budget.adherence_rate, 0);
+});
+
+test("het budgetblok noemt wat er met bewegen verdiend is", () => {
+  // Zonder dit getal is de nalevingsscore niet na te rekenen: je ziet een
+  // gemiddelde boven je budget en toch dagen die binnen budget vielen, zonder
+  // dat ergens staat waar die ruimte vandaan kwam.
+  const beweging: Activity = { id: "a1", ts: Date.now(), name: "Wandelen", met: 3.5, minutes: 60, points: 5 };
+  const dagen = [
+    dag(PEILDATUM, [regel(PEILDATUM, 12, 44)], [beweging]),
+    dag(verschuifDatum(PEILDATUM, -1), [regel(verschuifDatum(PEILDATUM, -1), 12, 30)]),
+  ];
+  const b = bouw(dagen).budget;
+  // Gemiddeld over de gelogde dagen: (5 + 0) / 2.
+  assert.equal(b.avg_activity_points_per_day, 2.5);
+  // Het eetgemiddelde blijft wat er gegeten is: (44 + 30) / 2.
+  assert.equal(b.avg_points_per_day, 37);
+  // En zonder beweging staat er nul, geen leeg veld.
+  assert.equal(bouw([dag(PEILDATUM, [regel(PEILDATUM, 12, 30)])]).budget.avg_activity_points_per_day, 0);
 });
 
 test("bewegingspunten staan per weekdag in het pakket", () => {

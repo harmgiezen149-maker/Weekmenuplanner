@@ -625,8 +625,19 @@ Wat er te zien is:
 - **Verdeling over de dag** in vijf blokken, als aandeel van de punten — niet van
   het aantal regels, want dan zou een dag met tien kleine dingen zwaarder wegen
   dan een dag met twee grote.
-- **Budget en spreiding**: naleving, gemiddelde, mediaan en standaardafwijking.
-  De spreiding vertelt vaak meer dan het gemiddelde.
+- **Budget en spreiding**: naleving, gemiddelde, mediaan en standaardafwijking,
+  plus wat je gemiddeld per dag met bewegen verdiende. De spreiding vertelt vaak
+  meer dan het gemiddelde.
+
+  De naleving telde de bewegingspunten van elke dag al mee — `over_budget` wordt
+  berekend als `punten − dagbudget − bewegingspunten` — maar het getal stond
+  nergens, en zonder dat getal is de uitkomst niet na te rekenen: je ziet een
+  gemiddelde van 42,3 tegen een budget van 38 en toch dagen die binnen budget
+  vielen, zonder dat ergens staat waar die ruimte vandaan kwam. Dat is precies
+  het soort cijfer waarvan je gaat denken dat de app zich vergist.
+  `budget.avg_activity_points_per_day` staat er nu bij, over dezelfde gelogde
+  dagen als het eetgemiddelde, met een regel eronder die zegt dat "binnen budget"
+  de beweging meetelt en het gemiddelde en de mediaan niet.
 - **Weekbuffer**: hoeveel er per week opgaat en op welk moment van de week.
 - **Logboek tegen weegschaal**: wat je inname voorspelt tegenover wat de
   trendlijn laat zien. Loopt de weegschaal achter, dan zit er meestal iets niet

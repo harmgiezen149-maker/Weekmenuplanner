@@ -70,10 +70,25 @@ export interface FactPack {
   budget: {
     current_daily_budget: number;
     weekly_buffer: number;
+    /**
+     * Aandeel gelogde dagen dat binnen budget bleef. Bewegingspunten van die
+     * dag tellen mee: ze verruimen het budget, dus een dag van 42 punten met 5
+     * uit beweging blijft binnen een budget van 38.
+     */
     adherence_rate: number;
     avg_points_per_day: number;
     median_points_per_day: number;
     sd_points_per_day: number;
+    /**
+     * Gemiddeld met bewegen verdiend, over dezelfde gelogde dagen als
+     * `avg_points_per_day`. Staat los van `activity.avg_weekly_points`, dat per
+     * week rekent en over álle dagen van het venster.
+     *
+     * Zonder dit getal is `adherence_rate` niet na te rekenen: je ziet dan een
+     * gemiddelde van 42,3 tegen een budget van 38 en toch dagen die binnen
+     * budget vielen, zonder dat ergens staat waar die ruimte vandaan kwam.
+     */
+    avg_activity_points_per_day: number;
   };
 
   by_weekday: Record<string, {
@@ -297,6 +312,7 @@ function bouwMeta(alle: DagFeit[], gelogd: DagFeit[], peildatum: string, nu?: Da
 
 function bouwBudget(gelogd: DagFeit[], profiel: Profile): FactPack["budget"] {
   const punten = gelogd.map((d) => d.punten);
+  // overBudget is al berekend inclusief de bewegingspunten van die dag.
   const binnen = gelogd.filter((d) => d.overBudget === 0).length;
   const gem = gemiddelde(punten);
   return {
@@ -306,6 +322,7 @@ function bouwBudget(gelogd: DagFeit[], profiel: Profile): FactPack["budget"] {
     avg_points_per_day: rond(gem, 1),
     median_points_per_day: rond(mediaan(punten), 1),
     sd_points_per_day: rond(standaardafwijking(punten), 1),
+    avg_activity_points_per_day: rond(gemiddelde(gelogd.map((d) => d.bewegingspunten)), 1),
   };
 }
 
@@ -707,7 +724,7 @@ export function adviesDrempel(p: FactPack): AdviesDrempel {
  * erop rekent tekent dan een gat — zonder dat er iets misgaat waar je het aan
  * ziet. De vingerafdruk neemt dit mee, dus oude caches vallen vanzelf af.
  */
-export const PAKKETVERSIE = 2;
+export const PAKKETVERSIE = 3;
 
 export function feitenVingerafdruk(invoer: Pick<FeitenInvoer, "peildatum" | "dagen" | "wegingen" | "profiel">): string {
   const regels = invoer.dagen.reduce((s, d) => s + d.entries.length + d.activity.length, 0);

@@ -275,12 +275,23 @@ export default function Inzicht({ peildatum }: { peildatum: string }) {
           <Cijfer waarde={nl(pakket.budget.avg_points_per_day)} label="gemiddeld per dag" />
           <Cijfer waarde={nl(pakket.budget.median_points_per_day)} label="mediaan per dag" />
           <Cijfer waarde={`± ${nl(pakket.budget.sd_points_per_day)}`} label="spreiding tussen de dagen" />
+          {pakket.budget.avg_activity_points_per_day > 0 && (
+            <Cijfer waarde={`+ ${nl(pakket.budget.avg_activity_points_per_day)}`}
+              label="gemiddeld per dag verdiend met bewegen" />
+          )}
         </div>
         <p style={S.uitleg}>
           Ligt de mediaan onder het gemiddelde, dan trekken een paar uitschieters het gemiddelde
           omhoog. De spreiding vertelt hoe ver de dagen uit elkaar liggen — vaak meer dan het
           gemiddelde zelf.
         </p>
+        {pakket.budget.avg_activity_points_per_day > 0 && (
+          <p style={S.uitleg}>
+            &ldquo;Binnen budget&rdquo; telt de beweging van die dag mee: die verruimt je budget.
+            Daardoor kan een dag boven de {pakket.budget.current_daily_budget} punten er tóch
+            binnen vallen. Het gemiddelde en de mediaan hierboven gaan alleen over wat je at.
+          </p>
+        )}
       </section>
 
       {/* -- weekbuffer -- */}

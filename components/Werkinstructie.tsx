@@ -563,6 +563,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             weegschaal, en waar je punten heen gaan. Dat deel is puur rekenwerk.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            Bij <strong>Budget en spreiding</strong> telt &ldquo;binnen budget&rdquo; de beweging van
+            die dag mee — die verruimt je budget, dus een dag boven je dagbudget kan er tóch binnen
+            vallen. Wat je gemiddeld per dag met bewegen verdiende staat er als apart cijfer bij. Het
+            gemiddelde en de mediaan gaan alleen over wat je at.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             Bovenaan staat één advies: eerst de waarneming, dan de uitleg, dan de achtergrond, en pas
             daarna de actie. Het verschijnt na je weging op de weegdag, en per weging precies één keer.
             Elk genoemd getal komt uit je eigen cijfers; kan de app er een niet terugvoeren, dan staat
