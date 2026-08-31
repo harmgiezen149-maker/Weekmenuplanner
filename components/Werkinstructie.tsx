@@ -504,6 +504,13 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             <strong>Handmatig</strong> — de zeven waarden van het etiket, met punten die meerekenen
             terwijl je typt.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>Aantal of gewicht</strong> — op het scherm waar je de hoeveelheid kiest staan twee
+            standen. Bij <em>Aantal</em> typ je hoeveel stuks, met een min- en een plusknop, en staat
+            ernaast wat één stuk weegt; bij <em>Hoeveelheid</em> vul je grammen in. Kent de app een
+            portie die je kunt tellen ("1 snee", "1 ei"), dan begint hij op aantal. In het logboek
+            staat dan <em>3 × snee</em> in plaats van 105 g.
+          </p>
           <div style={S.kader}>
             Bewaar bij elke manier het resultaat als favoriet. Dat is de enige manier waarop loggen op
             den duur licht blijft.

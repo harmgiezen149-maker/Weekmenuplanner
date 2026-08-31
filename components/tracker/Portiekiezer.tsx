@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ArrowLeft, Check, Loader2, Star } from "lucide-react";
+import { ArrowLeft, Check, Loader2, Minus, Plus, Star } from "lucide-react";
 import { T } from "./stijl";
 import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { nl } from "@/lib/tracker/datum";
+import { stuknaam, stukEenheid, STUK_STANDAARD } from "@/lib/tracker/portie";
 import { CATEGORIE_LABEL, MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Maaltijd, Nutrients, Product } from "@/lib/tracker/types";
 
@@ -16,6 +17,13 @@ const BRON_LABEL: Record<Product["bron"], string> = {
   eigen: "Zelf ingevoerd",
   schatting: "Geschat, niet nagekeken",
 };
+
+/**
+ * Label van de portieknop bij een eerder gelogd item. Staat hier omdat de
+ * portiekiezer eraan moet kunnen zien dat dit een hoeveelheid is en geen ding
+ * dat je kunt tellen.
+ */
+export const VORIGE_PORTIE = "vorige keer";
 
 /** Voedingswaarden per 100 omrekenen naar een hoeveelheid. */
 export function voorHoeveelheid(per100: Nutrients, grams: number): Nutrients {
@@ -67,15 +75,29 @@ export default function Portiekiezer({
   // van anderhalve liter eet je niet in één keer op. Dan begint het veld op
   // 100; de verpakking blijft als knop beschikbaar.
   const GROTE_VERPAKKING = 500;
-  const startHoeveelheid =
-    product.portie && product.portie.grams <= GROTE_VERPAKKING
-      ? product.portie.grams
-      : 100;
+  // "Vorige keer" is een hoeveelheid, geen ding: daar valt geen aantal van te
+  // maken zonder dat er "3 × vorige keer" in het logboek komt te staan.
+  const telbaar = heeftPortie && product.portie!.label !== VORIGE_PORTIE;
+  const losStuk = telbaar && product.portie!.grams <= GROTE_VERPAKKING;
+  const startHoeveelheid = heeftPortie && product.portie!.grams <= GROTE_VERPAKKING
+    ? product.portie!.grams
+    : 100;
+
+  // Twee manieren om hetzelfde te zeggen. Bij iets dat je per stuk eet — een
+  // boterham, een ei, een cracker — is het aantal wat je weet en het gewicht
+  // wat je zou moeten opzoeken; bij yoghurt of rijst precies andersom. Welke
+  // van de twee begint staat dus niet vast, maar hangt aan het product.
+  const [invoer, setInvoer] = useState<"aantal" | "gewicht">(losStuk ? "aantal" : "gewicht");
   const [hoev, setHoev] = useState(String(startHoeveelheid));
+  const [aantal, setAantal] = useState("1");
+  const [perStuk, setPerStuk] = useState(String(startHoeveelheid));
   const [maal, setMaal] = useState<Maaltijd>(maaltijd);
   const [favoriet, setFavoriet] = useState(false);
 
-  const grams = getal(hoev);
+  const naam = telbaar ? stuknaam(product.portie!.label) : STUK_STANDAARD;
+  const stukGram = getal(perStuk);
+  const aantalStuks = getal(aantal);
+  const grams = invoer === "aantal" ? afgerond(aantalStuks * stukGram) : getal(hoev);
   const nutrients = useMemo(() => voorHoeveelheid(product.per100, grams), [product.per100, grams]);
   const punten = toonPunten(rawPoints(nutrients, grams), schaal);
 
@@ -86,8 +108,12 @@ export default function Portiekiezer({
       brand: product.brand,
       meal: maal,
       source: herkomst(product),
-      amount: grams,
-      unit: product.eenheid,
+      // Bij loggen per stuk staat het aantal in het logboek en niet het
+      // omgerekende gewicht: "3 × snee" is wat je gegeten hebt. De punten
+      // hangen aan `grams`, dus die blijft in beide gevallen leidend.
+      ...(invoer === "aantal"
+        ? { amount: aantalStuks, unit: stukEenheid(naam) }
+        : { amount: grams, unit: product.eenheid }),
       grams,
       nutrients,
       ref: product.barcode,
@@ -120,7 +146,10 @@ export default function Portiekiezer({
       <div style={T.live} role="status" aria-live="polite">
         <span style={T.liveGetal}>{punten}</span>
         <span style={T.liveTekst}>
-          {punten === 1 ? "punt" : "punten"} voor {nl(grams)} {product.eenheid}<br />
+          {punten === 1 ? "punt" : "punten"} voor{" "}
+          {invoer === "aantal"
+            ? `${nl(aantalStuks)} × ${naam} (${nl(grams)} ${product.eenheid})`
+            : `${nl(grams)} ${product.eenheid}`}<br />
           {alsComponent
             ? "als onderdeel van deze maaltijd"
             : `${datumLabel.toLowerCase()} · ${MAALTIJD_LABEL[maal].toLowerCase()}`}
@@ -128,26 +157,73 @@ export default function Portiekiezer({
       </div>
 
       <div style={T.veldVak}>
-        <label style={T.label} htmlFor="pk-hoev">Hoeveelheid ({product.eenheid})</label>
-        <input id="pk-hoev" style={T.veld} value={hoev} inputMode="decimal"
-          onChange={(e) => setHoev(e.target.value)} />
-        <div style={{ ...T.chips, marginTop: 8 }}>
-          {heeftPortie && (
-            <button type="button" style={T.chip}
-              onClick={() => setHoev(String(product.portie!.grams))}>
-              {portieLabel(product)}
-            </button>
-          )}
-          <button type="button" style={T.chip} onClick={() => setHoev("100")}>
-            100 {product.eenheid}
+        <div style={{ ...T.chips, marginBottom: 10 }}>
+          <button type="button" onClick={() => setInvoer("aantal")}
+            style={{ ...T.chip, ...(invoer === "aantal" ? T.chipAan : {}) }}>
+            Aantal
           </button>
-          {heeftPortie && (
-            <button type="button" style={T.chip}
-              onClick={() => setHoev(String(Math.round(product.portie!.grams / 2)))}>
-              Halve portie
-            </button>
-          )}
+          <button type="button" onClick={() => setInvoer("gewicht")}
+            style={{ ...T.chip, ...(invoer === "gewicht" ? T.chipAan : {}) }}>
+            Hoeveelheid in {product.eenheid}
+          </button>
         </div>
+
+        {invoer === "aantal" ? (
+          <>
+            <div style={T.veldRij}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={T.label} htmlFor="pk-aantal">Aantal</label>
+                <div style={T.stapper}>
+                  <button type="button" style={T.stapKnop} aria-label="Eén minder"
+                    onClick={() => setAantal(stap(aantal, -1))}>
+                    <Minus size={15} />
+                  </button>
+                  <input id="pk-aantal" style={T.stapVeld} value={aantal} inputMode="decimal"
+                    onChange={(e) => setAantal(e.target.value)} />
+                  <button type="button" style={T.stapKnop} aria-label="Eén meer"
+                    onClick={() => setAantal(stap(aantal, 1))}>
+                    <Plus size={15} />
+                  </button>
+                </div>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <label style={T.label} htmlFor="pk-perstuk">
+                  Per {naam} ({product.eenheid})
+                </label>
+                <input id="pk-perstuk" style={T.veld} value={perStuk} inputMode="decimal"
+                  onChange={(e) => setPerStuk(e.target.value)} />
+              </div>
+            </div>
+            <p style={T.hint}>
+              Eén {naam} is {nl(stukGram)} {product.eenheid}, samen {nl(grams)}{" "}
+              {product.eenheid}.
+              {!telbaar && ` Van dit product is geen gewicht per ${naam} bekend; vul zelf in wat één ${naam} weegt.`}
+            </p>
+          </>
+        ) : (
+          <>
+            <label style={T.label} htmlFor="pk-hoev">Hoeveelheid ({product.eenheid})</label>
+            <input id="pk-hoev" style={T.veld} value={hoev} inputMode="decimal"
+              onChange={(e) => setHoev(e.target.value)} />
+            <div style={{ ...T.chips, marginTop: 8 }}>
+              {heeftPortie && (
+                <button type="button" style={T.chip}
+                  onClick={() => setHoev(String(product.portie!.grams))}>
+                  {portieLabel(product)}
+                </button>
+              )}
+              <button type="button" style={T.chip} onClick={() => setHoev("100")}>
+                100 {product.eenheid}
+              </button>
+              {heeftPortie && (
+                <button type="button" style={T.chip}
+                  onClick={() => setHoev(String(Math.round(product.portie!.grams / 2)))}>
+                  Halve portie
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {!alsComponent && (
@@ -203,4 +279,21 @@ function herkomst(p: Product): string {
 function getal(s: string): number {
   const n = Number(String(s).replace(",", "."));
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/**
+ * Eén stuk erbij of eraf. Halve stuks blijven halve stuks: wie op anderhalve
+ * boterham staat en op plus drukt, wil er tweeënhalf — niet plots twee.
+ */
+function stap(waarde: string, richting: number): string {
+  const nieuw = getal(waarde) + richting;
+  return nieuw <= 0 ? "1" : String(Math.round(nieuw * 100) / 100);
+}
+
+/**
+ * Het omgerekende gewicht op twee decimalen. Anders levert 3 × 33,3 g een
+ * getal met een sliert negens op, en dat staat zo in het logboek.
+ */
+function afgerond(n: number): number {
+  return Math.round(n * 100) / 100;
 }

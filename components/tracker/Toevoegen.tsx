@@ -10,7 +10,8 @@ import Handmatig from "./Handmatig";
 import Maaltijdbouwer from "./Maaltijdbouwer";
 import Recepten from "./Recepten";
 import Foto from "./Foto";
-import Portiekiezer, { naarPer100 } from "./Portiekiezer";
+import Portiekiezer, { naarPer100, VORIGE_PORTIE } from "./Portiekiezer";
+import { naamUitStukEenheid } from "@/lib/tracker/portie";
 import { trackerApi } from "./api";
 import type { FoodTemplate, Maaltijd, Maaltijdsjabloon, Product } from "@/lib/tracker/types";
 
@@ -83,7 +84,15 @@ export default function Toevoegen({
   };
 
   // Wel hetzelfde product, maar een andere hoeveelheid.
+  //
+  // Is het de vorige keer per stuk gelogd ("3 × snee"), dan is de portie één
+  // stuk en niet de hele vorige regel — anders zou "nog een keer, maar dan
+  // twee" uitkomen op zes boterhammen.
   const pasSjabloonAan = (t: FoodTemplate) => {
+    const stuk = naamUitStukEenheid(t.unit);
+    const perStuk = stuk && t.amount > 0
+      ? { grams: t.grams / t.amount, label: stuk }
+      : { grams: t.grams, label: VORIGE_PORTIE };
     setGekozen({
       id: t.id,
       name: t.name,
@@ -91,7 +100,7 @@ export default function Toevoegen({
       bron: "bewaard",
       eenheid: t.unit === "ml" ? "ml" : "g",
       per100: naarPer100(t.nutrients, t.grams),
-      portie: { grams: t.grams, label: "vorige keer" },
+      portie: perStuk,
       ...(t.ref ? { barcode: t.ref } : {}),
     });
   };

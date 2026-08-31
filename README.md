@@ -229,6 +229,26 @@ hoeveelheid, dan rekent de app het om.
 Bij alle vier kun je het resultaat als favoriet bewaren, zodat het de volgende
 keer bovenaan bij **Snel** staat.
 
+### Per stuk of per gram
+
+Van drie boterhammen weet je dat het er drie zijn, niet dat het 105 gram is. Het
+scherm waar je de hoeveelheid kiest heeft daarom twee standen: **Aantal** en
+**Hoeveelheid in g**. Bij aantal typ je hoeveel stuks (met een min- en een
+plusknop) en staat ernaast wat één stuk weegt; de app rekent het om en de punten
+hangen aan dat gewicht, niet aan het aantal.
+
+Welke stand begint hangt aan het product. Kent de app een portie die als één
+ding te tellen is — "1 snee", "1 ei", "1 bakje" — dan begint hij op aantal. Bij
+een grote verpakking (500 g of meer) of een portie die alleen een gewicht is
+("30 g") begint hij op grammen. De naam van één stuk komt uit dat portielabel;
+staat er alleen een gewicht, dan heet het "stuk" en kun je zelf invullen wat
+één stuk weegt.
+
+In het logboek staat dan `3 × snee` in plaats van `105 g`. Log je zoiets later
+opnieuw via het potlood bij **Snel**, dan is de portie één stuk en niet de hele
+vorige regel: "nog een keer, maar dan twee" levert twee boterhammen op en geen
+zes.
+
 ### Wegen en de trendlijn
 
 Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Één
