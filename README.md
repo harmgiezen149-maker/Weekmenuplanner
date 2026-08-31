@@ -249,6 +249,26 @@ opnieuw via het potlood bij **Snel**, dan is de portie één stuk en niet de hel
 vorige regel: "nog een keer, maar dan twee" levert twee boterhammen op en geen
 zes.
 
+### Het aantal achteraf bijstellen
+
+Je logt één ei en eet er twee. Het potlood bij een regel op het dagoverzicht
+klapt daarom een teller uit: aantal omhoog of omlaag, en de regel schaalt mee.
+Voedingswaarden, onderdelen en punten schalen lineair; de punten worden op de
+server opnieuw berekend, zodat er ook hier maar één formule in de app staat.
+
+Wat het aantal betekent hangt aan de regel, want dat verschilt echt:
+
+| Regel | Veld | "2" betekent |
+| --- | --- | --- |
+| `55 g` | Aantal keer | twee keer 55 g = 110 g |
+| `3 × snee` | Aantal | twee sneetjes (dus mínder dan drie) |
+| `1 portie` met onderdelen | Aantal porties | twee porties, met de onderdelen mee geschaald |
+
+Bij grammen is er geen stuk om te tellen, dus telt het veld hoe vaak de gelogde
+hoeveelheid meetelt. Bij stuks en porties staat het aantal al in de regel en
+wordt het gewoon bijgesteld. Porties gaan met halve stappen, want een halve
+portie komt echt voor.
+
 ### Wegen en de trendlijn
 
 Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Één

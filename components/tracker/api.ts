@@ -65,6 +65,11 @@ export const trackerApi = {
     fetch(`/api/tracker/dag/${datum}`, { method: "POST", headers: json, body: JSON.stringify(entry) })
       .then(lees<Day>),
 
+  /** Een bestaande regel bijwerken; de server rekent de punten opnieuw uit. */
+  wijzigRegel: (datum: string, entry: unknown) =>
+    fetch(`/api/tracker/dag/${datum}`, { method: "PATCH", headers: json, body: JSON.stringify(entry) })
+      .then(lees<Day>),
+
   wisRegel: (datum: string, id: string) =>
     fetch(`/api/tracker/dag/${datum}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
       .then(lees<Day>),

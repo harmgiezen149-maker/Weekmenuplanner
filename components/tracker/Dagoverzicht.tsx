@@ -1,13 +1,17 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown, Plus, Trash2, Settings, Scale, Footprints } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, ChevronDown, Minus, PencilLine, Plus, Trash2, Settings, Scale,
+  Footprints,
+} from "lucide-react";
 import { T } from "./stijl";
 import Ring from "./Ring";
 import { toonPunten } from "@/lib/tracker/points";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import { nl, verschuifDatum } from "@/lib/tracker/datum";
 import { dagBewegingspunten } from "@/lib/tracker/activiteit";
+import { aantalvak, factorVoor, schaalEntry } from "@/lib/tracker/regel";
 import Beweging from "./Beweging";
 import type { Day, Entry, Maaltijd, Profile } from "@/lib/tracker/types";
 
@@ -24,7 +28,7 @@ export function toonDatum(datum: string, vandaag: string): string {
 
 export default function Dagoverzicht({
   dag, profiel, datum, vandaag, buffer, moetWegen,
-  onDatum, onWis, onToevoegen, onInstellingen, onWegen,
+  onDatum, onWis, onWijzig, onToevoegen, onInstellingen, onWegen,
   bewegingBezig, bewegingFout, onBeweging, onWisBeweging,
 }: {
   dag: Day;
@@ -36,6 +40,8 @@ export default function Dagoverzicht({
   moetWegen: boolean;
   onDatum: (d: string) => void;
   onWis: (id: string) => void;
+  /** Een regel op een ander aantal zetten; de body gaat als PATCH mee. */
+  onWijzig: (regel: Record<string, unknown>) => void;
   onToevoegen: (m: Maaltijd) => void;
   onInstellingen: () => void;
   onWegen: () => void;
@@ -237,7 +243,7 @@ export default function Dagoverzicht({
             {regels.length === 0 && <div style={T.maaltijdLeeg}>Nog niets gelogd.</div>}
 
             {regels.map((e) => (
-              <Regel key={e.id} entry={e} schaal={schaal} onWis={onWis} />
+              <Regel key={e.id} entry={e} schaal={schaal} onWis={onWis} onWijzig={onWijzig} />
             ))}
 
             <button style={T.maaltijdPlus} onClick={() => onToevoegen(m)}>
@@ -255,12 +261,20 @@ export default function Dagoverzicht({
  * recept, dan zijn de onderdelen uit te klappen — anders is niet te zien waar
  * de punten vandaan komen.
  */
-function Regel({ entry, schaal, onWis }: {
-  entry: Entry; schaal: number; onWis: (id: string) => void;
+function Regel({ entry, schaal, onWis, onWijzig }: {
+  entry: Entry; schaal: number;
+  onWis: (id: string) => void;
+  onWijzig: (regel: Record<string, unknown>) => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Null zolang het aantal niet in bewerking is; anders wat er in het veld staat.
+  const [aantal, setAantal] = useState<string | null>(null);
   const onderdelen = entry.components ?? [];
   const samengesteld = onderdelen.length > 0;
+
+  const vak = aantalvak(entry);
+  const nieuwAantal = getal(aantal ?? "");
+  const factor = factorVoor(vak, nieuwAantal);
 
   return (
     <>
@@ -293,11 +307,42 @@ function Regel({ entry, schaal, onWis }: {
           </div>
         )}
         <span style={T.puntBadge}>{toonPunten(entry.points_raw, schaal)}</span>
+        <button style={T.potloodKnop}
+          onClick={() => setAantal((a) => (a === null ? String(vak.waarde) : null))}
+          aria-expanded={aantal !== null}
+          aria-label={`Aantal van ${entry.name} aanpassen`}>
+          <PencilLine size={15} />
+        </button>
         <button style={T.wisKnop} onClick={() => onWis(entry.id)}
           aria-label={`${entry.name} verwijderen`}>
           <Trash2 size={15} />
         </button>
       </div>
+
+      {aantal !== null && (
+        <div style={T.aantalRij}>
+          <div style={{ ...T.stapper, width: 132, flexShrink: 0 }}>
+            <button type="button" style={T.stapKnop} aria-label="Eén minder"
+              onClick={() => setAantal(stap(aantal, -vak.stap))}>
+              <Minus size={15} />
+            </button>
+            <input style={T.stapVeld} value={aantal} inputMode="decimal"
+              aria-label={vak.label} onChange={(e) => setAantal(e.target.value)} />
+            <button type="button" style={T.stapKnop} aria-label="Eén meer"
+              onClick={() => setAantal(stap(aantal, vak.stap))}>
+              <Plus size={15} />
+            </button>
+          </div>
+          <span style={T.aantalUitleg}>
+            {nl(nieuwAantal)} × {vak.eenheid} ·{" "}
+            {toonPunten(entry.points_raw * factor, schaal)} pt
+          </span>
+          <button type="button" style={T.aantalKnop}
+            onClick={() => { onWijzig(schaalEntry(entry, factor)); setAantal(null); }}>
+            Opslaan
+          </button>
+        </div>
+      )}
 
       {open && onderdelen.map((c) => (
         <div key={c.id} style={T.onderdeelRegel}>
@@ -310,6 +355,18 @@ function Regel({ entry, schaal, onWis }: {
       ))}
     </>
   );
+}
+
+/** Eén stap erbij of eraf, nooit onder de stapgrootte zelf. */
+function stap(waarde: string | null, richting: number): string {
+  const n = getal(waarde ?? "") + richting;
+  const kleinste = Math.abs(richting);
+  return String(Math.round(Math.max(n, kleinste) * 100) / 100);
+}
+
+function getal(s: string): number {
+  const n = Number(String(s).replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 function toonHoeveelheid(e: Entry): string {

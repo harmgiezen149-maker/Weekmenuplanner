@@ -511,6 +511,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             portie die je kunt tellen ("1 snee", "1 ei"), dan begint hij op aantal. In het logboek
             staat dan <em>3 × snee</em> in plaats van 105 g.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>Achteraf bijstellen</strong> — het potlood bij een regel op het dagoverzicht klapt
+            een teller uit. Bij een regel in grammen telt hij hoe vaak die hoeveelheid meetelt (twee
+            keer 55 g ei); bij stuks en porties stel je het aantal zelf bij. De punten en de
+            onderdelen schalen mee.
+          </p>
           <div style={S.kader}>
             Bewaar bij elke manier het resultaat als favoriet. Dat is de enige manier waarop loggen op
             den duur licht blijft.

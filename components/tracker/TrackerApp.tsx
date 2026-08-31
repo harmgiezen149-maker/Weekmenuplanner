@@ -176,6 +176,15 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
     } catch (e) { setFout(bericht(e)); }
   };
 
+  // Een regel op een ander aantal zetten. Het scherm stuurt de hele regel mee;
+  // de punten komen van de server terug.
+  const wijzigRegel = async (regel: Record<string, unknown>) => {
+    setFout("");
+    try {
+      setDag(await trackerApi.wijzigRegel(datum, regel));
+    } catch (e) { setFout(bericht(e)); }
+  };
+
   const voegToe = async (
     payload: Record<string, unknown>,
     alsFavoriet = false,
@@ -263,7 +272,7 @@ export default function TrackerApp({ pagina }: { pagina: Pagina }) {
                   : null}
                 moetWegen={gewicht?.moetWegen ?? false}
                 onDatum={(d) => { setDatum(d); ga(`/tracker?datum=${d}`); }}
-                onWis={wisRegel}
+                onWis={wisRegel} onWijzig={wijzigRegel}
                 onToevoegen={(m) => ga(`/tracker/toevoegen?datum=${datum}&maaltijd=${m}`)}
                 onInstellingen={() => ga("/tracker/instellingen")}
                 onWegen={() => ga("/tracker/gewicht")}
