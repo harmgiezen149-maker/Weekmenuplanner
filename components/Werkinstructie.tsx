@@ -517,6 +517,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             keer 55 g ei); bij stuks en porties stel je het aantal zelf bij. De punten en de
             onderdelen schalen mee.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>Andersom: van een eetmoment een maaltijd maken</strong> — onder elk eetmoment op
+            het dagoverzicht staat <em>Maaltijd of recept</em>. Wat je at wordt dan een vaste maaltijd
+            bij Snel, een recept in je kookboek, of allebei. Een regel die zelf uit onderdelen bestaat
+            wordt daarbij uitgeklapt, zodat de punten precies hetzelfde blijven.
+          </p>
           <div style={S.kader}>
             Bewaar bij elke manier het resultaat als favoriet. Dat is de enige manier waarop loggen op
             den duur licht blijft.

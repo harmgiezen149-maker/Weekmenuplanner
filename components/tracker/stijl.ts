@@ -65,6 +65,11 @@ export const T: Record<string, React.CSSProperties> = {
   onderdeelNaam: { display: "block", fontSize: 13, fontWeight: 500, color: "var(--sub)" },
   onderdeelPunt: { fontSize: 12, fontWeight: 700, color: "var(--sub)", flexShrink: 0, minWidth: 24, textAlign: "right" },
 
+  makerVak: { padding: "14px 15px", borderBottom: "1px solid var(--line)", background: "var(--bg)" },
+  makerGelukt: { display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13.5, lineHeight: 1.5, color: "var(--ink)", marginBottom: 12 },
+  makerRegels: { fontSize: 12.5, fontWeight: 700, color: "var(--sub)", marginBottom: 12 },
+  makerNamen: { fontSize: 12, fontWeight: 400, color: "var(--sub)", marginTop: 3, lineHeight: 1.5 },
+  maaltijdVoet: { display: "flex", alignItems: "stretch" },
   maaltijdLeeg: { padding: "13px 15px", fontSize: 13, color: "var(--sub)", borderBottom: "1px solid var(--line)" },
   maaltijdPlus: { display: "flex", alignItems: "center", justifyContent: "center", gap: 6, width: "100%", padding: "10px", background: "none", color: "var(--accent)", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" },
 

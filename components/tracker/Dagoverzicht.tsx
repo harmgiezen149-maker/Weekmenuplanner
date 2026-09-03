@@ -3,7 +3,7 @@
 import React, { useMemo, useState } from "react";
 import {
   ChevronLeft, ChevronRight, ChevronDown, Minus, PencilLine, Plus, Trash2, Settings, Scale,
-  Footprints,
+  Footprints, UtensilsCrossed,
 } from "lucide-react";
 import { T } from "./stijl";
 import Ring from "./Ring";
@@ -13,6 +13,7 @@ import { nl, verschuifDatum } from "@/lib/tracker/datum";
 import { dagBewegingspunten } from "@/lib/tracker/activiteit";
 import { aantalvak, factorVoor, schaalEntry } from "@/lib/tracker/regel";
 import Beweging from "./Beweging";
+import Maaltijdmaker from "./Maaltijdmaker";
 import type { Day, Entry, Maaltijd, Profile } from "@/lib/tracker/types";
 
 const NL_DATUM = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
@@ -51,6 +52,8 @@ export default function Dagoverzicht({
   onWisBeweging: (id: string) => void;
 }) {
   const [bewegingOpen, setBewegingOpen] = useState(false);
+  // Welk eetmoment op dit moment als maaltijd of recept wordt bewaard.
+  const [maakt, setMaakt] = useState<Maaltijd | null>(null);
   const beweging = dagBewegingspunten(dag.activity);
   const schaal = profiel?.points_scale ?? 1;
   const budget = profiel?.daily_budget ?? 0;
@@ -246,9 +249,21 @@ export default function Dagoverzicht({
               <Regel key={e.id} entry={e} schaal={schaal} onWis={onWis} onWijzig={onWijzig} />
             ))}
 
-            <button style={T.maaltijdPlus} onClick={() => onToevoegen(m)}>
-              <Plus size={15} /> Toevoegen
-            </button>
+            {maakt === m && (
+              <Maaltijdmaker maaltijd={m} regels={regels} schaal={schaal}
+                onKlaar={() => setMaakt(null)} />
+            )}
+
+            <div style={T.maaltijdVoet}>
+              <button style={T.maaltijdPlus} onClick={() => onToevoegen(m)}>
+                <Plus size={15} /> Toevoegen
+              </button>
+              {regels.length > 0 && maakt !== m && (
+                <button style={T.maaltijdPlus} onClick={() => setMaakt(m)}>
+                  <UtensilsCrossed size={15} /> Maaltijd of recept
+                </button>
+              )}
+            </div>
           </section>
         );
       })}

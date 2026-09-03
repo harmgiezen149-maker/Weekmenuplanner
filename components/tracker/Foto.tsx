@@ -8,15 +8,11 @@ import { nl } from "@/lib/tracker/datum";
 import { CATEGORIE_LABEL, CATEGORIEEN, MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Category, Maaltijd, Nutrients } from "@/lib/tracker/types";
 import type { FotoItem } from "@/lib/tracker/foto";
+import { KOOKBOEK_MAALTIJD } from "@/lib/tracker/samenstellen";
 import { comprimeerAfbeelding } from "@/lib/afbeelding";
 import { HOOFDINGREDIENTEN } from "@/lib/types";
 
 const MAX_ZIJDE = 1400; // groot genoeg om porties te kunnen zien
-
-/** De maaltijdnamen van de tracker naar die van het kookboek. */
-const KOOKBOEK_MAALTIJD: Record<Maaltijd, string> = {
-  ontbijt: "Ontbijt", lunch: "Lunch", diner: "Avondeten", snack: "Toetje",
-};
 
 /**
  * Een foto van je bord laten schatten.

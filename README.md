@@ -269,6 +269,36 @@ hoeveelheid meetelt. Bij stuks en porties staat het aantal al in de regel en
 wordt het gewoon bijgesteld. Porties gaan met halve stappen, want een halve
 portie komt echt voor.
 
+### Van een eetmoment een maaltijd of recept maken
+
+Wat je vanochtend at is de beste beschrijving van je vaste ontbijt die er
+bestaat: het staat er al, met hoeveelheden en al. Onder elk eetmoment met
+regels staat daarom **Maaltijd of recept**. Dat vraagt om een naam en om waar
+het heen moet — allebei mag:
+
+- **Vaste maaltijd** — komt bij **Snel** te staan en logt zichzelf morgen met
+  één tik, bij dezelfde maaltijd.
+- **Recept in kookboek** — komt in het kookboek met punten per portie, en kan
+  mee in het weekmenu en op de boodschappenlijst. Voor één persoon: dit is één
+  keer wat jij at, en doen alsof het een gezinsmaaltijd was zou de
+  hoeveelheden verzinnen. Bereiding, foto en personen vul je daar aan.
+
+**Een regel die zelf al uit onderdelen bestaat wordt uitgeklapt.** Log je een
+recept en maak je daar later een vaste maaltijd van, dan komen de ingrediënten
+als losse onderdelen mee en niet het gerecht als geheel. Dat is geen cosmetiek:
+de punten van zo'n regel zijn de som van de onderdelen, elk met zijn eigen
+categorie. Zou het als één onderdeel worden bewaard, dan wordt het opnieuw
+uitgerekend over de opgetelde voedingswaarden en telt de melksuiker in de
+yoghurt ineens wél mee. Een test legt vast dat de punten voor en na het
+uitklappen gelijk zijn.
+
+Voor het kookboek worden de hoeveelheden naar gram (of ml) omgerekend, ook als
+er "3 × snee" gelogd stond: het kookboek matcht ingrediënten met producten, en
+een zelfbedachte stukseenheid herkent het niet. Hetzelfde product twee keer in
+één eetmoment wordt één ingrediëntregel. Net als bij een recept uit een foto
+worden de onbekende ingrediënten daarna op de achtergrond geschat, zodat het
+verse recept niet met nul punten in het kookboek staat.
+
 ### Wegen en de trendlijn
 
 Op je weegdag verschijnt op het dagoverzicht een knop naar het weegscherm. Één
