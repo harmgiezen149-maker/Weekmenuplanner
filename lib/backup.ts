@@ -19,7 +19,7 @@
 // deel zit in allebei.
 // ---------------------------------------------------------------------------
 
-import { redis } from "./redis";
+import { redis, mgetInStukjes } from "./redis";
 import { persoonlijk } from "./persoon";
 import type { BackupBestand, BackupTelling } from "./backup-formaat";
 import { BACKUP_VERSIE, tel } from "./backup-formaat";
@@ -53,16 +53,15 @@ export async function maakBackup(persoon: { id: string; naam: string }): Promise
 
 async function leesGedeeld(): Promise<BackupBestand["gedeeld"]> {
   const receptIds = ((await redis.smembers("recipes:index")) ?? []) as string[];
-  const recepten = receptIds.length
-    ? ((await redis.mget<(Recept | null)[]>(...receptIds.map((id) => `recipe:${id}`))) ?? [])
-      .filter((r): r is Recept => r != null)
-    : [];
+  // In stukjes: met de foto's erin zijn alle recepten samen zo groot dat één
+  // mget de limiet van Upstash overschrijdt. Een back-up die daarop klapt is
+  // een back-up die je niet hebt.
+  const recepten = (await mgetInStukjes<Recept>(receptIds.map((id) => `recipe:${id}`)))
+    .filter((r): r is Recept => r != null);
 
   const dagDatums = ((await redis.zrange<string[]>("wl:day:index", 0, -1)) ?? []);
-  const dagen = dagDatums.length
-    ? ((await redis.mget<(Day | null)[]>(...dagDatums.map((d) => `wl:day:${d}`))) ?? [])
-      .filter((d): d is Day => d != null)
-    : [];
+  const dagen = (await mgetInStukjes<Day>(dagDatums.map((d) => `wl:day:${d}`)))
+    .filter((d): d is Day => d != null);
 
   const [week, boodschappen, gebiedvolgorde, voorraad, favorieten, recent, maaltijden, ingredienten] =
     await Promise.all([

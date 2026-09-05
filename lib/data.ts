@@ -1,4 +1,4 @@
-import { redis } from "./redis";
+import { redis, mgetInStukjes } from "./redis";
 import type { Recept, WeekState, Boodschappen, GebiedVolgorde, Voorraad } from "./types";
 
 // ----------------------------------------------------------------------------
@@ -27,7 +27,7 @@ export async function getAllRecepten(): Promise<Recept[]> {
   const ids = await redis.smembers(RECIPE_INDEX);
   if (!ids || ids.length === 0) return [];
   const keys = ids.map((id) => RECIPE(id as string));
-  const items = await redis.mget<Recept[]>(...keys);
+  const items = await mgetInStukjes<Recept>(keys);
   return (items.filter(Boolean) as Recept[]).sort((a, b) =>
     a.titel.localeCompare(b.titel)
   );
