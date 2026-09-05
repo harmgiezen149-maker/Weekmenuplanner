@@ -818,7 +818,7 @@ deelmenu van Safari, naast alle andere deelopties.
 
 ### De eigen basislijst aanvullen
 
-`lib/tracker/basisproducten.ts` bevat een kleine vijftig Nederlandse
+`lib/tracker/basisproducten.ts` bevat ruim honderd Nederlandse
 basisproducten met hun waarden per 100 g of ml. Één regel erbij is genoeg — de
 zoekfunctie pikt hem vanzelf op:
 
@@ -1751,12 +1751,28 @@ geen minder. Daar staat een test op. De regels zelf staan in `lib/maten.ts`.
 
 ### De basislijst
 
-Van 52 naar 123 producten. Wat erbij is gekomen is wat een Nederlandse
+Van 52 naar 130 producten. Wat erbij is gekomen is wat een Nederlandse
 thuiskeuken dagelijks gebruikt en wat tot nu toe buiten de telling viel:
 knoflook, prei, champignons, aubergine, tomatenblokjes en tomatenpuree,
 kokosmelk en bouillon, room en crème fraîche, mozzarella, feta, parmezaan,
 tofu en tempeh, spekblokjes en chorizo, sojasaus en ketjap, bloem en suiker,
 cashewnoten en pijnboompitten, wraps en pitabrood.
+
+**De meelsoorten staan er los in**: volkorenmeel, speltmeel, roggemeel,
+havermeel, boekweitmeel, amandelmeel en maizena, naast de tarwebloem die er al
+stond. Een baksel bestaat voor het grootste deel uit meel; viel dat buiten de
+telling, dan was het recept eigenlijk niet doorgerekend. Ze onder één noemer
+vangen kan niet: amandelmeel heeft bijna twee keer zoveel calorieën als
+tarwebloem en maizena is vrijwel zuiver zetmeel. Havermeel deelt zijn waarden
+met havermout — het ís gemalen havermout. Bij amandelmeel staat de categorie
+*noten & zaden*, zodat de suiker die er van nature in zit niet als toegevoegde
+suiker meetelt.
+
+Daarbij is één zoekfout rechtgezet: **"bloem" gaf Bloemkool**. Een naam die
+toevallig met je zoekterm begint woog zwaarder dan een heel woord dat precies
+klopte. Nu is dat andersom — een woord dat exact overeenkomt (in de naam of in
+de trefwoorden) gaat voor een naam die er alleen mee begint. "bloemkool" geeft
+nog steeds gewoon bloemkool.
 
 Waarden zijn per 100 g of 100 ml. Aanvullen blijft één regel werk in
 `lib/tracker/basisproducten.ts`; de zoekfunctie pikt hem vanzelf op.

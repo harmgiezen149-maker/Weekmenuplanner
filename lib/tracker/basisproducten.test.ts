@@ -125,3 +125,31 @@ test("zonder treffer komt er een lege lijst terug", () => {
 test("het aantal resultaten is begrensd", () => {
   assert.ok(zoekBasisproducten("e", 5).length <= 5);
 });
+
+test("de meelsoorten staan er los in", () => {
+  // Een baksel bestaat voor het grootste deel uit meel; valt dat buiten de
+  // telling, dan is het recept eigenlijk niet doorgerekend. De verschillen
+  // zijn te groot om er een voor de rest te laten staan.
+  assert.equal(zoekBasisproducten("volkorenmeel")[0].name, "Volkorenmeel");
+  assert.equal(zoekBasisproducten("havermeel")[0].name, "Havermeel");
+  assert.equal(zoekBasisproducten("boekweitmeel")[0].name, "Boekweitmeel");
+  assert.equal(zoekBasisproducten("amandelmeel")[0].name, "Amandelmeel");
+  assert.equal(zoekBasisproducten("speltmeel")[0].name, "Speltmeel");
+  assert.equal(zoekBasisproducten("roggemeel")[0].name, "Roggemeel");
+  assert.equal(zoekBasisproducten("maïzena")[0].name, "Maizena");
+
+  // Amandelmeel is bijna twee keer zo zwaar als tarwebloem; zou het als bloem
+  // tellen, dan klopt er niets van de punten.
+  assert.ok(vind("amandelmeel").per100.kcal > vind("bloem").per100.kcal * 1.5);
+  // De suiker in amandelen is die van de amandel zelf.
+  assert.equal(vind("amandelmeel").per100.category, "nuts_seeds");
+  // Havermeel is gemalen havermout en heeft dus dezelfde waarden.
+  assert.deepEqual(vind("havermeel").per100.kcal, vind("havermout").per100.kcal);
+});
+
+test("een woord dat precies klopt wint van een naam die er alleen mee begint", () => {
+  // "bloem" gaf eerder Bloemkool: die naam begint er toevallig mee. Bakken met
+  // bloemkool is niet wat je bedoelde.
+  assert.equal(zoekBasisproducten("bloem")[0].name, "Tarwebloem");
+  assert.equal(zoekBasisproducten("bloemkool")[0].name, "Bloemkool");
+});

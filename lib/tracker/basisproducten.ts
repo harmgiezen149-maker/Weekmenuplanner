@@ -101,8 +101,34 @@ const REGELS: BasisRegel[] = [
     w: [88, 2.0, 1.5, 0.9, 15.0, 1.2, 1.4] },
   { id: "frites-oven", naam: "Ovenfriet", ook: ["patat", "friet"],
     w: [180, 3.0, 6.0, 0.7, 27.0, 0.5, 3.0] },
-  { id: "bloem", naam: "Tarwebloem", ook: ["bloem", "patentbloem"],
+  { id: "bloem", naam: "Tarwebloem", ook: ["bloem", "patentbloem", "witte bloem"],
     w: [364, 10.3, 1.0, 0.2, 76.0, 0.3, 2.7] },
+
+  // Meelsoorten. Een recept dat "volkorenmeel" of "amandelmeel" zegt viel
+  // eerder buiten de puntentelling: de lijst kende alleen witte bloem, en dan
+  // telt een van de zwaarste ingredienten van een baksel niet mee. De
+  // verschillen zijn te groot om er een te laten staan voor de rest —
+  // amandelmeel heeft bijna twee keer zoveel calorieen als tarwebloem, en
+  // maizena bestaat vrijwel geheel uit zetmeel.
+  { id: "volkorenmeel", naam: "Volkorenmeel", ook: ["volkoren tarwemeel", "tarwemeel", "meel"],
+    w: [340, 13.2, 2.5, 0.4, 61.0, 0.4, 10.7] },
+  { id: "speltmeel", naam: "Speltmeel", ook: ["spelt"],
+    w: [338, 14.6, 2.4, 0.4, 62.0, 0.5, 10.7] },
+  { id: "roggemeel", naam: "Roggemeel", ook: ["rogge", "roggebloem"],
+    w: [325, 10.4, 1.8, 0.2, 60.0, 1.0, 15.1] },
+  // Gemalen havermout, en dus dezelfde waarden: wie het zelf maalt houdt
+  // precies over wat erin ging.
+  { id: "havermeel", naam: "Havermeel", ook: ["gemalen havermout", "havervlokken gemalen"],
+    w: [379, 13.0, 6.5, 1.1, 67.0, 1.0, 10.0] },
+  { id: "boekweitmeel", naam: "Boekweitmeel", ook: ["boekweit"],
+    w: [335, 12.6, 3.1, 0.7, 62.0, 2.6, 10.0] },
+  // Noten en zaden: de suiker die erin zit is die van de amandel zelf en hoort
+  // dus niet als toegevoegde suiker mee te tellen.
+  { id: "amandelmeel", naam: "Amandelmeel", ook: ["gemalen amandelen", "amandelpoeder"],
+    categorie: "nuts_seeds",
+    w: [590, 21.0, 50.0, 3.8, 8.0, 4.0, 11.0] },
+  { id: "maizena", naam: "Maizena", ook: ["maïzena", "maiszetmeel", "custardpoeder"],
+    w: [350, 0.3, 0.1, 0.0, 85.0, 0.0, 0.9] },
 
   { id: "kipfilet", naam: "Kipfilet, rauw", ook: ["kip"],
     w: [110, 23.0, 1.5, 0.5, 0, 0, 0], portie: { grams: 120, label: "1 filet" } },
@@ -384,10 +410,15 @@ export function zoekMetScore(term: string, limiet = 8, opties: ZoekOpties = {}):
     const extra = (r.ook ?? []).map(normaliseer);
 
     let score = 0;
+    // Een heel woord dat precies klopt weegt zwaarder dan een naam die er
+    // alleen mee begint. Anders won "Bloemkool" van tarwebloem zodra je
+    // "bloem" typte: die naam begint er toevallig mee, terwijl "bloem" een
+    // volwaardige naam is van iets heel anders. Bakken met bloemkool is niet
+    // wat je bedoelde.
     if (naam === q) score = 100;
+    else if (woorden.some((w) => w === q)) score = 90;
+    else if (extra.some((e) => e === q)) score = 85;
     else if (naam.startsWith(q)) score = 80;
-    else if (woorden.some((w) => w === q)) score = 70;
-    else if (extra.some((e) => e === q)) score = 65;
     else if (woorden.some((w) => w.startsWith(q))) score = 50;
     else if (extra.some((e) => e.startsWith(q))) score = 45;
     else if (naam.includes(q)) score = 30;
