@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { leesUrl, ontleedIngredient, leesPersonen, uitJsonLd, uitHtml, striptags } from "./link.ts";
+import { leesUrl, ontleedIngredient, leesPersonen, uitJsonLd, uitHtml, striptags, leesBereiding } from "./link.ts";
 
 test("een link wordt uit een gedeelde tekst gevist", () => {
   assert.equal(leesUrl("https://ah.nl/recept/123"), "https://ah.nl/recept/123");
@@ -139,4 +139,34 @@ test("de terugval slaat aan noch bij te weinig regels", () => {
 test("scripts en stijlen verdwijnen uit de platte tekst", () => {
   const html = "<div>Hallo<script>kwaad()</script><style>p{}</style> wereld &amp; zo</div>";
   assert.equal(striptags(html), "Hallo wereld & zo");
+});
+
+test("de bereiding komt in vier vormen binnen", () => {
+  // Eén lange tekst.
+  assert.equal(leesBereiding("Meng alles en bak het."), "Meng alles en bak het.");
+
+  // Een lijst zinnen.
+  assert.equal(leesBereiding(["Snijd de ui.", "Bak hem aan."]), "1. Snijd de ui.\n2. Bak hem aan.");
+
+  // HowToStep-objecten, zoals de meeste receptsites het schrijven.
+  assert.equal(
+    leesBereiding([{ "@type": "HowToStep", text: "Verwarm de oven." }, { "@type": "HowToStep", text: "Zet hem erin." }]),
+    "1. Verwarm de oven.\n2. Zet hem erin."
+  );
+
+  // Secties met stappen erin.
+  assert.equal(
+    leesBereiding([{ "@type": "HowToSection", itemListElement: [{ text: "Maak de saus." }] }]),
+    "Maak de saus."
+  );
+});
+
+test("html in de bereiding gaat eruit", () => {
+  assert.equal(leesBereiding("<p>Kook de <b>pasta</b>.</p>"), "Kook de pasta.");
+});
+
+test("geen bereiding levert een lege tekst op", () => {
+  assert.equal(leesBereiding(undefined), "");
+  assert.equal(leesBereiding([]), "");
+  assert.equal(leesBereiding([{ "@type": "HowToStep" }]), "");
 });

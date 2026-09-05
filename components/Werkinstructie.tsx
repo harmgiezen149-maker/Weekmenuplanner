@@ -670,8 +670,15 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             <strong>Telt een ingrediënt niet mee?</strong> Bij een opgehaald recept staat onder
             <em> Zo is het gerekend</em> naast elke regel een potlood. Daar schrijf je het ingrediënt
             anders op — "volkorenmeel (havermeel)" kent de app niet, "havermout" wel — of je zet er
-            een maat bij. Het wordt meteen opnieuw doorgerekend. Staat het er echt niet in, dan vul
-            je het daar zelf in of laat je het schatten, en telt het voortaan overal mee.
+            een maat bij. De namen die de app voorstelt zijn eerst getoetst: je krijgt alleen
+            knopjes van namen die echt iets opleveren, met het product erbij. Staat er niets in de
+            lijst, dan vul je het daar zelf in of laat je het schatten, en telt het voortaan overal
+            mee.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>Loggen, in het kookboek, of allebei.</strong> Onder het opgehaalde recept kies je
+            waar het heen gaat. Je bijstellingen gaan mee het kookboek in, net als de bereiding als
+            die op de pagina stond.
           </p>
           <p style={{ margin: 0 }}>
             Kom je onderweg een recept- of productpagina tegen, dan kun je die vanuit je browser

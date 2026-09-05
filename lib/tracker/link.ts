@@ -14,6 +14,13 @@ export interface RuwRecept {
   titel: string;
   personen: number;
   ingredienten: { naam: string; hoev: number; eenheid: string }[];
+  /**
+   * De bereidingswijze, als de pagina die gestructureerd meelevert.
+   *
+   * Alleen voor het kookboek: de tracker doet er niets mee. Voedingswaarden
+   * worden nog steeds nooit overgenomen — dit is de werkwijze, geen getal.
+   */
+  bereiding?: string;
 }
 
 /** Haalt de eerste http(s)-link uit een gedeelde tekst. */
@@ -52,16 +59,53 @@ export function uitJsonLd(html: string): RuwRecept | null {
         : Array.isArray(rauw.ingredients) ? rauw.ingredients : [];
       if (lijst.length === 0) continue;
 
+      const bereiding = leesBereiding((k as { recipeInstructions?: unknown }).recipeInstructions);
       return {
         titel: String((k as { name?: unknown }).name ?? "Geïmporteerd recept").slice(0, 120),
         personen: leesPersonen((k as { recipeYield?: unknown }).recipeYield),
         ingredienten: lijst
           .map((r: unknown) => ontleedIngredient(String(r)))
           .filter((i): i is RuwRecept["ingredienten"][number] => i !== null),
+        ...(bereiding ? { bereiding } : {}),
       };
     }
   }
   return null;
+}
+
+/**
+ * De bereidingswijze uit een JSON-LD-blok.
+ *
+ * Sites schrijven dit op vier manieren op: één lange tekst, een lijst zinnen,
+ * een lijst HowToStep-objecten, of secties met stappen erin. Alle vier komen
+ * hier uit op genummerde regels.
+ */
+export function leesBereiding(rauw: unknown): string {
+  const stappen = verzamelStappen(rauw).filter((s) => s !== "");
+  if (stappen.length === 0) return "";
+  if (stappen.length === 1) return stappen[0].slice(0, 4000);
+  return stappen.map((s, i) => `${i + 1}. ${s}`).join("\n").slice(0, 4000);
+}
+
+function verzamelStappen(rauw: unknown): string[] {
+  if (typeof rauw === "string") return [zin(rauw)];
+  if (Array.isArray(rauw)) return rauw.flatMap(verzamelStappen);
+  if (rauw && typeof rauw === "object") {
+    const o = rauw as Record<string, unknown>;
+    // Een sectie ("Voor de saus") bevat zijn stappen in itemListElement.
+    if (Array.isArray(o.itemListElement)) return verzamelStappen(o.itemListElement);
+    if (typeof o.text === "string") return [zin(o.text)];
+    if (typeof o.name === "string") return [zin(o.name)];
+  }
+  return [];
+}
+
+/**
+ * Tags eruit, en de spatie die daarvoor in de plaats komt weer weg als er een
+ * leesteken achteraan stond: "Kook de <b>pasta</b>." wordt anders "pasta .".
+ */
+function zin(html: string): string {
+  return striptags(html).replace(/\s+([.,;:!?])/g, "$1").trim();
 }
 
 /** Zet geneste JSON-LD (@graph, arrays) om in een platte lijst objecten. */

@@ -707,13 +707,18 @@ zijn dan te laag.
 Naast elke regel staat nu een potlood — bij de gaten in de accentkleur. Daar
 kun je drie dingen:
 
-1. **Anders opschrijven.** "volkorenmeel (havermeel)" kent de productlijst niet,
-   "havermout" wel. Boven het naamveld staan knopjes met de losse namen die in
-   de oorspronkelijke naam zitten (`lib/tracker/naamvarianten.ts`: haakjes,
-   komma's en "of" vallen uiteen); je kunt ook zelf iets typen. Er wordt meteen
-   opnieuw gerekend via `POST /api/tracker/recepten/doorrekenen` — dat is alleen
-   de eigen productlijst en de eigen formule, dus het kost geen modelaanroep en
-   je mag het zo vaak proberen als je wilt.
+1. **Anders opschrijven.** De losse namen die in de oorspronkelijke naam zitten
+   worden eruit gehaald (`lib/tracker/naamvarianten.ts`: haakjes, komma's en
+   "of" vallen uiteen) en **eerst getoetst** tegen je productlijst via
+   `POST /api/tracker/ingredienten/proberen`. Alleen namen die iets opleveren
+   worden als knopje aangeboden, met het gevonden product erbij:
+   *kipfilet → Kipfilet, rauw*. Levert geen van de varianten iets op, dan staat
+   dat er ook — bij "volkorenmeel (havermeel)" is dat "ook volkorenmeel en
+   havermeel staan niet in de productlijst" — zodat je niet blijft klikken op
+   een knopje dat niets verandert. Zelf typen kan altijd; er wordt meteen
+   opnieuw gerekend via `POST /api/tracker/recepten/doorrekenen`. Beide routes
+   gebruiken alleen de eigen productlijst en de eigen formule, dus ze kosten
+   geen modelaanroep en je mag het zo vaak proberen als je wilt.
 2. **De maat bijstellen.** Zelfde paneel, zelfde knop: een hoeveelheid en een
    eenheid die de app kent.
 3. **Zelf invullen.** Staat het er echt niet in, dan opent hetzelfde formulier
@@ -727,6 +732,26 @@ worden daarvoor apart vastgehouden: hernoem je eerst, dan hoort "onthouden" nog
 steeds bij de naam van de pagina en niet bij wat jij ervoor in de plaats zette.
 
 De bijstellingen gelden voor deze import; aan de pagina zelf verandert niets.
+
+#### Loggen, in het kookboek, of allebei
+
+Onder aan een opgehaald recept kies je waar het heen gaat: **in je logboek**
+(standaard aan — dat is waar je meestal voor komt), **in je kookboek**, of
+allebei. Zet je het in je kookboek, dan komt er één vraag bij: het
+hoofdingrediënt, want daar filter je later op.
+
+Het recept gaat mee **zoals het op dit scherm staat** — de ingrediënten komen
+uit de doorrekening, dus jouw bijstellingen gaan mee het kookboek in. Staat er
+een bereiding in de `schema.org`-gegevens van de pagina, dan komt die er ook
+bij (`leesBereiding` in `lib/tracker/link.ts` leest de vier vormen waarin sites
+dat opschrijven); de bronlink staat er altijd onder. Een foto komt niet mee —
+die haal je in het kookboek zelf op.
+
+Het kookboek gaat eerst en het loggen daarna, want loggen verlaat het scherm:
+mislukt het recept, dan sta je er nog met de melding erbij in plaats van in je
+dagoverzicht met een half uitgevoerde opdracht. Wat na het opslaan nog niet
+herkend is wordt op de achtergrond geschat, zodat het verse recept niet met een
+gat in de punten in je kookboek staat.
 
 #### Een product via een link
 

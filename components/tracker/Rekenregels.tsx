@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Check, Loader2, PencilLine, Sparkles, X } from "lucide-react";
 import { T } from "./stijl";
 import { STANDAARD_MATEN } from "@/lib/tracker/recept";
@@ -209,7 +209,36 @@ function Bijstellen({
   const [naam, setNaam] = useState(regel.naam);
   const [hoev, setHoev] = useState(String(regel.hoev || ""));
   const [eenheid, setEenheid] = useState(regel.eenheid);
+
+  // Welke van de voorgestelde namen de productlijst kent. Zonder deze vraag
+  // bood het scherm namen aan die het net zo min herkent — "volkorenmeel
+  // (havermeel)" valt uiteen in twee namen die er allebei niet in staan, en
+  // dan lijkt bijstellen niet te werken terwijl het gewoon niets oplevert.
+  const [bekend, setBekend] = useState<Record<string, string | null> | null>(null);
   const varianten = naamVarianten(origineel);
+
+  useEffect(() => {
+    if (herkend || varianten.length === 0) return;
+    let afgebroken = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/tracker/ingredienten/proberen", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ namen: varianten }),
+        });
+        const data = await res.json();
+        if (afgebroken || !Array.isArray(data?.uitslagen)) return;
+        const kaart: Record<string, string | null> = {};
+        for (const u of data.uitslagen) kaart[String(u.naam)] = u.product ?? null;
+        setBekend(kaart);
+      } catch { /* zonder deze uitslag zijn de knopjes gewoon niet gemerkt */ }
+    })();
+    return () => { afgebroken = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [origineel, herkend]);
+
+  const bruikbaar = varianten.filter((v) => bekend?.[v]);
+  const geenEnkele = bekend != null && bruikbaar.length === 0;
 
   const probeer = (metNaam = naam) => {
     const n = Number(String(hoev).replace(",", "."));
@@ -228,15 +257,27 @@ function Bijstellen({
         gerekend; er verandert niets aan de pagina zelf.
       </p>
 
-      {varianten.length > 0 && (
-        <div style={{ ...T.chips, marginBottom: 10 }}>
-          {varianten.map((v) => (
-            <button key={v} type="button" style={T.chip}
-              onClick={() => { setNaam(v); probeer(v); }} disabled={bezig}>
-              {v}
-            </button>
-          ))}
+      {bruikbaar.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <span style={T.label}>Deze kent de app wel</span>
+          <div style={T.chips}>
+            {bruikbaar.map((v) => (
+              <button key={v} type="button" style={T.chip}
+                onClick={() => { setNaam(v); probeer(v); }} disabled={bezig}>
+                {v} → {bekend?.[v]}
+              </button>
+            ))}
+          </div>
         </div>
+      )}
+
+      {geenEnkele && (
+        <p style={S.geenTreffer}>
+          {varianten.length === 1
+            ? `"${varianten[0]}" staat ook niet in de productlijst.`
+            : `Ook ${varianten.map((v) => `"${v}"`).join(" en ")} staan niet in de productlijst.`}{" "}
+          Probeer een andere naam, of vul het ingrediënt hieronder zelf in.
+        </p>
       )}
 
       <label style={T.label} htmlFor={`rk-naam-${regel.naam}`}>Naam</label>
@@ -292,5 +333,9 @@ function Bijstellen({
 
 const S: Record<string, React.CSSProperties> = {
   vak: { padding: "12px 15px 14px", background: "var(--bg)", borderBottom: "1px solid var(--line)" },
+  geenTreffer: {
+    fontSize: 12.5, lineHeight: 1.6, color: "#a8351f", background: "#fdeeeb",
+    border: "1px solid var(--red)", borderRadius: 10, padding: "9px 11px", margin: "0 0 12px",
+  },
   uitleg: { fontSize: 12.5, lineHeight: 1.6, color: "var(--sub)", margin: "0 0 12px" },
 };

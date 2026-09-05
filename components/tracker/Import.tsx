@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Activity, AlertTriangle, Check, ClipboardPaste, Link2, Loader2 } from "lucide-react";
+import {
+  Activity, AlertTriangle, BookOpen, Check, ClipboardPaste, Link2, Loader2,
+} from "lucide-react";
 import { leesGeplakteLijst } from "@/lib/tracker/koppeling";
 import { datumSleutel } from "@/lib/tracker/datum";
 import { T } from "./stijl";
@@ -11,12 +13,14 @@ import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Maaltijd, Product } from "@/lib/tracker/types";
 import type { ReceptPunten } from "@/lib/tracker/recept";
 import Rekenregels from "./Rekenregels";
+import { KOOKBOEK_MAALTIJD } from "@/lib/tracker/samenstellen";
+import { HOOFDINGREDIENTEN } from "@/lib/types";
 
 type Bron = "json-ld" | "html" | "model";
 
 interface ReceptUitslag {
   soort: "recept";
-  recept: { titel: string; personen: number };
+  recept: { titel: string; personen: number; bereiding?: string };
   punten: ReceptPunten;
   bron: Bron;
   url: string;
@@ -74,6 +78,13 @@ export default function Import({
   const [maal, setMaal] = useState<Maaltijd>("diner");
   const [beweging, setBeweging] = useState<{ geboekt: number; melding: string } | null>(null);
   const [bewegingBezig, setBewegingBezig] = useState(false);
+  // Waar het recept heen gaat. Loggen is waar je meestal voor komt; het
+  // kookboek staat ernaast, want een recept dat je lekker vond wil je vaker.
+  const [naarLogboek, setNaarLogboek] = useState(true);
+  const [naarKookboek, setNaarKookboek] = useState(false);
+  const [hoofd, setHoofd] = useState<string>(HOOFDINGREDIENTEN[3]);
+  const [bewaartRecept, setBewaartRecept] = useState(false);
+  const [kookboekKlaar, setKookboekKlaar] = useState("");
 
   /**
    * Ziet de gedeelde tekst eruit als een training?
@@ -156,6 +167,92 @@ export default function Import({
   const aantal = getal(porties);
   const perPortie = uitslag?.soort === "recept" ? uitslag.punten.perPortiePunten : 0;
   const punten = toonPunten(perPortie * aantal, schaal);
+
+  const kanOpslaan = aantal > 0 && (naarLogboek || naarKookboek) && !bezig && !bewaartRecept;
+  const opslaanLabel = naarLogboek && naarKookboek
+    ? "Loggen en in het kookboek"
+    : naarKookboek
+      ? "In het kookboek zetten"
+      : `Toevoegen aan ${datumLabel.toLowerCase()}`;
+
+  /**
+   * Het recept in het kookboek zetten.
+   *
+   * De ingrediënten komen uit de doorrekening en niet uit de oorspronkelijke
+   * pagina: heb je hierboven een naam of een maat bijgesteld, dan hoort die
+   * verbetering mee te gaan.
+   */
+  const bewaarInKookboek = async (u: ReceptUitslag) => {
+    const ingredienten = u.punten.matches.map((m) => ({
+      naam: m.ingredient, hoev: m.hoev, eenheid: m.eenheid,
+    }));
+    const res = await fetch("/api/recipes", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        titel: u.recept.titel,
+        hoofd,
+        maaltijd: KOOKBOEK_MAALTIJD[maal],
+        personen: u.recept.personen,
+        tijd: 30, score: 0, gegeten: 0, afbeelding: "",
+        ingredienten,
+        bereiding: [u.recept.bereiding, `Bron: ${u.url}`].filter(Boolean).join("\n\n"),
+      }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d?.error || "Het recept kon niet worden opgeslagen");
+    }
+
+    // Wat nog niet herkend is alsnog laten schatten, zodat het verse recept
+    // niet met een gat in de punten in het kookboek staat. Op de achtergrond
+    // en stil als het misgaat: het recept is opgeslagen, dat was de vraag.
+    if (u.punten.nietHerkend.length > 0) {
+      void fetch("/api/tracker/ingredienten/schat-alles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ namen: u.punten.nietHerkend }),
+      }).catch(() => {});
+    }
+  };
+
+  /**
+   * Opslaan. Het kookboek gaat eerst, want loggen verlaat dit scherm: gaat het
+   * recept mis, dan sta je hier nog met de melding erbij in plaats van in je
+   * dagoverzicht met een half uitgevoerde opdracht.
+   */
+  const bewaar = async (u: ReceptUitslag) => {
+    setEigenFout(""); setKookboekKlaar("");
+
+    if (naarKookboek) {
+      setBewaartRecept(true);
+      try {
+        await bewaarInKookboek(u);
+        setKookboekKlaar(`${u.recept.titel} staat in je kookboek.`);
+      } catch (e) {
+        setEigenFout(e instanceof Error ? e.message : "Het recept kon niet worden opgeslagen");
+        return;
+      } finally { setBewaartRecept(false); }
+    }
+
+    if (!naarLogboek) return;
+
+    const factor = aantal / u.punten.personen;
+    onLog({
+      name: u.recept.titel,
+      meal: maal,
+      source: "link",
+      ref: u.url,
+      amount: aantal,
+      unit: aantal === 1 ? "portie" : "porties",
+      components: u.punten.componenten.map((c) => ({
+        ...c,
+        amount: c.amount * factor,
+        grams: c.grams * factor,
+        nutrients: Object.fromEntries(
+          Object.entries(c.nutrients).map(([k, v]) => [k, typeof v === "number" ? v * factor : v])
+        ),
+      })),
+    });
+  };
 
   return (
     <>
@@ -326,31 +423,49 @@ export default function Import({
             naam of een maat die de app kent telt het alsnog.
           </p>
 
-          <button style={{ ...T.primair, opacity: aantal > 0 && !bezig ? 1 : 0.5 }}
-            disabled={aantal <= 0 || bezig}
-            onClick={() => {
-              const factor = aantal / uitslag.punten.personen;
-              onLog({
-                name: uitslag.recept.titel,
-                meal: maal,
-                source: "link",
-                ref: uitslag.url,
-                amount: aantal,
-                unit: aantal === 1 ? "portie" : "porties",
-                components: uitslag.punten.componenten.map((c) => ({
-                  ...c,
-                  amount: c.amount * factor,
-                  grams: c.grams * factor,
-                  nutrients: Object.fromEntries(
-                    Object.entries(c.nutrients).map(([k, v]) =>
-                      [k, typeof v === "number" ? v * factor : v])
-                  ),
-                })),
-              });
-            }}>
-            {bezig
+          <div style={T.veldVak}>
+            <span style={T.label}>Waar zet je het neer?</span>
+            <div style={T.chips}>
+              <button type="button" onClick={() => setNaarLogboek((v) => !v)}
+                style={{ ...T.chip, ...(naarLogboek ? T.chipAan : {}) }}>
+                <Activity size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
+                In je logboek
+              </button>
+              <button type="button" onClick={() => setNaarKookboek((v) => !v)}
+                style={{ ...T.chip, ...(naarKookboek ? T.chipAan : {}) }}>
+                <BookOpen size={13} style={{ verticalAlign: -2, marginRight: 5 }} />
+                In je kookboek
+              </button>
+            </div>
+            <p style={T.hint}>
+              Loggen zet {aantal === 1 ? "deze portie" : "deze porties"} bij{" "}
+              {datumLabel.toLowerCase()}. In je kookboek blijft het recept staan om vaker
+              te maken, met punten per portie, klaar voor het weekmenu. Allebei mag.
+            </p>
+          </div>
+
+          {naarKookboek && (
+            <div style={T.veldVak}>
+              <label style={T.label} htmlFor="im-hoofd">Hoofdingrediënt</label>
+              <select id="im-hoofd" style={T.veld} value={hoofd}
+                onChange={(e) => setHoofd(e.target.value)}>
+                {HOOFDINGREDIENTEN.map((h) => <option key={h} value={h}>{h}</option>)}
+              </select>
+              <p style={T.hint}>
+                De ingrediënten gaan mee zoals ze hierboven staan, jouw bijstellingen
+                incluis.{uitslag.recept.bereiding ? " De bereiding stond op de pagina en gaat mee." : " Een bereiding stond er niet bij; die vul je in het kookboek aan."}
+              </p>
+            </div>
+          )}
+
+          {kookboekKlaar && <div style={{ ...T.melding, marginBottom: 12 }}>{kookboekKlaar}</div>}
+
+          <button style={{ ...T.primair, opacity: kanOpslaan ? 1 : 0.5 }}
+            disabled={!kanOpslaan}
+            onClick={() => void bewaar(uitslag)}>
+            {bezig || bewaartRecept
               ? <><Loader2 size={16} className="spin" /> Opslaan...</>
-              : <><Check size={16} /> Toevoegen aan {datumLabel.toLowerCase()}</>}
+              : <><Check size={16} /> {opslaanLabel}</>}
           </button>
         </>
       )}
