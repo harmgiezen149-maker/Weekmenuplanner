@@ -446,6 +446,14 @@ test("na een weging op de weegdag staat het weegmoment open", () => {
   assert.equal(w.datum, "2026-08-23");
 });
 
+test("de reden noemt beide dagen, zodat het misverstand zichtbaar is", () => {
+  // 29 augustus 2026 is een zaterdag; de weegdag staat op zondag. Precies het
+  // geval waarin iemand zich afvraagt waarom er wel of geen advies komt.
+  const w = weegmomentOpen(pak(), [...WEGINGEN, { date: "2026-08-29", kg: 87.9 }], profiel(), []);
+  assert.equal(w.open, false);
+  assert.equal(w.reden, "je woog op zaterdag en je weegdag staat op zondag");
+});
+
 test("een weging op een andere dag dan de weegdag opent niets", () => {
   const w = weegmomentOpen(pak(), [...WEGINGEN, { date: "2026-08-25", kg: 87.9 }], profiel(), []);
   assert.equal(w.open, false);

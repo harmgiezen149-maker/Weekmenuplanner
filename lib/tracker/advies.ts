@@ -5,6 +5,7 @@ import { dagenTussen, datumSleutel, verschuifDatum } from "./datum.ts";
 import { metTrend } from "./gewicht.ts";
 import type { Weging } from "./gewicht";
 import type { Profile } from "./types";
+import { WEEGDAGEN } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // De adviesmodule: alles behalve de modelaanroep zelf.
@@ -492,7 +493,16 @@ export function weegmomentOpen(
   if (!laatste) return { open: false, datum: null, reden: "er is nog niet gewogen" };
 
   if (dagIndex(laatste.date) !== profiel.weigh_day) {
-    return { open: false, datum: laatste.date, reden: "de laatste weging viel niet op je weegdag" };
+    // Met de twee dagen erbij, want dit is precies waar het misverstand zit:
+    // "waarom kreeg ik hier niets" en "waarom kreeg ik dit nu wel" zijn beide
+    // te beantwoorden met de dag waarop je woog naast de dag die je hebt
+    // ingesteld.
+    return {
+      open: false,
+      datum: laatste.date,
+      reden: `je woog op ${dagNaam(dagIndex(laatste.date))} en je weegdag staat op `
+        + dagNaam(profiel.weigh_day),
+    };
   }
 
   const drempel = adviesDrempel(pakket);
@@ -511,6 +521,11 @@ export function weegmomentOpen(
   }
 
   return { open: true, datum: laatste.date, reden: "" };
+}
+
+/** De weegdag in gewone taal; onbekende waarden blijven onbeschreven. */
+function dagNaam(index: number): string {
+  return (WEEGDAGEN[index] ?? "een onbekende dag").toLowerCase();
 }
 
 // -- de evaluatielus ---------------------------------------------------------

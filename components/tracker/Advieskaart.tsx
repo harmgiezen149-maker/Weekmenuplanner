@@ -45,6 +45,22 @@ const S: Record<string, React.CSSProperties> = {
   bezig: { display: "flex", alignItems: "center", gap: 10, fontSize: 13.5, fontWeight: 600, color: "var(--accent)" },
 };
 
+/**
+ * Waarom er nu een analyse loopt.
+ *
+ * Het weegmoment gaat voor: staat die open, dan is dat de aanleiding, ook als
+ * er toevallig ook iets afwijkends speelt. Is het geen van beide — de knop
+ * "vraag een analyse" — dan wordt er niets beweerd over de aanleiding.
+ */
+function aanleidingBezig(weegmoment: Weegmoment | null, afwijking: Afwijking | null): string {
+  if (weegmoment?.open) return "Je weegmoment wordt geanalyseerd.";
+  if (afwijking?.open && afwijking.vlag) {
+    const label = AFWIJKING_LABEL[afwijking.vlag] ?? afwijking.vlag;
+    return `${hoofdletter(label)} — dat wordt nu geanalyseerd.`;
+  }
+  return "Je cijfers worden geanalyseerd.";
+}
+
 const UITKOMST_LABEL: Record<string, string> = {
   verbeterd: "Bewogen richting het doel",
   deels: "Deels bewogen richting het doel",
@@ -64,11 +80,14 @@ export default function Advieskaart({
   fout: string;
 }) {
   if (bezig) {
+    // Welke van de twee triggers dit is, want een weging kan ook een
+    // afwijkingsmelding openen — en dan hier "je weegmoment" zeggen terwijl je
+    // weegdag pas zondag is, klopt gewoon niet.
     return (
       <div style={S.kaart}>
         <div style={S.bezig}>
           <Loader2 size={18} className="spin" />
-          Je weegmoment wordt geanalyseerd. Dit duurt een halve minuut.
+          {aanleidingBezig(weegmoment, afwijking)} Dit duurt een halve minuut.
         </div>
       </div>
     );

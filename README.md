@@ -954,6 +954,15 @@ op elke overschrijding reageert bouwt dat mechanisme actief in. Een test loopt
 dertig dagen aan onafgebroken aanleidingen door en komt op één melding uit als
 het steeds dezelfde is, en op hooguit drie als ze wisselen.
 
+**Twee aanleidingen die op elkaar lijken.** Een weging kan zelf een
+afwijkingsmelding openen: twee van de vijf aanleidingen hangen aan de
+weeglijst. Zet je weegdag op zondag en weeg je op zaterdag, dan gebeurt er dus
+tóch iets — niet omdat je weegmoment openstaat, maar omdat er iets in je cijfers
+opviel. Het scherm zei daar eerst "je weegmoment wordt geanalyseerd", wat niet
+klopte; nu noemt het de echte aanleiding. En staat het weegmoment níet open, dan
+zegt de melding welke dag je woog en welke dag je hebt ingesteld, zodat een
+verschil daartussen meteen te zien is.
+
 **Het kanaal** is een banner op `/tracker` en een stip op de Inzicht-navigatie.
 Geen push-notificaties: die zijn op iOS onbetrouwbaar en verhogen de meldingsdruk
 zonder aantoonbare winst. De banner leest beschrijvend — er staat wat er is, niet
