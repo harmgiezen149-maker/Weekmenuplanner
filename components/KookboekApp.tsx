@@ -2126,7 +2126,10 @@ function LinkImport({ onAdd, deling }: {
       const res = await api.importRecept({ type: "link", url: doelUrl });
       const recept = normaliseer(res.recept || res);
       setParsed(recept);
-      if (Array.isArray(res.afbeeldingen) && res.afbeeldingen.length) setAfbKeuze(res.afbeeldingen);
+      // Ook een lege lijst zetten: dat is het verschil tussen "we hebben
+      // gekeken en er stond geen foto op" en "hier wordt niet naar foto's
+      // gekeken", en dat verschil hoort het bevestigingsscherm te zien.
+      setAfbKeuze(Array.isArray(res.afbeeldingen) ? res.afbeeldingen : []);
     } catch (e: any) { setErr(e.message || "Kon de pagina niet uitlezen."); }
     finally { setBusy(false); setOphalenUrl(null); }
   };
@@ -2219,30 +2222,42 @@ function BevestigImport({
 }) {
   const [recept, setRecept] = useState<Partial<Recept>>(parsed);
   const [bezigAfb, setBezigAfb] = useState<string | null>(null);
+  const [afbFout, setAfbFout] = useState("");
   const [formKey, setFormKey] = useState(0);
 
-  const kiesAfb = async (url: string) => {
-    setBezigAfb(url);
+  const kiesAfb = async (url: string): Promise<boolean> => {
+    setBezigAfb(url); setAfbFout("");
     try {
       const res = await api.importRecept({ type: "afbeelding-proxy", url });
       const klein = await comprimeerAfbeelding(res.dataUrl);
       setRecept((p) => ({ ...p, afbeelding: klein }));
       setFormKey((k) => k + 1); // herinitialiseer het formulier met de nieuwe afbeelding
+      return true;
     } catch {
-      // stil falen; gebruiker kan een andere kiezen of handmatig uploaden
+      return false;
     } finally { setBezigAfb(null); }
   };
 
-  // Zet automatisch de eerste (beste) site-afbeelding op het recept zodra het
-  // bevestigingsscherm opent, zodat er standaard een afbeelding meekomt. De
+  // Zet automatisch de eerste site-afbeelding op het recept zodra het
+  // bevestigingsscherm opent, zodat er standaard een foto meekomt. De
   // gebruiker kan via de strip alsnog een andere kiezen of hem verwijderen.
+  //
+  // Meer dan één proberen, want de bovenste kandidaat is niet altijd op te
+  // halen: fotoservers weigeren weleens een aanvraag zonder de juiste
+  // verwijzende pagina. Lukt geen van de eerste paar, dan zeggen we dat —
+  // eerder gebeurde er zichtbaar niets en leek het alsof de app de foto
+  // vergeten was.
   const autoGedaan = useRef(false);
   useEffect(() => {
     if (autoGedaan.current) return;
-    if (!parsed.afbeelding && afbKeuze && afbKeuze.length > 0) {
-      autoGedaan.current = true;
-      kiesAfb(afbKeuze[0]);
-    }
+    autoGedaan.current = true;
+    if (parsed.afbeelding || !afbKeuze || afbKeuze.length === 0) return;
+    (async () => {
+      for (const kandidaat of afbKeuze.slice(0, 3)) {
+        if (await kiesAfb(kandidaat)) return;
+      }
+      setAfbFout("De foto's van de pagina lieten zich niet ophalen. Kies er hieronder een, of voeg zelf een foto toe.");
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2274,12 +2289,26 @@ function BevestigImport({
         </div>
       )}
 
+      {afbKeuze && afbKeuze.length === 0 && (
+        <p style={S.afbGeen}>
+          Van deze pagina kwam geen foto mee. Voeg er hieronder zelf een toe.
+        </p>
+      )}
+
+      {afbFout && <p style={S.afbFout}>{afbFout}</p>}
+
       {afbKeuze && afbKeuze.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <span style={S.label}>Kies een afbeelding van de site</span>
           <div style={S.afbKeuzeStrip}>
             {afbKeuze.map((url) => (
-              <button key={url} onClick={() => kiesAfb(url)} style={S.afbKeuzeItem}>
+              <button
+                key={url}
+                onClick={() => void kiesAfb(url).then((gelukt) => {
+                  if (!gelukt) setAfbFout("Deze foto liet zich niet ophalen. Probeer een andere.");
+                })}
+                style={S.afbKeuzeItem}
+              >
                 <img src={url} alt="" style={S.afbKeuzeImg} loading="lazy" />
                 {bezigAfb === url && <div style={S.afbKeuzeBezig}><Loader2 size={18} className="spin" /></div>}
                 {recept.afbeelding && bezigAfb !== url && <span style={S.afbKeuzeCheck} />}
@@ -3966,6 +3995,8 @@ const S: Record<string, React.CSSProperties> = {
   afbKnoppen: { display: "flex", gap: 8, padding: 8, borderTop: "1px solid var(--line)" },
   afbKnop: { flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: "var(--bg)", border: "1px solid var(--line)", color: "var(--ink)", padding: "8px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" },
   afbLeeg: { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "20px", border: "1.5px dashed var(--line)", borderRadius: 10, background: "var(--surface)", color: "var(--accent)", fontSize: 14, fontWeight: 700, cursor: "pointer" },
+  afbGeen: { fontSize: 12.5, color: "var(--sub)", margin: "0 0 12px", lineHeight: 1.5 },
+  afbFout: { fontSize: 12.5, color: "var(--red)", margin: "0 0 12px", lineHeight: 1.5 },
   afbKeuzeStrip: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 },
   afbKeuzeItem: { position: "relative", flexShrink: 0, width: 92, height: 92, borderRadius: 10, overflow: "hidden", border: "1px solid var(--line)", padding: 0, cursor: "pointer", background: "var(--bg)" },
   afbKeuzeImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },

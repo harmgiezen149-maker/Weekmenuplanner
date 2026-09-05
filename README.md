@@ -687,6 +687,27 @@ behandeling: je ziet het uitgelezen recept in het formulier, kunt het aanpassen,
 en pas als je op *Recept opslaan* drukt staat het in je kookboek. Daarna wordt
 het meteen doorgerekend naar punten per portie, net als elk ander nieuw recept.
 
+**De foto van de pagina komt mee.** De kandidaten worden van de bronpagina
+geplukt — `og:image`, de `schema.org`-receptgegevens en de `<img>`-tags, in die
+volgorde, want zo staat de gerechtfoto vooraan (`lib/afbeeldingen.ts`, met
+tests). De bovenste die zich laat ophalen wordt verkleind en in het formulier
+gezet; via de strip erboven kies je alsnog een andere.
+
+Er wordt meer dan één kandidaat geprobeerd, want de bovenste is niet altijd op
+te halen — fotoservers weigeren weleens een aanvraag zonder verwijzende pagina.
+Lukt geen van de eerste drie, of stond er niets op de pagina, dan staat dat er
+nu ook: eerder gebeurde er zichtbaar niets en leek het alsof de app de foto
+vergeten was.
+
+Twee dingen die daarbij misgingen en nu geregeld zijn. Een `og:image` staat er
+vaak als `...&amp;width=1200`; letterlijk overgenomen vraag je de fotoserver om
+een parameter die `amp;width` heet, en krijg je een 404. En een site die onze
+eigen fetch weigert (Cloudflare, een 403 op datacenter-IP's) liet ons met lege
+handen staan — terwijl het model de pagina wél zag. Daarom vraagt de link-import
+het model nu ook om de foto-url; die gaat vooraan in de lijst met kandidaten en
+wordt uit het recept zelf gehaald, want daar hoort straks de foto zelf te staan
+en niet een adres.
+
 Het deelmenu is slordig met wat het meestuurt: Chrome zet de link soms in `url`,
 soms in `text`, en vaak staat er "Paginatitel https://..." in één veld. Kwam er
 helemaal geen link mee — je deelde platte tekst — dan staat die tekst klaar in
@@ -744,8 +765,10 @@ Het recept gaat mee **zoals het op dit scherm staat** — de ingrediënten komen
 uit de doorrekening, dus jouw bijstellingen gaan mee het kookboek in. Staat er
 een bereiding in de `schema.org`-gegevens van de pagina, dan komt die er ook
 bij (`leesBereiding` in `lib/tracker/link.ts` leest de vier vormen waarin sites
-dat opschrijven); de bronlink staat er altijd onder. Een foto komt niet mee —
-die haal je in het kookboek zelf op.
+dat opschrijven); de bronlink staat er altijd onder. **De foto van de pagina
+komt mee**: die wordt van de bronpagina geplukt, verkleind en bij het recept
+gezet. Stond er geen bruikbare foto op, dan zegt de melding dat erbij en voeg je
+er in het kookboek zelf een toe.
 
 Het kookboek gaat eerst en het loggen daarna, want loggen verlaat het scherm:
 mislukt het recept, dan sta je er nog met de melding erbij in plaats van in je
@@ -2256,6 +2279,8 @@ lib/
   weekfoto.ts           Een gefotografeerd weekmenu uitlezen (puur, getest)
   receptmatch.ts        Wat op het briefje staat koppelen aan een recept (puur)
   afbeelding.ts         Foto's schalen en comprimeren (browser)
+  afbeeldingen.ts       Kandidaat-foto's van een receptpagina plukken (puur, getest)
+  receptfoto.ts         Die foto ophalen en bewaarbaar maken (browser)
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)
   prijsboek.ts          Het prijsboek bewaren en bonnen erin opnemen (Redis)

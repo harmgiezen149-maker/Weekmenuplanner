@@ -219,7 +219,8 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
         <H id="toevoegen" titel="Toevoegen">
           <p style={{ margin: "0 0 8px" }}>
             <strong>Link</strong> — zoek een gerecht op naam (de app zoekt receptsites af en toont
-            keuzeopties) of plak zelf een link. Het recept wordt uitgelezen, foto en al.
+            keuzeopties) of plak zelf een link. Het recept wordt uitgelezen, foto en al: de foto van de
+            pagina staat meteen in het formulier, en in de strip erboven kies je zo nodig een andere.
           </p>
           <p style={{ margin: "0 0 8px" }}>
             <strong>Foto</strong> — fotografeer een recept uit een tijdschrift of kookboek. Staat het
@@ -677,14 +678,16 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
           <p style={{ margin: "0 0 8px" }}>
             <strong>Loggen, in het kookboek, of allebei.</strong> Onder het opgehaalde recept kies je
-            waar het heen gaat. Je bijstellingen gaan mee het kookboek in, net als de bereiding als
-            die op de pagina stond.
+            waar het heen gaat. Je bijstellingen gaan mee het kookboek in, net als de bereiding en de
+            foto als die op de pagina stonden. Kwam er geen foto mee, dan zegt de melding dat erbij en
+            voeg je er in het kookboek zelf een toe.
           </p>
           <p style={{ margin: 0 }}>
             Kom je onderweg een recept- of productpagina tegen, dan kun je die vanuit je browser
             delen naar Kookboek. Je krijgt dan één vraag: moet het een <em>recept in het kookboek</em>
             worden of een <em>product in de tracker</em>. Bij het kookboek wordt de pagina meteen
-            uitgelezen en zie je het recept in het formulier voordat je het opslaat. Dit werkt op
+            uitgelezen en zie je het recept in het formulier voordat je het opslaat — met de foto van
+            de pagina erbij, en een strip met de andere foto's van die pagina om uit te kiezen. Dit werkt op
             Android, mits je de app op je beginscherm hebt gezet; op iPhone plak je de link bij
             Toevoegen → Link of op <span style={S.route}>/tracker/import</span>.
           </p>

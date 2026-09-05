@@ -15,6 +15,7 @@ import type { ReceptPunten } from "@/lib/tracker/recept";
 import Rekenregels from "./Rekenregels";
 import { KOOKBOEK_MAALTIJD } from "@/lib/tracker/samenstellen";
 import { HOOFDINGREDIENTEN } from "@/lib/types";
+import { fotoVanPagina } from "@/lib/receptfoto";
 
 type Bron = "json-ld" | "html" | "model";
 
@@ -84,6 +85,7 @@ export default function Import({
   const [naarKookboek, setNaarKookboek] = useState(false);
   const [hoofd, setHoofd] = useState<string>(HOOFDINGREDIENTEN[3]);
   const [bewaartRecept, setBewaartRecept] = useState(false);
+  const [fotoBezig, setFotoBezig] = useState(false);
   const [kookboekKlaar, setKookboekKlaar] = useState("");
 
   /**
@@ -182,10 +184,19 @@ export default function Import({
    * pagina: heb je hierboven een naam of een maat bijgesteld, dan hoort die
    * verbetering mee te gaan.
    */
-  const bewaarInKookboek = async (u: ReceptUitslag) => {
+  const bewaarInKookboek = async (u: ReceptUitslag): Promise<{ metFoto: boolean }> => {
     const ingredienten = u.punten.matches.map((m) => ({
       naam: m.ingredient, hoev: m.hoev, eenheid: m.eenheid,
     }));
+
+    // De foto van de bronpagina meenemen. Een recept zonder plaatje valt in het
+    // kookboek uit de toon tussen de rest, en de pagina heeft er meestal een.
+    // Lukt het niet, dan gaat het recept gewoon zonder mee — dat mag geen
+    // reden zijn om het opslaan te laten stranden.
+    setFotoBezig(true);
+    const afbeelding = await fotoVanPagina(u.url).catch(() => "");
+    setFotoBezig(false);
+
     const res = await fetch("/api/recipes", {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -193,7 +204,7 @@ export default function Import({
         hoofd,
         maaltijd: KOOKBOEK_MAALTIJD[maal],
         personen: u.recept.personen,
-        tijd: 30, score: 0, gegeten: 0, afbeelding: "",
+        tijd: 30, score: 0, gegeten: 0, afbeelding,
         ingredienten,
         bereiding: [u.recept.bereiding, `Bron: ${u.url}`].filter(Boolean).join("\n\n"),
       }),
@@ -212,6 +223,8 @@ export default function Import({
         body: JSON.stringify({ namen: u.punten.nietHerkend }),
       }).catch(() => {});
     }
+
+    return { metFoto: afbeelding !== "" };
   };
 
   /**
@@ -225,12 +238,17 @@ export default function Import({
     if (naarKookboek) {
       setBewaartRecept(true);
       try {
-        await bewaarInKookboek(u);
-        setKookboekKlaar(`${u.recept.titel} staat in je kookboek.`);
+        const { metFoto } = await bewaarInKookboek(u);
+        setKookboekKlaar(
+          `${u.recept.titel} staat in je kookboek` +
+          (metFoto
+            ? ", met de foto van de pagina erbij."
+            : ". Er kwam geen foto van de pagina mee; die voeg je in het kookboek zelf toe.")
+        );
       } catch (e) {
         setEigenFout(e instanceof Error ? e.message : "Het recept kon niet worden opgeslagen");
         return;
-      } finally { setBewaartRecept(false); }
+      } finally { setBewaartRecept(false); setFotoBezig(false); }
     }
 
     if (!naarLogboek) return;
@@ -454,6 +472,7 @@ export default function Import({
               <p style={T.hint}>
                 De ingrediënten gaan mee zoals ze hierboven staan, jouw bijstellingen
                 incluis.{uitslag.recept.bereiding ? " De bereiding stond op de pagina en gaat mee." : " Een bereiding stond er niet bij; die vul je in het kookboek aan."}
+                {" "}Staat er een foto op de pagina, dan komt die er ook bij.
               </p>
             </div>
           )}
@@ -464,7 +483,7 @@ export default function Import({
             disabled={!kanOpslaan}
             onClick={() => void bewaar(uitslag)}>
             {bezig || bewaartRecept
-              ? <><Loader2 size={16} className="spin" /> Opslaan...</>
+              ? <><Loader2 size={16} className="spin" /> {fotoBezig ? "Foto ophalen..." : "Opslaan..."}</>
               : <><Check size={16} /> {opslaanLabel}</>}
           </button>
         </>
