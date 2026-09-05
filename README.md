@@ -697,6 +697,37 @@ rommelige varianten.
 **iOS** kent `share_target` niet. Daar plak je de link in **Toevoegen → Link**,
 of je gebruikt de Shortcut voor de tracker.
 
+#### Een ingrediënt dat niet herkend wordt
+
+Onder het opgehaalde recept staat *Zo is het gerekend*: per ingrediënt welk
+product eraan gekoppeld is en hoe de hoeveelheid is omgerekend. Wat niet
+herkend wordt staat doorgestreept met "telt niet mee", en de punten erboven
+zijn dan te laag.
+
+Naast elke regel staat nu een potlood — bij de gaten in de accentkleur. Daar
+kun je drie dingen:
+
+1. **Anders opschrijven.** "volkorenmeel (havermeel)" kent de productlijst niet,
+   "havermout" wel. Boven het naamveld staan knopjes met de losse namen die in
+   de oorspronkelijke naam zitten (`lib/tracker/naamvarianten.ts`: haakjes,
+   komma's en "of" vallen uiteen); je kunt ook zelf iets typen. Er wordt meteen
+   opnieuw gerekend via `POST /api/tracker/recepten/doorrekenen` — dat is alleen
+   de eigen productlijst en de eigen formule, dus het kost geen modelaanroep en
+   je mag het zo vaak proberen als je wilt.
+2. **De maat bijstellen.** Zelfde paneel, zelfde knop: een hoeveelheid en een
+   eenheid die de app kent.
+3. **Zelf invullen.** Staat het er echt niet in, dan opent hetzelfde formulier
+   als bij het aanvullen vanuit het kookboek, inclusief de schatknop. Wat je
+   bewaart komt in de productlijst en telt vanaf dat moment in élk recept mee.
+
+Werkt het na hernoemen, dan verschijnt er **"Onthoud dit voor …"**. Daarmee
+worden de gevonden voedingswaarden onder de oorspronkelijke naam bewaard, dus
+dezelfde pagina valt de volgende keer meteen goed. De namen die je binnenkreeg
+worden daarvoor apart vastgehouden: hernoem je eerst, dan hoort "onthouden" nog
+steeds bij de naam van de pagina en niet bij wat jij ervoor in de plaats zette.
+
+De bijstellingen gelden voor deze import; aan de pagina zelf verandert niets.
+
 #### Een product via een link
 
 Plak de link van een productpagina — bijvoorbeeld van jumbo.com of ah.nl — en de

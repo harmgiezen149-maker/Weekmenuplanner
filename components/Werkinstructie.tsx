@@ -666,6 +666,13 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             staan tot jij ze bijstelt. Niemand heeft die getallen nagekeken, en dat hoor je te kunnen
             zien.
           </div>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>Telt een ingrediënt niet mee?</strong> Bij een opgehaald recept staat onder
+            <em> Zo is het gerekend</em> naast elke regel een potlood. Daar schrijf je het ingrediënt
+            anders op — "volkorenmeel (havermeel)" kent de app niet, "havermout" wel — of je zet er
+            een maat bij. Het wordt meteen opnieuw doorgerekend. Staat het er echt niet in, dan vul
+            je het daar zelf in of laat je het schatten, en telt het voortaan overal mee.
+          </p>
           <p style={{ margin: 0 }}>
             Kom je onderweg een recept- of productpagina tegen, dan kun je die vanuit je browser
             delen naar Kookboek. Je krijgt dan één vraag: moet het een <em>recept in het kookboek</em>

@@ -10,6 +10,7 @@ import { nl } from "@/lib/tracker/datum";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { Maaltijd, Product } from "@/lib/tracker/types";
 import type { ReceptPunten } from "@/lib/tracker/recept";
+import Rekenregels from "./Rekenregels";
 
 type Bron = "json-ld" | "html" | "model";
 
@@ -309,30 +310,20 @@ export default function Import({
           </div>
 
           <h2 style={T.lijstKop}>Zo is het gerekend</h2>
-          <div style={T.kaartStrak}>
-            {uitslag.punten.matches.map((m, i) => (
-              <div key={`${m.ingredient}-${i}`} style={T.regel}>
-                <div style={T.regelTekst}>
-                  <div style={{
-                    ...T.regelNaam,
-                    color: m.overgeslagen ? "var(--sub)" : "var(--ink)",
-                    textDecoration: m.overgeslagen ? "line-through" : "none",
-                  }}>
-                    {m.ingredient}
-                  </div>
-                  <div style={T.regelSub}>
-                    {m.overgeslagen
-                      ? "niet herkend, telt niet mee"
-                      : `${m.product!.name} · ${m.omrekening.aanname}`}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Op url gesleuteld: haal je een andere pagina op, dan begint dit
+              lijstje schoon en niet met de bijstellingen van het vorige recept. */}
+          <Rekenregels
+            key={uitslag.url}
+            punten={uitslag.punten}
+            personen={uitslag.recept.personen}
+            onHerrekend={(nieuw) => setUitslag({ ...uitslag, punten: nieuw })}
+          />
 
           <p style={T.hint}>
             De punten komen uit de eigen formule, berekend uit de ingrediënten.
-            Een puntwaarde die op de bronpagina staat wordt nooit overgenomen.
+            Een puntwaarde die op de bronpagina staat wordt nooit overgenomen. Telt
+            een ingrediënt niet mee, tik dan op het potlood ernaast: met een andere
+            naam of een maat die de app kent telt het alsnog.
           </p>
 
           <button style={{ ...T.primair, opacity: aantal > 0 && !bezig ? 1 : 0.5 }}
