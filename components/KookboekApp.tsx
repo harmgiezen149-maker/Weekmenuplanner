@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { comprimeerAfbeelding, fileNaarDataUrl } from "@/lib/afbeelding";
+import { fotoPad } from "@/lib/receptfotos";
 import Bonscanner from "./Bonscanner";
 import type { BonKeuze } from "./Bonscanner";
 import { euroTekst, raamLijst } from "@/lib/prijzen";
@@ -130,6 +131,19 @@ const api = {
     return res.json();
   },
 };
+
+/**
+ * Waar de foto van dit recept vandaan komt.
+ *
+ * Bij een recept dat nog in het formulier staat is dat de data-URL die je net
+ * koos. Bij een recept uit het kookboek is het een adres: de lijst stuurt de
+ * foto's niet meer mee — dat waren tien megabyte per keer dat de app openging
+ * — en de browser haalt ze los op en bewaart ze.
+ */
+function fotoBron(r: { id?: string; afbeelding?: string; heeftFoto?: boolean }): string {
+  if (r.afbeelding) return r.afbeelding;
+  return r.heeftFoto && r.id ? fotoPad(r.id) : "";
+}
 
 const uid = () => "i" + Math.random().toString(36).slice(2, 9) + Date.now().toString(36);
 
@@ -1220,8 +1234,8 @@ function ReceptKaart({ r, punten, puntenStatus, onOpen, onPlaats }: {
   return (
     <div className="card" style={S.card}>
       <button onClick={onOpen} style={S.cardBody}>
-        {r.afbeelding && (
-          <div style={S.cardAfbWrap}><img src={r.afbeelding} alt={r.titel} style={S.cardAfb} loading="lazy" /></div>
+        {fotoBron(r) && (
+          <div style={S.cardAfbWrap}><img src={fotoBron(r)} alt={r.titel} style={S.cardAfb} loading="lazy" /></div>
         )}
         <div style={S.cardTop}>
           <span className="recept-titel" style={S.cardTitle} title={r.titel}>{r.titel}</span>
@@ -1482,9 +1496,9 @@ function ReceptModal({
 
         {gedeeld && <div style={S.deelMelding}>{gedeeld}</div>}
 
-        {r.afbeelding && (
+        {fotoBron(r) && (
           <button onClick={() => setZoom(true)} style={S.detailAfbWrap}>
-            <img src={r.afbeelding} alt={r.titel} style={S.detailAfb} />
+            <img src={fotoBron(r)} alt={r.titel} style={S.detailAfb} />
             <span style={S.detailAfbZoom}><ZoomIn size={16} /></span>
           </button>
         )}
@@ -1535,7 +1549,7 @@ function ReceptModal({
           </p>
         )}
 
-        {zoom && r.afbeelding && <AfbeeldingZoom src={r.afbeelding} onClose={() => setZoom(false)} />}
+        {zoom && fotoBron(r) && <AfbeeldingZoom src={fotoBron(r)} onClose={() => setZoom(false)} />}
 
         <div style={S.modalKnopRij}>
           <button onClick={onPlaats} style={S.primaryBtn}>
@@ -1840,7 +1854,13 @@ function AfbeeldingKiezer({ waarde, onChange }: { waarde: string; onChange: (v: 
 }
 
 function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Recept>) => void; initial?: Partial<Recept>; opslaanLabel?: string }) {
-  const [r, setR] = useState<Partial<Recept>>(initial || leegRecept());
+  // De foto begint op zijn adres en niet op leeg. Bewerk je een bestaand
+  // recept, dan heeft de browser de foto zelf niet — alleen waar hij staat.
+  // Zou het veld leeg beginnen, dan wiste elke titelwijziging je foto.
+  // Verwijderen zet het veld alsnog op leeg, en dát telt wel als weghalen.
+  const [r, setR] = useState<Partial<Recept>>(() =>
+    initial ? { ...initial, afbeelding: fotoBron(initial) } : leegRecept()
+  );
   const [bezig, setBezig] = useState(false);
   const set = (k: keyof Recept, v: any) => setR((p) => ({ ...p, [k]: v }));
   const setIng = (i: number, k: string, v: any) => setR((p) => ({ ...p, ingredienten: (p.ingredienten || []).map((ing, idx) => idx === i ? { ...ing, [k]: v } : ing) }));
@@ -2596,8 +2616,8 @@ function Weekmenu({
                   ) : (
                     <>
                       <button onClick={() => setKook({ recept: r, personen: slot.personen })} style={S.weekSlotOpen}>
-                        {r.afbeelding
-                          ? <img src={r.afbeelding} alt="" style={S.weekThumb} />
+                        {fotoBron(r)
+                          ? <img src={fotoBron(r)} alt="" style={S.weekThumb} />
                           : <span style={S.weekThumbLeeg}><ChefHat size={18} /></span>}
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={S.weekRecept}>{r.titel}</div>
@@ -2631,8 +2651,8 @@ function Weekmenu({
                 <div key={key} style={S.weekExtraRow}>
                   <span style={S.weekMaaltijdTag}>{maaltijd}</span>
                   <button onClick={() => setKook({ recept: er, personen: es!.personen })} style={S.weekSlotOpen}>
-                    {er.afbeelding
-                      ? <img src={er.afbeelding} alt="" style={S.weekThumbKlein} />
+                    {fotoBron(er)
+                      ? <img src={fotoBron(er)} alt="" style={S.weekThumbKlein} />
                       : <span style={{ ...S.weekThumbLeeg, ...S.weekThumbKleinMaat }}><ChefHat size={14} /></span>}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={S.weekExtraTitel}>{er.titel}</div>
@@ -2927,8 +2947,8 @@ function EvaluatieWizard({
           <button onClick={onAnnuleer} style={S.iconBtn} aria-label="Annuleren"><X size={20} /></button>
         </div>
 
-        {r.afbeelding && (
-          <div style={S.detailAfbWrap}><img src={r.afbeelding} alt={r.titel} style={S.detailAfb} /></div>
+        {fotoBron(r) && (
+          <div style={S.detailAfbWrap}><img src={fotoBron(r)} alt={r.titel} style={S.detailAfb} /></div>
         )}
 
         <div style={S.evalScoreBlok}>
@@ -2983,13 +3003,13 @@ function KookWeergave({ recept, personen, onClose }: { recept: Recept; personen:
           <button onClick={onClose} style={S.iconBtn} aria-label="Sluiten"><X size={20} /></button>
         </div>
 
-        {recept.afbeelding && (
+        {fotoBron(recept) && (
           <button onClick={() => setZoom(true)} style={S.detailAfbWrap}>
-            <img src={recept.afbeelding} alt={recept.titel} style={S.detailAfb} />
+            <img src={fotoBron(recept)} alt={recept.titel} style={S.detailAfb} />
             <span style={S.detailAfbZoom}><ZoomIn size={16} /></span>
           </button>
         )}
-        {zoom && recept.afbeelding && <AfbeeldingZoom src={recept.afbeelding} onClose={() => setZoom(false)} />}
+        {zoom && fotoBron(recept) && <AfbeeldingZoom src={fotoBron(recept)} onClose={() => setZoom(false)} />}
 
         <div style={S.cardMeta}>
           <Tag tone="maaltijd">{recept.maaltijd || "Avondeten"}</Tag>

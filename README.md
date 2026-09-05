@@ -1777,6 +1777,43 @@ nog steeds gewoon bloemkool.
 Waarden zijn per 100 g of 100 ml. Aanvullen blijft één regel werk in
 `lib/tracker/basisproducten.ts`; de zoekfunctie pikt hem vanzelf op.
 
+### De foto's uit de receptenlijst
+
+Foto's staan als data-URL in het recept zelf. Prettig om op te slaan — één
+sleutel, één ding — maar niet om te versturen: `GET /api/recipes` werd er ruim
+tien megabyte van, en dat haalde de app op bij elke start. Uiteindelijk liep het
+kookboek erop vast:
+
+```
+GET /api/recipes 500
+UpstashError: max request size exceeded. Limit: 10485760, Actual: 10733457
+```
+
+Twee dingen zijn daarop veranderd. Het ophalen uit Redis gaat per tien sleutels
+in plaats van in één mget (`mgetInStukjes` in `lib/redis.ts`) — na elkaar, want
+de client zet standaard auto-pipelining aan en voegt gelijktijdige opdrachten
+samen tot één verzoek. En de lijst stuurt de foto's niet meer mee.
+
+Wat de browser krijgt is een recept met een lege `afbeelding` en `heeftFoto`.
+De foto zelf komt van **`/api/recipes/<id>/foto`**, als gewone afbeelding met
+een ETag. Daarmee doet je browser het werk: parallel ophalen, pas als de kaart
+in beeld komt, en daarna uit zijn eigen cache. Vijf minuten zonder navragen,
+daarna een controle die 304 teruggeeft als er niets veranderd is.
+
+**De opslag verandert niet.** De foto blijft in het recept staan, dus back-up en
+export bevatten hem gewoon. Wat wel moest: het opslaan beschermen. Het formulier
+kent de foto niet meer, alleen zijn adres, en zou dat adres bij elke wijziging
+terugsturen. `nieuweFotoWaarde` in `lib/receptfotos.ts` kent daarom drie
+gevallen, met tests op alle drie:
+
+| wat er binnenkomt | wat het betekent | wat er gebeurt |
+|---|---|---|
+| een `data:`-URL | je koos een nieuwe foto | die wordt bewaard |
+| een lege string | je drukte op *Verwijderen* | de foto gaat weg |
+| iets anders | het adres kwam ongewijzigd terug | er verandert niets |
+
+Zonder die derde regel zou het wijzigen van een titel je foto wissen.
+
 ### Welke recepten nog niet compleet zijn
 
 Boven de receptenlijst staat een paneel dat laat zien bij welke recepten een
@@ -2217,6 +2254,7 @@ app/
     cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
     recipes/route.ts        GET alle / POST nieuw recept
     recipes/[id]/route.ts   PUT / DELETE per recept
+    recipes/[id]/foto/      De foto van één recept, als gewone afbeelding
     week/route.ts           GET / PUT weekplanning per week
     week/voorstel/route.ts  POST een voorgesteld weekmenu
     week/foto/route.ts      POST een gefotografeerd weekmenu uitlezen
@@ -2296,6 +2334,7 @@ lib/
   receptmatch.ts        Wat op het briefje staat koppelen aan een recept (puur)
   afbeelding.ts         Foto's schalen en comprimeren (browser)
   afbeeldingen.ts       Kandidaat-foto's van een receptpagina plukken (puur, getest)
+  receptfotos.ts        De foto los van het recept versturen (puur, getest)
   receptfoto.ts         Die foto ophalen en bewaarbaar maken (browser)
   bon.ts                Een kassabon uitlezen en niet-producten wegfilteren (puur)
   prijzen.ts            Prijsboek, naamsleutels en de raming (puur)

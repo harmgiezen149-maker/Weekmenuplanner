@@ -59,7 +59,18 @@ export interface Recept {
   score: number;
   personen: number;
   gegeten: number; // hoe vaak dit recept al gegeten is
-  afbeelding: string; // data-URL (base64) of lege string
+  /**
+   * De foto, als data-URL (base64) of een lege string.
+   *
+   * In de opslag staat hier de foto zelf. In de lijst die de browser krijgt
+   * staat hij er juist niet in — dat waren tien megabyte per keer dat je de
+   * app opende. Daar is dit leeg en zegt `heeftFoto` of er een is; de foto
+   * komt dan van `/api/recipes/<id>/foto`, zodat de browser hem los ophaalt
+   * en bewaart. Zie `fotoBron` in components/KookboekApp.tsx.
+   */
+  afbeelding: string;
+  /** Alleen in antwoorden aan de browser: staat er een foto bij dit recept? */
+  heeftFoto?: boolean;
   ingredienten: Ingredient[];
   bereiding: string;
 }

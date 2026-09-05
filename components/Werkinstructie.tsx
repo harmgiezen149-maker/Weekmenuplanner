@@ -214,6 +214,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             gegeten-teller op, bewerk je met het potlood, of zet je het meteen in het weekmenu of op
             de lijst. Tik op de foto om schermvullend in te zoomen.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            De foto's worden apart opgehaald, niet met de receptenlijst mee. De lijst staat daardoor
+            meteen op je scherm en de foto's druppelen erachteraan binnen; de tweede keer komen ze
+            uit het geheugen van je browser en staan ze er direct. Dat scheelt bij elke keer dat je
+            de app opent een flinke hap mobiele data.
+          </p>
         </H>
 
         <H id="toevoegen" titel="Toevoegen">
