@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { comprimeerAfbeelding, fileNaarDataUrl } from "@/lib/afbeelding";
 import Bonscanner from "./Bonscanner";
 import type { BonKeuze } from "./Bonscanner";
@@ -222,7 +222,22 @@ export default function App() {
   const [receptPunten, setReceptPunten] = useState<ReceptPuntenKaart>({});
   const [puntenStatus, setPuntenStatus] = useState<PuntenStatus>("laden");
   const router = useRouter();
+  const zoekParams = useSearchParams();
   const [laden, setLaden] = useState(true);
+
+  // Wat er via het deelmenu binnenkomt: een link naar een receptpagina, of
+  // losse tekst om op te zoeken. Zie /deel, dat de keuze maakt.
+  const [deling, setDeling] = useState<{ url?: string; zoek?: string } | null>(null);
+  useEffect(() => {
+    const url = zoekParams.get("deel");
+    const zoek = zoekParams.get("deelzoek");
+    if (!url && !zoek) return;
+    setDeling(url ? { url } : { zoek: zoek ?? "" });
+    setTab("toevoegen");
+    // Het adres weer schoonvegen, anders begint een herlaadbeurt dezelfde
+    // import opnieuw — en dat is een modelaanroep die je niet vroeg.
+    router.replace("/");
+  }, [zoekParams, router]);
 
   useEffect(() => {
     (async () => {
@@ -571,7 +586,9 @@ export default function App() {
                 onPuntenVeranderd={ververPunten}
               />
             )}
-            {tab === "toevoegen" && <Toevoegen onAdd={addRecept} startTitel={nieuwTitel} />}
+            {tab === "toevoegen" && (
+              <Toevoegen onAdd={addRecept} startTitel={nieuwTitel} deling={deling} />
+            )}
             {tab === "week" && (
               <Weekmenu
                 recepten={recepten} week={week} setWeek={setWeek} dagen={dagenInVolgorde}
@@ -1731,11 +1748,16 @@ function BewerkRecept({
 // ============================================================================
 // TOEVOEGEN
 // ============================================================================
-function Toevoegen({ onAdd, startTitel }: { onAdd: (r: Partial<Recept>) => void; startTitel?: string }) {
+function Toevoegen({ onAdd, startTitel, deling }: {
+  onAdd: (r: Partial<Recept>) => void;
+  startTitel?: string;
+  /** Wat er via het deelmenu binnenkwam; opent meteen de linkimport. */
+  deling?: { url?: string; zoek?: string } | null;
+}) {
   // Met een naam van een briefje in de hand is handmatig het snelste pad: de
   // titel staat er al, jij vult de ingrediënten aan. Link en foto blijven staan
   // voor als het recept ergens vandaan te halen is.
-  const [modus, setModus] = useState(startTitel ? "hand" : "link");
+  const [modus, setModus] = useState(startTitel && !deling ? "hand" : "link");
   return (
     <div>
       <div style={S.segWrap}>
@@ -1759,7 +1781,9 @@ function Toevoegen({ onAdd, startTitel }: { onAdd: (r: Partial<Recept>) => void;
       )}
       {modus === "foto" && <FotoImport onAdd={onAdd} />}
       {modus === "bord" && <BordImport onAdd={onAdd} />}
-      {modus === "link" && <LinkImport onAdd={onAdd} />}
+      {modus === "link" && (
+        <LinkImport key={deling?.url || deling?.zoek || "leeg"} onAdd={onAdd} deling={deling} />
+      )}
     </div>
   );
 }
@@ -2050,14 +2074,17 @@ function BordImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
   );
 }
 
-function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
-  const [url, setUrl] = useState("");
+function LinkImport({ onAdd, deling }: {
+  onAdd: (r: Partial<Recept>) => void;
+  deling?: { url?: string; zoek?: string } | null;
+}) {
+  const [url, setUrl] = useState(deling?.url ?? "");
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<Partial<Recept> | null>(null);
   const [afbKeuze, setAfbKeuze] = useState<string[] | null>(null);
   const [err, setErr] = useState("");
   // zoeken op gerechtnaam
-  const [zoekTerm, setZoekTerm] = useState("");
+  const [zoekTerm, setZoekTerm] = useState(deling?.zoek ?? "");
   const [zoekBezig, setZoekBezig] = useState(false);
   const [opties, setOpties] = useState<{ titel: string; url: string; bron: string; omschrijving: string }[] | null>(null);
   const [ophalenUrl, setOphalenUrl] = useState<string | null>(null); // welke optie wordt nu opgehaald
@@ -2073,6 +2100,18 @@ function LinkImport({ onAdd }: { onAdd: (r: Partial<Recept>) => void }) {
     } catch (e: any) { setErr(e.message || "Kon de pagina niet uitlezen."); }
     finally { setBusy(false); setOphalenUrl(null); }
   };
+
+  // Een gedeelde link meteen ophalen. Je hebt in het deelscherm al gezegd dat
+  // dit een recept is; daarna nog op een knop moeten drukken voegt niets toe.
+  // De grendel voorkomt dat een tweede render dezelfde pagina nog eens ophaalt,
+  // want dat is een modelaanroep.
+  const gestart = useRef(false);
+  useEffect(() => {
+    if (!deling?.url || gestart.current) return;
+    gestart.current = true;
+    void verwerk(deling.url);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deling?.url]);
 
   const zoek = async () => {
     if (!zoekTerm.trim()) return;

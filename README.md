@@ -654,10 +654,11 @@ Op `/tracker/import` plak je een link. **De app zoekt zelf uit wat het is:** een
 receptpagina wordt per portie doorgerekend, een productpagina van een webshop
 levert een product op dat je meteen kunt loggen.
 
-**Android** — deel een pagina rechtstreeks vanuit je browser naar de app; hij
-komt binnen op `/tracker/import` en wordt meteen verwerkt. Dat werkt via
-`share_target` in het manifest en vereist dat je de app op je beginscherm hebt
-gezet.
+**Android** — deel een pagina rechtstreeks vanuit je browser naar de app. Dat
+werkt via `share_target` in het manifest en vereist dat je de app op je
+beginscherm hebt gezet. Wat je deelt komt binnen op **`/deel`**, dat vraagt waar
+het heen moet: een recept in het kookboek, of een product in de tracker. Zie
+hieronder.
 
 **iOS** kent `share_target` niet. Twee manieren:
 
@@ -668,6 +669,33 @@ De pagina wordt in drie stappen uitgelezen, van exact naar geraden: eerst het
 `schema.org`-blok dat veel sites meeleveren, dan de ingrediëntenlijst of de
 voedingswaardetabel uit de HTML, en pas als laatste het model op de platte
 tekst. Op het scherm staat welke van de drie het geworden is.
+
+#### Een recept delen naar het kookboek
+
+Sta je in Chrome op een receptpagina, dan is delen naar Kookboek de kortste weg
+om hem in je kookboek te krijgen. Het deelmenu kan maar naar één adres wijzen,
+en de app heeft twee bruikbare bestemmingen — dus komt alles binnen op `/deel`,
+een tussenscherm met de link erop en drie knoppen: **recept in het kookboek**,
+**product in de tracker**, of gewoon de app openen.
+
+Dat is één tik, en die tik is er met opzet. Zelf raden wat voor pagina het is
+zou bij elke gedeelde productpagina een receptimport starten, en dat is een
+modelaanroep die je niet vroeg. Nu gebeurt er niets tot je gekozen hebt.
+
+Kies je het kookboek, dan opent **Toevoegen → Link** met de pagina al in
+behandeling: je ziet het uitgelezen recept in het formulier, kunt het aanpassen,
+en pas als je op *Recept opslaan* drukt staat het in je kookboek. Daarna wordt
+het meteen doorgerekend naar punten per portie, net als elk ander nieuw recept.
+
+Het deelmenu is slordig met wat het meestuurt: Chrome zet de link soms in `url`,
+soms in `text`, en vaak staat er "Paginatitel https://..." in één veld. Kwam er
+helemaal geen link mee — je deelde platte tekst — dan staat die tekst klaar in
+het zoekveld, zodat je op die naam een receptpagina kunt laten zoeken. Wat er
+uit zo'n deling te halen valt staat in `lib/deellink.ts`, met tests op de
+rommelige varianten.
+
+**iOS** kent `share_target` niet. Daar plak je de link in **Toevoegen → Link**,
+of je gebruikt de Shortcut voor de tracker.
 
 #### Een product via een link
 
@@ -1428,7 +1456,8 @@ gebruikt hem ook.
 
 ### Delen vanuit Garmin Connect
 
-Het deelmenu van Android komt binnen op `/tracker/import`. Die pagina keek al of
+Een gedeelde tekst uit Garmin komt binnen op `/deel`; kies je daar de tracker,
+dan gaat hij naar `/tracker/import`. Die pagina keek al of
 er een recept of een product in zat; nu kijkt hij er ook of het een training is,
 met dezelfde parser. Is dat zo, dan verschijnt er een kaart met wat hij eruit
 las en een knop om het te boeken — en wordt de gedeelde tekst níét als

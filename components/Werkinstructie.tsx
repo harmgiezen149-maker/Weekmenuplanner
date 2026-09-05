@@ -660,9 +660,12 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             zien.
           </div>
           <p style={{ margin: 0 }}>
-            Kom je onderweg een recept- of productpagina tegen, dan kun je die delen naar de tracker.
-            Op Android staat Kookboek gewoon in het deelmenu; op iPhone plak je de link op{" "}
-            <span style={S.route}>/tracker/import</span>.
+            Kom je onderweg een recept- of productpagina tegen, dan kun je die vanuit je browser
+            delen naar Kookboek. Je krijgt dan één vraag: moet het een <em>recept in het kookboek</em>
+            worden of een <em>product in de tracker</em>. Bij het kookboek wordt de pagina meteen
+            uitgelezen en zie je het recept in het formulier voordat je het opslaat. Dit werkt op
+            Android, mits je de app op je beginscherm hebt gezet; op iPhone plak je de link bij
+            Toevoegen → Link of op <span style={S.route}>/tracker/import</span>.
           </p>
         </H>
 

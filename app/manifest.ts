@@ -13,11 +13,13 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f7f7f5",
     theme_color: "#f7f7f5",
     orientation: "portrait",
-    // Android: hiermee verschijnt de app in het deelmenu van de browser. Deel
-    // je een receptpagina, dan komt hij binnen op /tracker/import.
-    // iOS kent share_target niet; daar werkt het plakveld op diezelfde pagina.
+    // Android: hiermee verschijnt de app in het deelmenu van de browser. Wat je
+    // deelt komt binnen op /deel, dat vraagt waar het heen moet — een
+    // receptpagina hoort in het kookboek, een productpagina in de tracker, en
+    // het deelmenu kan maar naar één adres wijzen.
+    // iOS kent share_target niet; daar werkt het plakveld op /tracker/import.
     share_target: {
-      action: "/tracker/import",
+      action: "/deel",
       method: "GET",
       params: { title: "title", text: "text", url: "url" },
     },
