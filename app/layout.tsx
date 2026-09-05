@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorker from "@/components/ServiceWorker";
+import Chat from "@/components/Chat";
 
 export const metadata: Metadata = {
   title: "Kookboek",
@@ -31,6 +32,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <ServiceWorker />
         {children}
+        {/* Staat buiten {children} zodat de knop op elk scherm van allebei de
+            helften meekomt; hij verbergt zichzelf op het loginscherm. */}
+        <Chat />
       </body>
     </html>
   );

@@ -666,6 +666,29 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
           </p>
         </H>
 
+        <H id="chat" titel="Vraag het de app">
+          <p style={{ margin: "0 0 8px" }}>
+            Rechtsonder staat op elk scherm een pratend bolletje. Daar kun je alles vragen over je
+            kookboek, je weekmenu, je boodschappen, je voorraad en je tracker — van "wat staat er
+            deze week op het menu" tot "hoe ging mijn week". Kijk je naar een recept, dan gaat
+            "hoeveel punten kost dit?" over dát recept.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
+            Hij zoekt het antwoord op in je eigen gegevens en rekent met dezelfde puntenformule als
+            de rest van de app. Staat het antwoord daar niet in, dan gaat hij het internet op en
+            zet de bron eronder, zodat je ziet wat van jou is en wat van een website.
+          </p>
+          <div style={S.kader}>
+            Hij verandert zelf niets. Moet er iets gepland, gelogd of op de lijst, dan krijg je een
+            kaartje met een knop; pas als jij die indrukt gebeurt het. Loggen kan alleen met iets
+            dat de app al kent — anders zouden de voedingswaarden verzonnen zijn.
+          </div>
+          <p style={{ margin: 0 }}>
+            Gesprekken blijven bewaard: bij het openen praat je verder waar je gebleven was. Met de
+            plus begin je opnieuw, en linksboven staan je eerdere gesprekken.
+          </p>
+        </H>
+
         <H id="account" titel="Inloggen, personen en back-up">
           <p style={{ margin: "0 0 8px" }}>
             De app zit achter een inlog. Iedereen heeft een eigen gebruikersnaam en wachtwoord; je

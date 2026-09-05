@@ -29,6 +29,7 @@ import Werkinstructie from "./Werkinstructie";
 import { STANDAARD_MATEN } from "@/lib/tracker/recept";
 import type { Nutrients } from "@/lib/tracker/types";
 import { beschrijfMislukt } from "@/lib/tracker/schatting";
+import { zetScherm, wisScherm } from "@/lib/scherm";
 import type { MislukteSchatting } from "@/lib/tracker/schatting";
 
 // ============================================================================
@@ -785,6 +786,15 @@ function ReceptenLijst({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [open, setOpen] = useState<Recept | null>(null);
   const [plaats, setPlaats] = useState<Recept | null>(null);
+
+  // Zodat een vraag aan de chatknop over "dit recept" ook echt over dit recept
+  // gaat. Het pad in de adresbalk zegt dat niet: dit is één pagina.
+  useEffect(() => {
+    if (!open) return;
+    const omschrijving = `het recept ${open.titel}`;
+    zetScherm(omschrijving);
+    return () => wisScherm(omschrijving);
+  }, [open]);
   const [bewerk, setBewerk] = useState<Recept | null>(null);
   const [naarLijst, setNaarLijst] = useState<Recept | null>(null);
 

@@ -1924,6 +1924,80 @@ zonder die stap zou het verse recept met nul punten in je kookboek staan.
 
 ---
 
+## Vraag het de app
+
+Rechtsonder staat op elk scherm een pratend bolletje. Daarachter zit een
+chatbot die vragen beantwoordt over allebei de helften: je kookboek, je
+weekmenu, je boodschappenlijst, je voorraad, je logboek, je punten, je beweging
+en je gewicht.
+
+### Hij weet niets tot hij het opzoekt
+
+De bot krijgt geen dump van de database mee. Hij krijgt **gereedschap** en haalt
+op wat een vraag nodig heeft: `recepten_zoeken`, `recept_details`, `weekmenu`,
+`boodschappenlijst`, `voorraad`, `dag_logboek`, `tracker_week`, `feitenpakket`,
+`gewicht`, `profiel`, `product_opzoeken` en `vaste_maaltijden`. Dat is geen
+zuinigheid: het hele kookboek plus twaalf weken logboek past niet zinnig in één
+bericht, en zo staat op één plek — `lib/chat/gereedschap.ts` — wat de bot wél en
+niet kan zien.
+
+De punten die hij noemt komen daarmee uit dezelfde formule als de rest van de
+app, niet uit een schatting van het model.
+
+### Internet erbij, met de bron erbij
+
+Weten je eigen gegevens het antwoord niet — een voedingsvraag, een idee, een
+product dat de app niet kent — dan zoekt hij het op het web op. Dat gebeurt via
+de zoekfunctie van Anthropic zelf; de bronnen komen mee terug en staan onder het
+antwoord. Wat van internet komt is als zodanig gemarkeerd, want "30 tot 40 gram
+vezels per dag" van een website is iets anders dan een getal uit je eigen
+logboek.
+
+Hij is geen arts, en dat staat ook in zijn instructie: algemene informatie over
+voeding mag, een diagnose of een streng dieet niet.
+
+### Hij stelt voor, jij drukt op de knop
+
+De bot kan zelf niets veranderen. Wil je iets gepland, gelogd of op de lijst
+hebben, dan zet hij een **kaartje** in het gesprek met een knop eronder. Pas als
+jij die indrukt gaat het naar `/api/chat/actie`, en die route kijkt alles
+opnieuw na: bestaat dat recept nog, is dat een dag van de week, klopt het
+eetmoment. De regel wordt daar opgebouwd uit gegevens die de app al had.
+
+Daarom kan loggen alleen met iets dat de app kent: een recept, een vaste
+maaltijd of een favoriet. Zou de bot zelf voedingswaarden mogen aanleveren, dan
+stond er straks een verzonnen getal in je logboek dat van een echte niet te
+onderscheiden is — precies wat de punten waardeloos maakt. Kent de app het niet,
+dan stelt hij voor om het eerst als recept aan te maken.
+
+### Hij weet welk scherm je open hebt
+
+Beide helften zijn eenpagina-schermen, dus het pad in de adresbalk zegt niet dat
+je naar de pastasalade kijkt. Een scherm dat iets toont wat de moeite waard is
+meldt zich aan bij `lib/scherm.ts`; de chatknop leest dat uit. "Hoeveel punten
+kost dit?" gaat daardoor over het recept dat voor je staat.
+
+### Gesprekken blijven staan
+
+Elk gesprek wordt bewaard onder `wl:p:<persoon>:chat:<id>` — persoonlijk, want
+het gaat over jouw gewicht en jouw vragen. Bij het openen komt het laatste
+gesprek terug; met de plus begin je een nieuw, en via het bolletje linksboven
+kies je een ouder gesprek of gooi je er een weg. De twintig nieuwste blijven
+staan, met per gesprek de laatste zestig berichten.
+
+Terug het model in gaat alleen de tekst van eerdere beurten, niet het
+gereedschapsverkeer eromheen. Wat toen is opgezocht kan inmiddels veranderd
+zijn, en opnieuw kijken is beter dan een oud antwoord napraten.
+
+### Wat het kost
+
+De chat draait op `claude-opus-5`, met de effort bewust op `low`: dit is een
+gesprek op een telefoon en de route heeft een minuut. Per vraag zijn er hooguit
+vijf rondes gereedschap. Zonder `ANTHROPIC_API_KEY` geeft de knop een nette
+melding en werkt de rest van de app gewoon door.
+
+---
+
 ## Hoe de data is opgeslagen (voor later)
 
 In Upstash Redis:
@@ -1941,6 +2015,8 @@ In Upstash Redis:
   raken.
 - `wl:p:<persoon>:*` — het persoonlijke deel: profiel, weeglijst, feitenpakket
   en adviezen.
+- `wl:p:<persoon>:chat:<id>` en `wl:p:<persoon>:chat:index` — de gesprekken met
+  de chatbot, en de volgorde waarin ze zijn bijgewerkt.
 - `auth:*` — accounts, sessies en het VAPID-sleutelpaar voor pushmeldingen.
   Buiten `wl:` gehouden: dit gaat over toegang tot de hele app, niet over
   voeding.

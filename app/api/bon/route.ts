@@ -89,8 +89,8 @@ export async function POST(req: NextRequest) {
     });
 
     const tekst = res.content
-      .filter((b): b is { type: "text"; text: string } => b.type === "text")
-      .map((b) => b.text).join("");
+      .filter((b) => b.type === "text")
+      .map((b) => (b as Anthropic.TextBlock).text).join("");
     const bon = leesBon(tekst);
 
     if (bon.regels.length === 0) {
