@@ -1646,6 +1646,30 @@ naamtreffer te overrulen.
 `REKENVERSIE` staat daarom op 3. Die telt mee in de vingerafdruk van een recept,
 dus alle gecachete puntentotalen worden opnieuw berekend.
 
+### "Naar smaak" wordt bij het opslaan opgevraagd
+
+Half het internet schrijft "peper en zout — naar smaak", en dat is een prima
+instructie voor een kok. Voor de puntentelling is het niets: er valt geen gram
+van te maken, dus zo'n ingrediënt viel stilzwijgend buiten het totaal. Er wordt
+met opzet niet teruggevallen op 100 g — bij olie verdubbelt dat een recept in
+zijn eentje — maar een gat dat niemand ziet is ook geen oplossing.
+
+Sla je een recept op en staat er een maat in waar niets van te maken valt, dan
+vraagt het formulier er één keer naar: per ingrediënt een hoeveelheid en een
+eenheid uit de lijst die de app kent, met een voorstel al ingevuld. "Naar smaak"
+wordt 1 snufje, "flinke scheut" 1 el, "handvol" 1 handje; herkent hij de tekst
+niet, dan staat er een snufje. De voorstellen liggen bewust aan de lage kant:
+punten die je niet gegeten hebt zijn erger dan punten die je mist.
+
+Laat je de eenheid op *telt niet mee* staan, dan blijft het ingrediënt gewoon in
+het recept staan — je hebt het bij het koken nodig — alleen niet in de punten.
+En met *zo opslaan, zonder aanvullen* sla je alles over.
+
+Welke ingrediënten dit zijn wordt bepaald met dezelfde functie als de
+puntentelling (`ingredientNaarGram`), zodat de vraag precies over de
+ingrediënten gaat die anders buiten het totaal vallen — geen ingrediënt meer en
+geen minder. Daar staat een test op. De regels zelf staan in `lib/maten.ts`.
+
 ### De basislijst
 
 Van 52 naar 123 producten. Wat erbij is gekomen is wat een Nederlandse

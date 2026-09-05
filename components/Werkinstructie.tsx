@@ -654,6 +654,13 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             is; onbekende zijn aantikbaar, en er is een knop om ze allemaal in één keer te laten
             aanvullen. Zo'n aanvulling telt daarna mee in élk recept waar dat ingrediënt in voorkomt.
           </p>
+          <p style={{ margin: "0 0 8px" }}>
+            <strong>"Naar smaak" wordt gevraagd.</strong> Sla je een recept op met een maat waar
+            niets van te maken valt — <em>naar smaak</em>, <em>flinke scheut</em> — dan vraagt het
+            formulier om een hoeveelheid en een eenheid, met een voorstel al ingevuld. Laat je het op
+            <em> telt niet mee</em> staan, dan blijft het ingrediënt in het recept, alleen niet in de
+            punten.
+          </p>
           <div style={S.kader}>
             Voedingswaarden die door AI zijn ingevuld krijgen het label <em>geschat</em>, en dat blijft
             staan tot jij ze bijstelt. Niemand heeft die getallen nagekeken, en dat hoor je te kunnen

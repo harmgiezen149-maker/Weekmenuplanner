@@ -30,6 +30,10 @@ import { STANDAARD_MATEN } from "@/lib/tracker/recept";
 import type { Nutrients } from "@/lib/tracker/types";
 import { beschrijfMislukt } from "@/lib/tracker/schatting";
 import { zetScherm, wisScherm } from "@/lib/scherm";
+import Matenvragen from "./Matenvragen";
+import type { Keuzes } from "./Matenvragen";
+import { onleesbareMaten, metAangevuldeMaten } from "@/lib/maten";
+import type { Onleesbaar } from "@/lib/maten";
 import type { MislukteSchatting } from "@/lib/tracker/schatting";
 
 // ============================================================================
@@ -1843,14 +1847,32 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
   const addIng = () => setR((p) => ({ ...p, ingredienten: [...(p.ingredienten || []), { naam: "", hoev: 0, eenheid: "" }] }));
   const delIng = (i: number) => setR((p) => ({ ...p, ingredienten: (p.ingredienten || []).filter((_, idx) => idx !== i) }));
 
-  const opslaan = async () => {
-    if (!r.titel?.trim()) return alert("Geef het recept een titel.");
+  // Ingrediënten met een maat waar niets van te maken valt ("naar smaak"). Die
+  // vallen anders stil buiten de puntentelling; hier wordt er één keer naar
+  // gevraagd, vlak voor het opslaan.
+  const [vragen, setVragen] = useState<Onleesbaar[] | null>(null);
+
+  const bewaar = async (keuzes: Keuzes) => {
     setBezig(true);
+    const schoon = (r.ingredienten || []).filter((i) => i.naam.trim());
     await onAdd({
       ...r, tijd: Number(r.tijd) || 0, personen: Number(r.personen) || 1,
-      ingredienten: (r.ingredienten || []).filter((i) => i.naam.trim()).map((i) => ({ ...i, hoev: Number(i.hoev) || 0 })),
+      ingredienten: metAangevuldeMaten(schoon, keuzes).map((i) => ({ ...i, hoev: Number(i.hoev) || 0 })),
     });
     setBezig(false);
+    setVragen(null);
+  };
+
+  const opslaan = async () => {
+    if (!r.titel?.trim()) return alert("Geef het recept een titel.");
+    const onleesbaar = onleesbareMaten((r.ingredienten || []).filter((i) => i.naam.trim()));
+    // Eén keer vragen: heb je de vraag beantwoord of weggeklikt, dan slaat de
+    // volgende druk op de knop gewoon op.
+    if (onleesbaar.length > 0 && vragen === null) {
+      setVragen(onleesbaar);
+      return;
+    }
+    await bewaar({});
   };
 
   return (
@@ -1901,6 +1923,14 @@ function HandmatigForm({ onAdd, initial, opslaanLabel }: { onAdd: (r: Partial<Re
       </Field>
 
       <Field label="Bereiding"><textarea style={S.textarea} rows={4} value={r.bereiding} onChange={(e) => set("bereiding", e.target.value)} placeholder="Beschrijf de stappen..." /></Field>
+
+      {vragen && vragen.length > 0 && (
+        <Matenvragen
+          vragen={vragen} bezig={bezig}
+          onKlaar={(keuzes) => void bewaar(keuzes)}
+          onOverslaan={() => void bewaar({})}
+        />
+      )}
 
       <button onClick={opslaan} style={S.primaryBtn} disabled={bezig}>
         {bezig ? <><Loader2 size={16} className="spin" /> Opslaan...</> : <><Check size={16} /> {opslaanLabel || "Recept opslaan"}</>}
