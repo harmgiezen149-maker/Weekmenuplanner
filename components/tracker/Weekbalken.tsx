@@ -13,10 +13,13 @@ import type { WeekSamenvatting } from "@/lib/tracker/week";
 // Over budget krijgt een eigen kleur én een getal erbij, zodat het ook zonder
 // kleur te zien is.
 //
-// Onderaan de staaf staat in het groen wat er die dag met bewegen verdiend is.
-// Dat is geen tweede budgetlijn: het dagbudget blijft wat het is, er komt
-// alleen ruimte bij. Een streep op "budget plus beweging" zou een budget
-// suggereren dat per dag verschuift, en dat is niet hoe het werkt.
+// Bovenop de staaf staat in het groen wat er die dag met bewegen verdiend is.
+// Het echte eten staat onderin: zo is in één oogopslag te zien wat er
+// werkelijk over budget is (het gekleurde deel tot aan de budgetlijn) en wat
+// beweging daar nog aan ruimte bovenop heeft gezet. Dat is geen tweede
+// budgetlijn: het dagbudget blijft wat het is, er komt alleen ruimte bij. Een
+// streep op "budget plus beweging" zou een budget suggereren dat per dag
+// verschuift, en dat is niet hoe het werkt.
 // ---------------------------------------------------------------------------
 
 const DAGLETTERS = ["ma", "di", "wo", "do", "vr", "za", "zo"];
@@ -75,23 +78,32 @@ export default function Weekbalken({ week }: { week: WeekSamenvatting }) {
           // Past het label in de balk, dan gaat het erin: erboven zou het bij
           // een dag vlak onder het budget op de budgetlijn belanden.
           const labelBinnen = hoogte >= 26;
-          // Het groene voetstuk is niet meer dan er die dag gegeten is: een
+          // De groene kop is niet meer dan er die dag gegeten is: een
           // wandeling van 8 punten op een dag van 5 punten zou anders een
           // staaf opleveren die groter is dan wat er op tafel stond.
           const groen = d.bewegingspunten > 0
             ? Math.min(hoogte, basis - y(Math.min(d.bewegingspunten, d.punten)))
             : 0;
+          // Het echte eten staat onderin, bewegen zet er bovenop nog wat
+          // ruimte bij. Andersom — bewegen onderin — zou suggereren dat
+          // beweging de basis is en eten de aanvulling; het is precies omgekeerd.
+          const zonderBeweging = hoogte - groen;
           return (
             <g key={d.datum}>
-              <path d={balkPad(x, basis - hoogte, balkB, hoogte, 4)}
-                fill={over ? "var(--over)" : "var(--accent)"} />
-              {groen > 0 && (
-                <path
-                  d={groen >= hoogte
-                    ? balkPad(x, basis - groen, balkB, groen, 4)
-                    : voetPad(x, basis - groen, balkB, groen)}
-                  fill="var(--green)"
-                />
+              {groen >= hoogte ? (
+                <path d={balkPad(x, basis - hoogte, balkB, hoogte, 4)} fill="var(--green)" />
+              ) : (
+                <>
+                  <path
+                    d={groen > 0
+                      ? voetPad(x, basis - zonderBeweging, balkB, zonderBeweging)
+                      : balkPad(x, basis - zonderBeweging, balkB, zonderBeweging, 4)}
+                    fill={over ? "var(--over)" : "var(--accent)"}
+                  />
+                  {groen > 0 && (
+                    <path d={balkPad(x, basis - hoogte, balkB, groen, 4)} fill="var(--green)" />
+                  )}
+                </>
               )}
               <text
                 x={x + balkB / 2}
@@ -166,11 +178,12 @@ function balkPad(x: number, y: number, b: number, h: number, r: number): string 
 }
 
 /**
- * Het groene voetstuk van een staaf.
+ * Het onderstuk van een staaf: rechthoekig, geen ronding.
  *
- * Rechte bovenkant: het is een deel van dezelfde staaf, geen apart blokje.
- * Vult het groen de hele staaf, dan tekent de aanroeper balkPad, zodat de
- * afgeronde kop behouden blijft.
+ * Gebruikt voor het eten-gedeelte wanneer de groene kop er bovenop staat —
+ * die kop draagt dan de afgeronde bovenkant en dit stuk blijft plat, zodat het
+ * geheel er als één staaf uitziet. Vult iets de hele staaf, dan tekent de
+ * aanroeper balkPad, zodat de afgeronde kop behouden blijft.
  */
 function voetPad(x: number, y: number, b: number, h: number): string {
   return `M${x},${y} L${x + b},${y} L${x + b},${y + h} L${x},${y + h} Z`;

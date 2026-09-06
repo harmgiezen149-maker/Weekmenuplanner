@@ -852,9 +852,12 @@ Wat er te zien is:
   laat diner en een avondsnack vallen in hetzelfde tijdblok, terwijl het advies
   dat eraan hangt tegenovergesteld is.
 - **Punten per weekdag**, met het aantal gelogde dagen onder elke balk. Een
-  gemiddelde zonder dat getal is niet te wegen. Onderaan de balk staat in het
-  groen wat er op die weekdag gemiddeld met bewegen verdiend is. Geen tweede
-  budgetlijn erbij: het dagbudget blijft wat het is, er komt alleen ruimte bij.
+  gemiddelde zonder dat getal is niet te wegen. Bovenop de balk staat in het
+  groen wat er op die weekdag gemiddeld met bewegen verdiend is: het echte eten
+  staat onderin, zodat in één oogopslag te zien is wat er werkelijk over budget
+  is (het gekleurde deel tot aan de streepjeslijn) en wat bewegen daar nog aan
+  ruimte bovenop heeft gezet. Geen tweede budgetlijn erbij: het dagbudget
+  blijft wat het is, er komt alleen ruimte bij.
 - **Verdeling over de dag** in vijf blokken, als aandeel van de punten — niet van
   het aantal regels, want dan zou een dag met tien kleine dingen zwaarder wegen
   dan een dag met twee grote.
