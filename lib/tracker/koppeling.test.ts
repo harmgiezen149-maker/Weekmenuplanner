@@ -21,6 +21,12 @@ test("onze eigen id's en namen werken ook", () => {
   assert.equal(herkenSoort("Fietsen, rustig")?.id, "fietsen-rustig");
 });
 
+test("de kale naam 'Kracht' uit de Nederlandse Garmin-app wordt herkend", () => {
+  // Geen synoniem uit een andere taal: dit is de eigen standaardnaam van de
+  // app zelf, en "Krachttraining" alleen ving hem niet.
+  assert.equal(herkenSoort("Kracht")?.id, "krachttraining");
+});
+
 test("hardlopen wordt geen wandelen omdat er lopen in staat", () => {
   // Op hele woorden zoeken, niet op substrings: anders boekt "hardlopen 30 min"
   // zichzelf als wandelen en vind je die punten later nergens terug.

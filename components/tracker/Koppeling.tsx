@@ -1,15 +1,24 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
-import { Check, Copy, Download, Loader2, RefreshCw, Trash2, Watch } from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Camera, Check, Copy, Download, Loader2, RefreshCw, Trash2, Watch, X } from "lucide-react";
 import { T } from "./stijl";
+import { fileNaarDataUrl, comprimeerAfbeelding } from "@/lib/afbeelding";
 
 // Beweging uit je horloge.
 //
-// Twee wegen: een sleutel waarmee Tasker activiteiten instuurt, en een plakveld
-// voor een lijst die je uit Garmin Connect kopieert. De tweede werkt altijd en
-// meteen; de eerste vraagt eenmalig wat gepriegel op je telefoon en loopt
-// daarna vanzelf.
+// Drie wegen naar hetzelfde plakveld: zelf typen of plakken, een screenshot
+// van je overzicht laten uitlezen, en een sleutel waarmee Tasker activiteiten
+// instuurt. De eerste twee werken altijd en meteen; de derde vraagt eenmalig
+// wat gepriegel op je telefoon en loopt daarna vanzelf.
+//
+// De foto vult hetzelfde tekstveld als plakken, in plaats van meteen te
+// boeken: zo kijk je na wat het model eruit haalde en kun je het aanvullen of
+// verbeteren voor je op Inlezen drukt — precies zoals elke andere import in
+// deze app een concept oplevert en geen voldongen feit.
+
+/** Groot genoeg om kleine cijfers in een lange lijst leesbaar te houden. */
+const MAX_ZIJDE = 1600;
 
 interface Geboekt {
   datum: string;
@@ -28,6 +37,13 @@ export default function Koppeling() {
   const [uitslag, setUitslag] = useState<
     { geboekt: Geboekt[]; overgeslagen: number; afgewezen: string[] } | null
   >(null);
+
+  // Screenshot inlezen: eerst foto's verzamelen (er kan meer dan één
+  // screenshot nodig zijn bij een lange lijst), dan pas naar het model.
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [fotos, setFotos] = useState<string[]>([]); // data-URLs, al gecomprimeerd
+  const [fotoBezig, setFotoBezig] = useState(false);
+  const [leesBezig, setLeesBezig] = useState(false);
 
   const laad = useCallback(async () => {
     try {
@@ -71,6 +87,45 @@ export default function Koppeling() {
     }
   };
 
+  /** Eén of meer foto's toevoegen aan de strip; comprimeren gebeurt meteen. */
+  const voegFotos = async (files: FileList) => {
+    setFout(""); setFotoBezig(true);
+    try {
+      const nieuwe: string[] = [];
+      for (const file of Array.from(files)) {
+        const raw = await fileNaarDataUrl(file);
+        nieuwe.push(await comprimeerAfbeelding(raw, 0.85, MAX_ZIJDE));
+      }
+      setFotos((p) => [...p, ...nieuwe]);
+    } catch {
+      setFout("Kon een foto niet verwerken.");
+    } finally {
+      setFotoBezig(false);
+      if (fileRef.current) fileRef.current.value = ""; // zelfde bestand opnieuw kunnen kiezen
+    }
+  };
+
+  const verwijderFoto = (idx: number) => setFotos((p) => p.filter((_, i) => i !== idx));
+
+  /**
+   * De foto's laten uitlezen. Het resultaat komt niet meteen het logboek in —
+   * het vult het plakveld, zodat je het kunt nakijken voor je op Inlezen drukt.
+   */
+  const leesFotos = async () => {
+    if (!fotos.length || leesBezig) return;
+    setLeesBezig(true); setFout("");
+    try {
+      const res = await fetch("/api/tracker/beweging/foto", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fotos }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Er ging iets mis");
+      setTekst((p) => (p.trim() ? `${p.trim()}\n${data.tekst}` : data.tekst));
+      setFotos([]);
+    } catch (e) { setFout(tekstUit(e)); } finally { setLeesBezig(false); }
+  };
+
   const plakken = async () => {
     if (!tekst.trim() || bezig) return;
     setBezig(true); setFout(""); setUitslag(null);
@@ -96,9 +151,50 @@ export default function Koppeling() {
 
       {fout && <div style={T.fout}>{fout}</div>}
 
+      <h3 style={T.subKop}>Een screenshot laten inlezen</h3>
+      <p style={T.hint}>
+        Geen zin om te kopiëren? Maak een screenshot van je overzicht in Garmin Connect (of een
+        andere app) en laat hem uitlezen. Past de lijst niet op één scherm, voeg dan gerust
+        meerdere screenshots toe voor je op Uitlezen drukt. Het resultaat komt in het tekstveld
+        hieronder terecht — kijk het na voor je op Inlezen drukt, precies als bij elke andere foto
+        in deze app.
+      </p>
+      <input
+        ref={fileRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+        onChange={(e) => e.target.files?.length && voegFotos(e.target.files)}
+      />
+      {fotos.length > 0 && (
+        <div style={T.fotoStrip}>
+          {fotos.map((f, idx) => (
+            <div key={idx} style={T.fotoStripItem}>
+              <img src={f} alt={`Screenshot ${idx + 1}`} style={T.fotoStripImg} />
+              <span style={T.fotoStripNr}>{idx + 1}</span>
+              <button onClick={() => verwijderFoto(idx)} style={T.fotoStripDel} aria-label="Verwijder screenshot">
+                <X size={13} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        style={{ ...T.secundair, marginTop: fotos.length ? 8 : 0, opacity: fotoBezig || leesBezig ? 0.6 : 1 }}
+        onClick={() => fileRef.current?.click()} disabled={fotoBezig || leesBezig}
+      >
+        {fotoBezig
+          ? <><Loader2 size={15} className="spin" /> Foto verwerken...</>
+          : <><Camera size={15} /> {fotos.length ? "Nog een screenshot toevoegen" : "Screenshot kiezen"}</>}
+      </button>
+      {fotos.length > 0 && (
+        <button style={{ ...T.primair, opacity: leesBezig ? 0.6 : 1 }} onClick={leesFotos} disabled={leesBezig || fotoBezig}>
+          {leesBezig
+            ? <><Loader2 size={15} className="spin" /> Uitlezen...</>
+            : <><Check size={15} /> Uitlezen ({fotos.length} {fotos.length === 1 ? "screenshot" : "screenshots"})</>}
+        </button>
+      )}
+
       <h3 style={T.subKop}>Lijst plakken</h3>
       <p style={T.hint}>
-        De snelste weg, en hij werkt meteen. Kopieer je activiteiten uit Garmin Connect (of typ ze
+        Ook zonder screenshot werkt dit meteen. Kopieer je activiteiten uit Garmin Connect (of typ ze
         over) en plak ze hieronder — één per regel, met de soort, de datum en de duur erin.
         Bijvoorbeeld: <em>Hardlopen 2026-08-24 45:12</em>. Wat de app niet herkent laat hij staan
         in plaats van te gokken.

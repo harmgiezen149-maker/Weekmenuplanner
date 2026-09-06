@@ -1482,7 +1482,34 @@ Connect is Android-only en werkt alleen op het toestel zelf.
 Wat wél gratis kan: Garmin Connect schrijft naar Health Connect, een Tasker-
 plug-in leest daaruit, en Tasker doet een HTTP POST naar deze app. Eenmalig
 priegelen, daarna vanzelf. Daarnaast is er de weg die altijd werkt: een lijst
-kopiëren uit Garmin Connect en die plakken.
+kopiëren uit Garmin Connect en die plakken — of, als kopiëren niet lukt of te
+veel gedoe is, gewoon een screenshot van het overzicht.
+
+### Een screenshot in plaats van kopiëren
+
+`POST /api/tracker/beweging/foto` stuurt een of meer screenshots naar het
+model met de vraag welke activiteiten erop staan — naam, datum, duur, verder
+niets. Wat daarna met die drie gegevens gebeurt, ligt al vast: het antwoord
+wordt teruggezet in exact de tekstvorm die het plakveld ernaast al kent (naam,
+datum en duur, met een tab ertussen) en gaat door dezelfde `leesGeplakteLijst`
+die het plakken ook gebruikt. Geen tweede plek die herkent welke sport het is
+of hoe lang het duurde — die twee plekken zouden na verloop van tijd toch iets
+anders gaan herkennen, en dan meldt de foto-weg een activiteit die de plakweg
+wél kent.
+
+Vandaar ook dat er niets rechtstreeks geboekt wordt. Het resultaat komt terug
+in hetzelfde tekstveld als de plaklijst, zodat je het kunt nakijken of aanvullen
+voordat je op **Inlezen** drukt — een import is hier, net als overal elders in
+de app, een concept en geen voldongen feit. Staat de lijst niet op één scherm,
+dan voeg je gewoon meerdere screenshots toe voor je op **Uitlezen** drukt; het
+model krijgt ze dan samen te zien en wordt gevraagd dezelfde training niet
+twee keer over te nemen.
+
+Bij het uitproberen bleek Garmin Connect in het Nederlands activiteiten
+soms kaal "Kracht" noemen in plaats van "Krachttraining". Dat is geen synoniem
+uit een andere taal maar de eigen standaardnaam van de app, en hij stond nog
+niet in de lijst — nu wel, en dat helpt de geplakte lijst net zo goed als de
+foto.
 
 ### De sleutel
 
@@ -2252,6 +2279,7 @@ app/
     koppeling/tasker/route.ts  GET de Tasker-taak als .tsk.xml, sleutel erin
     tracker/beweging/extern/route.ts   POST vanaf je horloge, met eigen sleutel
     tracker/beweging/plakken/route.ts  POST een geplakte lijst uit Garmin Connect
+    tracker/beweging/foto/route.ts     POST een screenshot; vult hetzelfde plakveld
     push/route.ts           GET sleutel+voorkeur / POST aanmelden / DELETE afmelden
     push/proef/route.ts     POST een proefmelding naar je eigen apparaten
     cron/herinnering/route.ts  De dagelijkse taak die de meldingen verstuurt
@@ -2314,7 +2342,7 @@ components/
     Instellingen.tsx    Profiel met live budgetberekening
     Account.tsx         Account, personen en back-up onder Instellingen
     Meldingen.tsx       Pushmeldingen aan- en uitzetten, met proefknop
-    Koppeling.tsx       Lijst plakken en de sleutel voor je horloge
+    Koppeling.tsx       Lijst plakken, een screenshot laten inlezen, de sleutel voor je horloge
     Ring.tsx            De puntenring (SVG)
     stijl.ts            Inline stijlen, bovenop de CSS-variabelen
     api.ts              Fetch-helpers voor de tracker-endpoints
@@ -2367,6 +2395,7 @@ lib/
     herinnering.ts      Wanneer gaat er een melding uit, en wat staat erin (puur)
     meldingen.ts        Voorkeuren en het geheugen tegen dubbele meldingen
     koppeling.ts        Externe activiteiten en geplakte lijsten lezen (puur)
+    beweging-foto.ts    Een screenshot-antwoord omzetten naar diezelfde lijst (puur, getest)
     beweging-opslag.ts  Activiteiten boeken; de enige plek waar dat gebeurt
     gezondheidjson.ts   Een blok Health Connect-sessies uitlezen (puur, getest)
     datum.ts            Datum- en getalhulpjes (ook bruikbaar in de browser)

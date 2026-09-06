@@ -782,6 +782,13 @@ export default function Werkinstructie({ onClose }: { onClose: () => void }) {
             Dezelfde regel twee keer plakken levert één activiteit op.
           </p>
           <p style={{ margin: "0 0 8px" }}>
+            Geen zin om te kopiëren? Maak in plaats daarvan een <strong>screenshot</strong> van je
+            overzicht en laat hem uitlezen — de knop staat vlak boven het plakveld. Past de lijst
+            niet op één scherm, voeg dan gerust meerdere screenshots toe voor je op Uitlezen drukt.
+            Het resultaat komt in hetzelfde plakveld terecht, dus je kijkt het na en past het zo
+            nodig aan voor je op Inlezen drukt — precies als bij elke andere foto in deze app.
+          </p>
+          <p style={{ margin: "0 0 8px" }}>
             Wil je het automatisch, dan is de eenvoudigste weg een Tasker-profiel dat afgaat op een
             melding van Garmin Connect: de tekst van die melding gaat naar de app, en die zoekt er
             zelf een sport en een duur uit. Geen plug-in nodig. Lukt dat niet, dan is er de omweg

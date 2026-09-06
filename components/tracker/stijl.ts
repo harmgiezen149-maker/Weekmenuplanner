@@ -143,6 +143,14 @@ export const T: Record<string, React.CSSProperties> = {
   fotoVoorbeeld: { width: "100%", maxHeight: 260, objectFit: "cover", display: "block" },
   fotoOpnieuw: { position: "absolute", right: 10, bottom: 10, display: "inline-flex", alignItems: "center", gap: 5, background: "rgba(22,25,39,0.78)", color: "#fff", border: "none", borderRadius: 999, padding: "7px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer" },
 
+  // Meerdere foto's naast elkaar (een lange lijst die over meer dan één
+  // screenshot loopt).
+  fotoStrip: { display: "flex", gap: 8, overflowX: "auto", width: "100%", paddingBottom: 4 },
+  fotoStripItem: { position: "relative", flexShrink: 0, width: 84, height: 110, borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)", background: "var(--bg)" },
+  fotoStripImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  fotoStripNr: { position: "absolute", left: 5, top: 5, minWidth: 20, height: 20, borderRadius: 10, background: "rgba(16,17,24,0.65)", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px" },
+  fotoStripDel: { position: "absolute", right: 4, top: 4, width: 22, height: 22, borderRadius: 11, border: "none", background: "rgba(16,17,24,0.65)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", padding: 0 },
+
   // Scanner
   scanKader: { position: "relative", width: "100%", aspectRatio: "4 / 3", background: "#101118", borderRadius: 16, overflow: "hidden", marginBottom: 12 },
   scanVideo: { width: "100%", height: "100%", objectFit: "cover", display: "block" },

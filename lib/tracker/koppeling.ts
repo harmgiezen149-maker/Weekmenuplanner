@@ -36,6 +36,9 @@ const SYNONIEMEN: Record<string, string> = {
   // kracht en overig
   strength_training: "krachttraining", weight_lifting: "krachttraining",
   krachttraining: "krachttraining", workout: "krachttraining", fitness: "krachttraining",
+  // "Kracht" is de kale naam die de Garmin Connect-app in het Nederlands
+  // gebruikt — geen synoniem uit een andere taal, maar de eigen standaardnaam.
+  kracht: "krachttraining",
   swimming: "zwemmen", swimming_pool: "zwemmen", swimming_open_water: "zwemmen",
   zwemmen: "zwemmen", gardening: "tuinieren", tuinieren: "tuinieren",
 };
