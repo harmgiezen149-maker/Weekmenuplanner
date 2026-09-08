@@ -18,6 +18,20 @@ import type { Day, Entry, Maaltijd, Profile } from "@/lib/tracker/types";
 
 const NL_DATUM = new Intl.DateTimeFormat("nl-NL", { weekday: "long", day: "numeric", month: "long" });
 
+/**
+ * Een gekleurde streep links van elk maaltijdblok, zodat je bij het scrollen
+ * op kleur al ziet welk moment van de dag het is — niet alleen op de tekst.
+ * Bestaande tokens, geen nieuwe kleur erbij: ontbijt in het goud van de
+ * ochtend, lunch in het accent, diner in het rood-bruin van de avond, een
+ * snack neutraal omdat die geen vast moment op de dag heeft.
+ */
+const MAALTIJD_STREEP: Record<Maaltijd, string> = {
+  ontbijt: "var(--gold)",
+  lunch: "var(--accent)",
+  diner: "var(--over)",
+  snack: "var(--sub)",
+};
+
 export function toonDatum(datum: string, vandaag: string): string {
   if (datum === vandaag) return "Vandaag";
   const d = new Date(datum + "T12:00:00");
@@ -237,7 +251,7 @@ export default function Dagoverzicht({
         const regels = perMaaltijd[m];
         const punten = toonPunten(regels.reduce((s, e) => s + e.points_raw, 0), schaal);
         return (
-          <section key={m} style={T.kaartStrak}>
+          <section key={m} style={{ ...T.kaartStrak, borderLeft: `3px solid ${MAALTIJD_STREEP[m]}` }}>
             <header style={T.maaltijdKop}>
               <span style={T.maaltijdNaam}>{MAALTIJD_LABEL[m]}</span>
               <span style={T.maaltijdPunten}>{punten} pt</span>

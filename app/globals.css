@@ -1,11 +1,15 @@
 :root {
-  --bg: #f7f7f5;
+  --bg: #f6f6f1;
   --surface: #ffffff;
   --ink: #101118;
   --sub: #6f7385;
   --line: #e8e8e4;
-  --accent: #4f46e5;
-  --accent-soft: #eeedfd;
+  /* Salie-richting: een gedempt dennengroen in plaats van indigo. Bewust
+     donkerder en minder verzadigd dan --green (dat blijft ongewijzigd) zodat
+     "accent" en "verdiend met bewegen" ook voor kleurenblinde lezers twee
+     verschillende dingen blijven, en niet alleen via de kleurtoon. */
+  --accent: #3d6b5c;
+  --accent-soft: #e5eeea;
   --gold: #f0a93a;
   /* Vlakvulling voor "over budget" in de grafieken. De lichtere --gold haalt
      op wit maar 2:1 contrast; deze donkerdere tint haalt ruim 3:1 en blijft
