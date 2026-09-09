@@ -1,13 +1,14 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowLeft, Check, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, Loader2, PencilLine, Plus, Trash2 } from "lucide-react";
 import { T } from "./stijl";
 import Onderdeelkiezer from "./Onderdeelkiezer";
-import Portiekiezer from "./Portiekiezer";
+import Portiekiezer, { naarPer100 } from "./Portiekiezer";
 import { rawPoints, toonPunten } from "@/lib/tracker/points";
 import { telComponentenOp } from "@/lib/tracker/maaltijd";
 import { nl } from "@/lib/tracker/datum";
+import { naamUitStukEenheid } from "@/lib/tracker/portie";
 import { MAALTIJDEN_TRACKER, MAALTIJD_LABEL } from "@/lib/tracker/types";
 import type { FoodTemplate, Maaltijd, MaaltijdComponent, Maaltijdsjabloon, Nutrients, Product } from "@/lib/tracker/types";
 
@@ -36,6 +37,9 @@ export default function Maaltijdbouwer({
   const [componenten, setComponenten] = useState<MaaltijdComponent[]>(bestaand?.components ?? []);
   const [zoekt, setZoekt] = useState(false);
   const [gekozen, setGekozen] = useState<Product | null>(null);
+  // Index van het onderdeel dat wordt aangepast; null = er wordt iets nieuws
+  // toegevoegd. Portiekiezer kent zelf geen onderscheid tussen die twee.
+  const [bewerktIndex, setBewerktIndex] = useState<number | null>(null);
 
   const totaal = telComponentenOp(componenten);
   const punten = toonPunten(totaal.points_raw, schaal);
@@ -44,8 +48,8 @@ export default function Maaltijdbouwer({
   const voegToe = (payload: Record<string, unknown>) => {
     const nutrients = payload.nutrients as Nutrients;
     const grams = Number(payload.grams) || 0;
-    setComponenten((lijst) => [...lijst, {
-      id: `${Date.now()}-${lijst.length}`,
+    const component: MaaltijdComponent = {
+      id: bewerktIndex != null ? componenten[bewerktIndex].id : `${Date.now()}-${componenten.length}`,
       name: String(payload.name ?? "Onderdeel"),
       ...(payload.brand ? { brand: String(payload.brand) } : {}),
       amount: Number(payload.amount) || grams,
@@ -56,9 +60,11 @@ export default function Maaltijdbouwer({
       // meteen klopt. De server rekent het bij het opslaan opnieuw uit en
       // blijft de bron van waarheid.
       points_raw: rawPoints(nutrients, grams),
-    }]);
-    setGekozen(null);
-    setZoekt(false);
+    };
+    setComponenten((lijst) => bewerktIndex != null
+      ? lijst.map((c, i) => (i === bewerktIndex ? component : c))
+      : [...lijst, component]);
+    sluitPortie();
   };
 
   /** Een favoriet in één tik toevoegen, in de hoeveelheid die bewaard staat. */
@@ -67,14 +73,41 @@ export default function Maaltijdbouwer({
     setZoekt(false);
   };
 
-  // Onderdeel toevoegen: eerst kiezen, dan zo nodig de hoeveelheid.
+  const sluitPortie = () => {
+    setGekozen(null);
+    setBewerktIndex(null);
+    setZoekt(false);
+  };
+
+  // De hoeveelheid van een bestaand onderdeel aanpassen: terug naar waarden
+  // per 100, zodat de portiekiezer het weer als product kan tonen.
+  const bewerkComponent = (i: number) => {
+    const c = componenten[i];
+    const stuk = naamUitStukEenheid(c.unit);
+    const perStuk = stuk && c.amount > 0
+      ? { grams: c.grams / c.amount, label: stuk }
+      : { grams: c.grams, label: "zoals bewaard" };
+    setBewerktIndex(i);
+    setGekozen({
+      id: c.id,
+      name: c.name,
+      ...(c.brand ? { brand: c.brand } : {}),
+      bron: "bewaard",
+      eenheid: c.unit === "ml" ? "ml" : "g",
+      per100: naarPer100(c.nutrients, c.grams),
+      portie: perStuk,
+    });
+  };
+
+  // Onderdeel toevoegen of aanpassen: eerst kiezen (bij aanpassen al bekend),
+  // dan de hoeveelheid.
   if (gekozen) {
     return (
       <Portiekiezer
         product={gekozen} maaltijd={maal} datumLabel="" schaal={schaal}
         bezig={false} fout="" modus="component"
         onOpslaan={voegToe}
-        onTerug={() => setGekozen(null)}
+        onTerug={sluitPortie}
       />
     );
   }
@@ -145,6 +178,10 @@ export default function Maaltijdbouwer({
                 </div>
               </div>
               <span style={T.puntBadge}>{toonPunten(c.points_raw, schaal)}</span>
+              <button style={T.potloodKnop} onClick={() => bewerkComponent(i)}
+                aria-label={`${c.name}: hoeveelheid aanpassen`}>
+                <PencilLine size={15} />
+              </button>
               <button style={T.wisKnop}
                 onClick={() => setComponenten((l) => l.filter((_, j) => j !== i))}
                 aria-label={`${c.name} uit de maaltijd verwijderen`}>
