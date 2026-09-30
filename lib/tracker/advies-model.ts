@@ -17,7 +17,7 @@ import {
 // altijd beter dan een advies dat de controle niet doorstaat.
 // ---------------------------------------------------------------------------
 
-export const MODEL = "claude-sonnet-4-6";
+export const MODEL = "claude-sonnet-5";
 
 /** Ruim genoeg voor 350 woorden tekst plus de JSON eromheen. */
 const MAX_TOKENS = 2000;

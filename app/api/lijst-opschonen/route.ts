@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const vraag = { role: "user" as const, content: "Artikelen:\n" + lijst };
     const maak = () =>
       client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 8000,
         system: systeem + " Houd de JSON compact: geen onnodige spaties of regeleindes.",
         messages: [vraag],

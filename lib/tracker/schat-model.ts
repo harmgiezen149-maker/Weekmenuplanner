@@ -15,7 +15,7 @@ import type { Schatting } from "./schatting";
 // Gelijkgehouden met de rest van de app. De SDK hier kent nog geen structured
 // outputs, dus de JSON wordt via de systeeminstructie afgedwongen en daarna
 // defensief gelezen.
-export const MODEL = "claude-sonnet-4-6";
+export const MODEL = "claude-sonnet-5";
 
 export const SYSTEM =
   "Je geeft de gemiddelde voedingswaarden PER 100 GRAM (of per 100 ml bij een vloeistof) " +

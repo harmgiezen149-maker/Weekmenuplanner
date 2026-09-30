@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     // een lijst keuzeopties terug: [{ titel, url, bron, omschrijving }].
     if (body.type === "zoek") {
       const res = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 1500,
         system:
           "Je zoekt recepten op internet voor een gerechtnaam. Zoek naar Nederlandstalige receptpagina's " +
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
       ];
     } else if (body.type === "link") {
       const res = await client.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-5",
         max_tokens: 1500,
         system: SYSTEM_LINK,
         tools: [{ type: "web_fetch_20250910", name: "web_fetch", max_uses: 3 } as any],
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-sonnet-5",
       max_tokens: 1500,
       system: body.type === "bord" ? SYSTEM_BORD : SYSTEM,
       messages: [{ role: "user", content }],

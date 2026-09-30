@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // Model gelijkgehouden met de rest van de app. De SDK in dit project (0.32.x)
 // kent nog geen structured outputs, dus de JSON wordt via de systeeminstructie
 // afgedwongen en in lib/bon.ts defensief gelezen.
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const BON_SYSTEM =
   "Je leest een Nederlandse kassabon van een supermarkt. Geef UITSLUITEND geldige JSON terug, " +

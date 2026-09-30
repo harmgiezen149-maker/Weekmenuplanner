@@ -12,7 +12,7 @@ import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const PRODUCT_SYSTEM =
   "Je haalt de gegevens van één product uit de tekst van een webshoppagina en geeft " +

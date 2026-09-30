@@ -8,7 +8,7 @@ export const maxDuration = 60;
 // Model gelijkgehouden met de rest van de app. De SDK in dit project (0.32.x)
 // kent nog geen structured outputs, dus de JSON wordt via de systeeminstructie
 // afgedwongen en in lib/weekfoto.ts defensief gelezen.
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je leest een handgeschreven weekmenu van een briefje. Geef UITSLUITEND geldige JSON terug, " +

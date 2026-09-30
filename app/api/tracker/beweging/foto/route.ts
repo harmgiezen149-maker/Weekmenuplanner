@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 // Model gelijkgehouden met de rest van de app.
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je leest een screenshot van een overzicht van sportactiviteiten, bijvoorbeeld uit Garmin " +

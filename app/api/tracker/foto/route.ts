@@ -9,7 +9,7 @@ export const maxDuration = 60;
 // Model gelijkgehouden met de rest van de app. De SDK in dit project
 // (0.32.x) kent nog geen structured outputs, dus de JSON wordt afgedwongen
 // via de systeeminstructie en daarna defensief gelezen.
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je schat voedingswaarden van eten op een foto. Geef UITSLUITEND geldige JSON terug, " +
