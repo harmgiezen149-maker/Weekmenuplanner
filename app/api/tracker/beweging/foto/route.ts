@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { leesFotoActiviteiten } from "@/lib/tracker/beweging-foto";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -109,6 +110,9 @@ export async function POST(req: NextRequest) {
     if (e instanceof Anthropic.AuthenticationError) {
       return NextResponse.json({ error: "De ANTHROPIC_API_KEY wordt niet geaccepteerd." }, { status: 401 });
     }
+    logAiFout("beweging-foto", e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "De foto kon niet worden verwerkt. Plak de lijst met de hand." },
       { status: 502 }

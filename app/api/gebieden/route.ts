@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { logAiFout } from "@/lib/ai-fout";
 import { WINKELGEBIEDEN } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +47,9 @@ export async function POST(req: NextRequest) {
       geldig[n] = WINKELGEBIEDEN.includes(g) ? g : "";
     }
     return NextResponse.json({ gebieden: geldig });
-  } catch {
+  } catch (e) {
+    // Geen melding aan de gebruiker: zonder afdeling kiest die er zelf een.
+    logAiFout("winkelgebieden", e);
     return NextResponse.json({ gebieden: Object.fromEntries(namen.map((n: string) => [n, ""])) });
   }
 }

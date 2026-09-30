@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { leesWeekfoto } from "@/lib/weekfoto";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -78,6 +79,9 @@ export async function POST(req: NextRequest) {
       .map((b) => (b as Anthropic.TextBlock).text).join("");
     gelezen = leesWeekfoto(tekst);
   } catch (e) {
+    logAiFout("weekfoto-lezen", e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Het lezen van de foto ging mis" },
       { status: 502 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 import { berekenReceptPunten } from "@/lib/tracker/recept";
 import { leesUrl, leesPersonen, striptags, uitJsonLd, uitHtml } from "@/lib/tracker/link";
 import type { RuwRecept } from "@/lib/tracker/link";
@@ -78,23 +79,30 @@ export async function POST(req: NextRequest) {
 
   // Eerst uitzoeken wát dit is. Een productpagina en een receptpagina vragen
   // om een heel andere behandeling, en de gebruiker hoeft dat niet te weten.
-  if (lijktOpProduct(html)) {
-    const product = await leesProduct(html, url);
-    if (product) return NextResponse.json(product);
-    // Geen bruikbaar product? Dan alsnog als recept proberen.
-  }
-
-  let recept = uitJsonLd(html);
+  let recept: RuwRecept | null;
   let bron: "json-ld" | "html" | "model" = "json-ld";
+  try {
+    if (lijktOpProduct(html)) {
+      const product = await leesProduct(html, url);
+      if (product) return NextResponse.json(product);
+      // Geen bruikbaar product? Dan alsnog als recept proberen.
+    }
 
-  if (!recept) {
-    recept = uitHtml(html);
-    bron = "html";
-  }
+    recept = uitJsonLd(html);
 
-  if (!recept && process.env.ANTHROPIC_API_KEY) {
-    recept = await uitModel(html, process.env.ANTHROPIC_API_KEY);
-    bron = "model";
+    if (!recept) {
+      recept = uitHtml(html);
+      bron = "html";
+    }
+
+    if (!recept && process.env.ANTHROPIC_API_KEY) {
+      recept = await uitModel(html, process.env.ANTHROPIC_API_KEY);
+      bron = "model";
+    }
+  } catch (e) {
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
+    throw e;
   }
 
   if (!recept || recept.ingredienten.length === 0) {
@@ -189,7 +197,11 @@ async function productUitModel(html: string, key: string) {
         category: "default" as const,
       },
     };
-  } catch {
+  } catch (e) {
+    logAiFout("product-import (model)", e);
+    // Een op tegoed gelopen account is geen "niets herkend": die melding moet
+    // bovenkomen in plaats van te verdwijnen achter de algemene foutmelding.
+    if (limietMelding(e)) throw e;
     return null;
   }
 }
@@ -235,7 +247,11 @@ async function uitModel(html: string, key: string): Promise<RuwRecept | null> {
         eenheid: String(i?.eenheid ?? "").trim().slice(0, 16),
       })).filter((i: { naam: string }) => i.naam.length > 0),
     };
-  } catch {
+  } catch (e) {
+    logAiFout("recept-import (model)", e);
+    // Een op tegoed gelopen account is geen "niets herkend": die melding moet
+    // bovenkomen in plaats van te verdwijnen achter de algemene foutmelding.
+    if (limietMelding(e)) throw e;
     return null;
   }
 }

@@ -4,6 +4,7 @@ import { leesBon } from "@/lib/bon";
 import type { BonRegel } from "@/lib/bon";
 import { neemBonOp } from "@/lib/prijsboek";
 import { WINKELGEBIEDEN } from "@/lib/types";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -106,6 +107,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(bon);
   } catch (e) {
+    logAiFout("bon-lezen", e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Het lezen van de foto ging mis" },
       { status: 502 }

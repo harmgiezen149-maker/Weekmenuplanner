@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -101,6 +102,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ samenvoegingen, verpakkingen });
   } catch (e: any) {
+    logAiFout("lijst-opschonen", e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ samenvoegingen: [], verpakkingen: [], error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json({ samenvoegingen: [], verpakkingen: [], error: e?.message || "onbekend" }, { status: 500 });
   }
 }

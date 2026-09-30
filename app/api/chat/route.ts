@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 import { GEREEDSCHAP, voerUit } from "@/lib/chat/gereedschap";
 import type { Uitkomst, Voorstel } from "@/lib/chat/gereedschap";
 import { chatSysteem } from "@/lib/chat/systeem";
@@ -142,6 +143,9 @@ export async function POST(req: NextRequest) {
       messages.push({ role: "user", content: resultaten });
     }
   } catch (e) {
+    logAiFout("chat", e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     const traag = e instanceof Anthropic.RateLimitError;
     return NextResponse.json(
       {

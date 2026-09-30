@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
 import { KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN } from "@/lib/types";
 import { haalAfbeeldingen } from "@/lib/afbeeldingen";
 
@@ -187,6 +188,9 @@ export async function POST(req: NextRequest) {
       .join("\n");
     return NextResponse.json({ recept: parseJson(text) });
   } catch (e: any) {
+    logAiFout(`recept-import (${body.type})`, e);
+    const limiet = limietMelding(e);
+    if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "Kon het recept niet uitlezen: " + (e?.message || "onbekende fout") },
       { status: 500 }
