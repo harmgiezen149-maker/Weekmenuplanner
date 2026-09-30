@@ -98,6 +98,14 @@ export async function POST(req: NextRequest) {
     if (e instanceof Anthropic.AuthenticationError) {
       return NextResponse.json({ error: "De ANTHROPIC_API_KEY wordt niet geaccepteerd." }, { status: 401 });
     }
+    // Tijdelijk: deze fout kwam tot nu toe nergens in de logs terecht, waardoor
+    // niet te zien was wat er precies misging achter de generieke melding.
+    console.error(
+      "foto-verwerking mislukt:",
+      e instanceof Anthropic.APIError
+        ? `${e.status} ${e.name}: ${e.message}`
+        : e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+    );
     return NextResponse.json(
       { error: "De foto kon niet worden verwerkt. Vul het gerecht handmatig in." },
       { status: 502 }
