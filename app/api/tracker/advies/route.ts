@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout } from "@/lib/ai-fout";
 import {
   laadFeiten, getProfile, getWegingen, getLaatsteAdviezen, werkEvaluatieBij,
   saveAdvies, getCooldown, saveCooldown, setGezienAdvies,
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     logAiFout("advies", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Het advies kon niet worden opgehaald." },

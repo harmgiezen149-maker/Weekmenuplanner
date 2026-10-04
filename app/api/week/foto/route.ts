@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { leesWeekfoto } from "@/lib/weekfoto";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// Model gelijkgehouden met de rest van de app. De SDK in dit project (0.32.x)
-// kent nog geen structured outputs, dus de JSON wordt via de systeeminstructie
-// afgedwongen en in lib/weekfoto.ts defensief gelezen.
-const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je leest een handgeschreven weekmenu van een briefje. Geef UITSLUITEND geldige JSON terug, " +
@@ -61,6 +57,7 @@ export async function POST(req: NextRequest) {
   try {
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 1500,
       system: SYSTEM,
       messages: [{
@@ -74,13 +71,14 @@ export async function POST(req: NextRequest) {
         ],
       }],
     });
+    controleerWeigering(res);
     const tekst = res.content
       .filter((b) => b.type === "text")
       .map((b) => (b as Anthropic.TextBlock).text).join("");
     gelezen = leesWeekfoto(tekst);
   } catch (e) {
     logAiFout("weekfoto-lezen", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Het lezen van de foto ging mis" },

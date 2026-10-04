@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { controleerWeigering, logAiFout } from "../ai-fout.ts";
+import { MODEL, ZONDER_DENKEN } from "../ai-model.ts";
 import {
   adviesSysteem, bouwAdviesBericht, leesAdviesJson, valideerAdvies,
   type AdviesInvoer, type AdviesPayload, type Validatie,
@@ -16,8 +18,6 @@ import {
 // derde poging kost geld en levert zelden iets anders op, en géén advies is
 // altijd beter dan een advies dat de controle niet doorstaat.
 // ---------------------------------------------------------------------------
-
-export const MODEL = "claude-sonnet-5";
 
 /** Ruim genoeg voor 350 woorden tekst plus de JSON eromheen. */
 const MAX_TOKENS = 2000;
@@ -51,11 +51,13 @@ export async function genereerAdvies(
   for (let poging = 1; poging <= MAX_POGINGEN; poging++) {
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: MAX_TOKENS,
       system: systeem,
       messages: berichten,
     });
 
+    controleerWeigering(res);
     const tekst = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text)
@@ -66,10 +68,18 @@ export async function genereerAdvies(
       const validatie = valideerAdvies(payload, invoer.pakket, invoer.vorige);
       if (validatie.geldig) return { ok: true, payload, validatie, pogingen: poging };
       laatsteRedenen = validatie.redenen;
+    } else {
+      const afgekapt = res.stop_reason === "max_tokens";
+      laatsteRedenen = [afgekapt ? "het antwoord werd afgekapt" : "het model gaf geen bruikbare JSON terug"];
+      logAiFout("advies", new Error(
+        `poging ${poging}: onleesbaar antwoord (stop_reason ${res.stop_reason}, ` +
+        `${res.usage.output_tokens} tokens, ${tekst.length} tekens)`
+      ));
     }
 
     if (poging < MAX_POGINGEN) {
-      berichten.push({ role: "assistant", content: tekst });
+      // Een leeg tekstblok weigert de API; dan blijft de herkansing zonder context.
+      berichten.push({ role: "assistant", content: tekst || "(leeg antwoord)" });
       berichten.push({ role: "user", content: herkansing(laatsteRedenen) });
     }
   }

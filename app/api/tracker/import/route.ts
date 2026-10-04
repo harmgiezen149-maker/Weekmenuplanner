@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 import { berekenReceptPunten } from "@/lib/tracker/recept";
 import { leesUrl, leesPersonen, striptags, uitJsonLd, uitHtml } from "@/lib/tracker/link";
 import type { RuwRecept } from "@/lib/tracker/link";
@@ -12,8 +13,6 @@ import { getIngredienten } from "@/lib/tracker/ingredienten-opslag";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-const MODEL = "claude-sonnet-5";
 
 const PRODUCT_SYSTEM =
   "Je haalt de gegevens van één product uit de tekst van een webshoppagina en geeft " +
@@ -100,7 +99,7 @@ export async function POST(req: NextRequest) {
       bron = "model";
     }
   } catch (e) {
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     throw e;
   }
@@ -156,10 +155,12 @@ async function productUitModel(html: string, key: string) {
     const client = new Anthropic({ apiKey: key });
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 1024,
       system: PRODUCT_SYSTEM,
       messages: [{ role: "user", content: tekst }],
     });
+    controleerWeigering(res);
     const uit = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text).join("\n")
@@ -201,7 +202,7 @@ async function productUitModel(html: string, key: string) {
     logAiFout("product-import (model)", e);
     // Een op tegoed gelopen account is geen "niets herkend": die melding moet
     // bovenkomen in plaats van te verdwijnen achter de algemene foutmelding.
-    if (limietMelding(e)) throw e;
+    if (aiMelding(e)) throw e;
     return null;
   }
 }
@@ -224,10 +225,12 @@ async function uitModel(html: string, key: string): Promise<RuwRecept | null> {
     const client = new Anthropic({ apiKey: key });
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 2048,
       system: SYSTEM,
       messages: [{ role: "user", content: tekst }],
     });
+    controleerWeigering(res);
     const uit = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text).join("\n")
@@ -251,7 +254,7 @@ async function uitModel(html: string, key: string): Promise<RuwRecept | null> {
     logAiFout("recept-import (model)", e);
     // Een op tegoed gelopen account is geen "niets herkend": die melding moet
     // bovenkomen in plaats van te verdwijnen achter de algemene foutmelding.
-    if (limietMelding(e)) throw e;
+    if (aiMelding(e)) throw e;
     return null;
   }
 }

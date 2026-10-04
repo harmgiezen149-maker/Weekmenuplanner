@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,7 +52,8 @@ export async function POST(req: NextRequest) {
     const vraag = { role: "user" as const, content: "Artikelen:\n" + lijst };
     const maak = () =>
       client.messages.create({
-        model: "claude-sonnet-5",
+        model: MODEL,
+        thinking: ZONDER_DENKEN,
         max_tokens: 8000,
         system: systeem + " Houd de JSON compact: geen onnodige spaties of regeleindes.",
         messages: [vraag],
@@ -66,6 +68,7 @@ export async function POST(req: NextRequest) {
       res = await maak();
     }
 
+    controleerWeigering(res);
     const text = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text).join("\n")
@@ -103,7 +106,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ samenvoegingen, verpakkingen });
   } catch (e: any) {
     logAiFout("lijst-opschonen", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ samenvoegingen: [], verpakkingen: [], error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json({ samenvoegingen: [], verpakkingen: [], error: e?.message || "onbekend" }, { status: 500 });
   }

@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { leesFotoActiviteiten } from "@/lib/tracker/beweging-foto";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// Model gelijkgehouden met de rest van de app.
-const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je leest een screenshot van een overzicht van sportactiviteiten, bijvoorbeeld uit Garmin " +
@@ -65,6 +63,7 @@ export async function POST(req: NextRequest) {
   try {
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 2048,
       system: SYSTEM,
       messages: [{
@@ -86,6 +85,7 @@ export async function POST(req: NextRequest) {
       }],
     });
 
+    controleerWeigering(res);
     const tekst = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text)
@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "De ANTHROPIC_API_KEY wordt niet geaccepteerd." }, { status: 401 });
     }
     logAiFout("beweging-foto", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "De foto kon niet worden verwerkt. Plak de lijst met de hand." },

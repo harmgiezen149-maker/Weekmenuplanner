@@ -1,3 +1,5 @@
+import type Anthropic from "@anthropic-ai/sdk";
+
 // ---------------------------------------------------------------------------
 // Fouten van de modelaanroepen, voor alle routes gelijk.
 //
@@ -6,8 +8,27 @@
 // verwerkt", en in de logs stond niets.
 // ---------------------------------------------------------------------------
 
-/** Status voor een aanroep die niet kon omdat het tegoed op is. */
+/** Status voor een aanroep die het model niet wilde of kon doen. */
 export const LIMIET_STATUS = 503;
+
+/** Het model weigerde: een gewone 200, maar zonder bruikbaar antwoord. */
+export class AiWeigering extends Error {
+  readonly categorie: string | null;
+  constructor(categorie: string | null) {
+    super(`model weigerde (${categorie ?? "geen categorie"})`);
+    this.name = "AiWeigering";
+    this.categorie = categorie;
+  }
+}
+
+/**
+ * Zet een weigering om in een fout, zodat die langs dezelfde weg loopt als de
+ * limiet. Zonder deze stap leest de route een lege tekst en meldt "geen
+ * bruikbare JSON".
+ */
+export function controleerWeigering(res: Pick<Anthropic.Message, "stop_reason" | "stop_details">): void {
+  if (res.stop_reason === "refusal") throw new AiWeigering(res.stop_details?.category ?? null);
+}
 
 function tekstVan(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -15,15 +36,18 @@ function tekstVan(e: unknown): string {
 }
 
 /**
- * Herkent de weigering van Anthropic wanneer de zelf ingestelde
- * bestedingslimiet bereikt is, en maakt er een melding van die zegt wat er aan
- * de hand is en wanneer het weer werkt. Geeft null voor elke andere fout.
+ * Een melding voor de gebruiker bij de twee fouten die geen storing zijn: het
+ * tegoed is op, of het model weigerde. Null voor elke andere fout.
  *
- * Herkend aan de tekst en niet aan het fouttype: de API geeft hiervoor een
- * gewone 400 (invalid_request_error), niet te onderscheiden van een fout in de
- * aanvraag zelf.
+ * De limiet wordt herkend aan de tekst en niet aan het fouttype: de API geeft
+ * hiervoor een gewone 400 (invalid_request_error), niet te onderscheiden van
+ * een fout in de aanvraag zelf.
  */
-export function limietMelding(e: unknown): string | null {
+export function aiMelding(e: unknown): string | null {
+  if (e instanceof AiWeigering) {
+    return "Het model weigerde dit verzoek. Probeer een andere foto of formulering, of vul het met de hand in.";
+  }
+
   const tekst = tekstVan(e);
   if (!/usage limits?/i.test(tekst)) return null;
 

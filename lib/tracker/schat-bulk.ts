@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { limietMelding, logAiFout } from "../ai-fout.ts";
+import { AiWeigering, aiMelding, logAiFout } from "../ai-fout.ts";
 import { schatIngredient } from "./schat-model.ts";
 import { metIngredient } from "./ingredienten.ts";
 import type { IngredientBibliotheek } from "./ingredienten";
@@ -45,7 +45,8 @@ export async function schatReeks(
       return { naam, schatting: await schatIngredient(client, naam), reden: "" };
     } catch (e) {
       logAiFout(`ingredient-schatten (${naam})`, e);
-      if (limietMelding(e)) return { naam, schatting: null, reden: "AI-tegoed op" };
+      if (e instanceof AiWeigering) return { naam, schatting: null, reden: "geweigerd" };
+      if (aiMelding(e)) return { naam, schatting: null, reden: "AI-tegoed op" };
       const traag = e instanceof Anthropic.RateLimitError;
       return { naam, schatting: null, reden: traag ? "even te druk" : "schatten mislukt" };
     }

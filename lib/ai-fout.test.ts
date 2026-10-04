@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { limietMelding } from "./ai-fout.ts";
+import { AiWeigering, aiMelding, controleerWeigering } from "./ai-fout.ts";
 
 // Letterlijk zoals de SDK hem doorgeeft, uit de productielogs van 30 september.
 const LIMIET = new Error(
@@ -10,7 +10,7 @@ const LIMIET = new Error(
 );
 
 test("de bestedingslimiet wordt herkend, met het moment in Nederlandse tijd", () => {
-  const m = limietMelding(LIMIET);
+  const m = aiMelding(LIMIET);
   assert.ok(m);
   assert.match(m, /AI-tegoed is op/);
   // 00:00 UTC is in de zomertijd 02:00 in Nederland.
@@ -18,14 +18,27 @@ test("de bestedingslimiet wordt herkend, met het moment in Nederlandse tijd", ()
 });
 
 test("zonder herkenbare datum blijft de melding bruikbaar", () => {
-  const m = limietMelding(new Error("You have reached your specified API usage limits."));
+  const m = aiMelding(new Error("You have reached your specified API usage limits."));
   assert.ok(m);
   assert.doesNotMatch(m, /Vanaf/);
 });
 
 test("andere fouten zijn geen limiet", () => {
-  assert.equal(limietMelding(new Error("400 invalid model")), null);
-  assert.equal(limietMelding(new Error("socket hang up")), null);
-  assert.equal(limietMelding(undefined), null);
-  assert.equal(limietMelding("usage"), null);
+  assert.equal(aiMelding(new Error("400 invalid model")), null);
+  assert.equal(aiMelding(new Error("socket hang up")), null);
+  assert.equal(aiMelding(undefined), null);
+  assert.equal(aiMelding("usage"), null);
+});
+
+test("een weigering wordt een eigen melding, een gewoon antwoord gooit niets", () => {
+  assert.throws(
+    () => controleerWeigering({ stop_reason: "refusal", stop_details: { type: "refusal", category: "general_harms", explanation: null } as never }),
+    (e: unknown) => e instanceof AiWeigering && e.categorie === "general_harms",
+  );
+  assert.doesNotThrow(() => controleerWeigering({ stop_reason: "end_turn", stop_details: null }));
+
+  const m = aiMelding(new AiWeigering(null));
+  assert.ok(m);
+  assert.match(m, /weigerde/);
+  assert.doesNotMatch(m, /tegoed/);
 });

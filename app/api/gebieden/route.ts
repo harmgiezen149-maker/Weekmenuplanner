@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { logAiFout } from "@/lib/ai-fout";
+import { logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 import { WINKELGEBIEDEN } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -28,11 +29,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const res = await client.messages.create({
-      model: "claude-sonnet-5",
+      model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 1024,
       system: systeem,
       messages: [{ role: "user", content: "Ingrediënten:\n" + namen.map((n: string) => "- " + n).join("\n") }],
     });
+    controleerWeigering(res);
     const text = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text).join("\n")

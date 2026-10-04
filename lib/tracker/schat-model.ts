@@ -1,4 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { controleerWeigering } from "../ai-fout.ts";
+import { MODEL, ZONDER_DENKEN } from "../ai-model.ts";
 import { leesSchatting } from "./schatting";
 import { CATEGORIEEN } from "./types";
 import type { Schatting } from "./schatting";
@@ -11,11 +13,6 @@ import type { Schatting } from "./schatting";
 // hetzelfde antwoord te geven, dus staat de aanroep hier en niet twee keer in
 // een route.
 // ---------------------------------------------------------------------------
-
-// Gelijkgehouden met de rest van de app. De SDK hier kent nog geen structured
-// outputs, dus de JSON wordt via de systeeminstructie afgedwongen en daarna
-// defensief gelezen.
-export const MODEL = "claude-sonnet-5";
 
 export const SYSTEM =
   "Je geeft de gemiddelde voedingswaarden PER 100 GRAM (of per 100 ml bij een vloeistof) " +
@@ -40,11 +37,13 @@ export async function schatIngredient(
 ): Promise<Schatting | null> {
   const res = await client.messages.create({
     model: MODEL,
+    thinking: ZONDER_DENKEN,
     max_tokens: 512,
     system: SYSTEM,
     messages: [{ role: "user", content: `Ingrediënt: ${naam.slice(0, 80)}` }],
   });
 
+  controleerWeigering(res);
   const tekst = res.content
     .filter((c): c is Anthropic.TextBlock => c.type === "text")
     .map((c) => c.text)

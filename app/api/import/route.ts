@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 import { KEUKENS, HOOFDINGREDIENTEN, MOEILIJKHEDEN, MAALTIJDEN } from "@/lib/types";
 import { haalAfbeeldingen } from "@/lib/afbeeldingen";
 
@@ -92,7 +93,8 @@ export async function POST(req: NextRequest) {
     // een lijst keuzeopties terug: [{ titel, url, bron, omschrijving }].
     if (body.type === "zoek") {
       const res = await client.messages.create({
-        model: "claude-sonnet-5",
+        model: MODEL,
+        thinking: ZONDER_DENKEN,
         max_tokens: 1500,
         system:
           "Je zoekt recepten op internet voor een gerechtnaam. Zoek naar Nederlandstalige receptpagina's " +
@@ -100,9 +102,10 @@ export async function POST(req: NextRequest) {
           "Geef 4 tot 6 opties terug als UITSLUITEND geldige JSON, geen uitleg, geen markdown: " +
           '{"opties":[{"titel":"...","url":"https://...","bron":"naam van de site","omschrijving":"één korte zin"}]}. ' +
           "Gebruik alleen url's die je daadwerkelijk in de zoekresultaten hebt gezien, verzin er geen.",
-        tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 } as any],
+        tools: [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }],
         messages: [{ role: "user", content: `Zoek recepten voor: ${body.query}` }],
       });
+      controleerWeigering(res);
       const text = res.content
         .filter((c): c is Anthropic.TextBlock => c.type === "text")
         .map((c) => c.text).join("\n")
@@ -145,14 +148,16 @@ export async function POST(req: NextRequest) {
       ];
     } else if (body.type === "link") {
       const res = await client.messages.create({
-        model: "claude-sonnet-5",
+        model: MODEL,
+        thinking: ZONDER_DENKEN,
         max_tokens: 1500,
         system: SYSTEM_LINK,
-        tools: [{ type: "web_fetch_20250910", name: "web_fetch", max_uses: 3 } as any],
+        tools: [{ type: "web_fetch_20260209", name: "web_fetch", max_uses: 3 }],
         messages: [
           { role: "user", content: `Haal het recept op van deze pagina en geef het als JSON volgens het schema: ${body.url}` },
         ],
       });
+      controleerWeigering(res);
       const text = res.content
         .filter((c): c is Anthropic.TextBlock => c.type === "text")
         .map((c) => c.text)
@@ -177,11 +182,13 @@ export async function POST(req: NextRequest) {
     }
 
     const res = await client.messages.create({
-      model: "claude-sonnet-5",
+      model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 1500,
       system: body.type === "bord" ? SYSTEM_BORD : SYSTEM,
       messages: [{ role: "user", content }],
     });
+    controleerWeigering(res);
     const text = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text)
@@ -189,7 +196,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ recept: parseJson(text) });
   } catch (e: any) {
     logAiFout(`recept-import (${body.type})`, e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "Kon het recept niet uitlezen: " + (e?.message || "onbekende fout") },

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout } from "@/lib/ai-fout";
 import { schatIngredient } from "@/lib/tracker/schat-model";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Even te druk. Probeer het zo nog eens." }, { status: 429 });
     }
     logAiFout("ingredient-schatten", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "Schatten mislukt. Vul de waarden zelf in." },

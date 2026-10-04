@@ -4,15 +4,11 @@ import { leesBon } from "@/lib/bon";
 import type { BonRegel } from "@/lib/bon";
 import { neemBonOp } from "@/lib/prijsboek";
 import { WINKELGEBIEDEN } from "@/lib/types";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// Model gelijkgehouden met de rest van de app. De SDK in dit project (0.32.x)
-// kent nog geen structured outputs, dus de JSON wordt via de systeeminstructie
-// afgedwongen en in lib/bon.ts defensief gelezen.
-const MODEL = "claude-sonnet-5";
 
 const BON_SYSTEM =
   "Je leest een Nederlandse kassabon van een supermarkt. Geef UITSLUITEND geldige JSON terug, " +
@@ -70,6 +66,7 @@ export async function POST(req: NextRequest) {
   try {
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 3000,
       system: soort === "bon" ? BON_SYSTEM : PRODUCT_SYSTEM,
       messages: [{
@@ -89,6 +86,7 @@ export async function POST(req: NextRequest) {
       }],
     });
 
+    controleerWeigering(res);
     const tekst = res.content
       .filter((b) => b.type === "text")
       .map((b) => (b as Anthropic.TextBlock).text).join("");
@@ -108,7 +106,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(bon);
   } catch (e) {
     logAiFout("bon-lezen", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Het lezen van de foto ging mis" },

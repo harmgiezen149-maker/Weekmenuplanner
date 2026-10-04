@@ -2,15 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CATEGORIEEN } from "@/lib/tracker/types";
 import { leesItems } from "@/lib/tracker/foto";
-import { LIMIET_STATUS, limietMelding, logAiFout } from "@/lib/ai-fout";
+import { LIMIET_STATUS, aiMelding, logAiFout, controleerWeigering } from "@/lib/ai-fout";
+import { MODEL, ZONDER_DENKEN } from "@/lib/ai-model";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-
-// Model gelijkgehouden met de rest van de app. De SDK in dit project
-// (0.32.x) kent nog geen structured outputs, dus de JSON wordt afgedwongen
-// via de systeeminstructie en daarna defensief gelezen.
-const MODEL = "claude-sonnet-5";
 
 const SYSTEM =
   "Je schat voedingswaarden van eten op een foto. Geef UITSLUITEND geldige JSON terug, " +
@@ -59,6 +55,7 @@ export async function POST(req: NextRequest) {
   try {
     const res = await client.messages.create({
       model: MODEL,
+      thinking: ZONDER_DENKEN,
       max_tokens: 2048,
       system: SYSTEM,
       messages: [{
@@ -78,6 +75,7 @@ export async function POST(req: NextRequest) {
       }],
     });
 
+    controleerWeigering(res);
     const tekst = res.content
       .filter((c): c is Anthropic.TextBlock => c.type === "text")
       .map((c) => c.text)
@@ -100,7 +98,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "De ANTHROPIC_API_KEY wordt niet geaccepteerd." }, { status: 401 });
     }
     logAiFout("foto-verwerking", e);
-    const limiet = limietMelding(e);
+    const limiet = aiMelding(e);
     if (limiet) return NextResponse.json({ error: limiet }, { status: LIMIET_STATUS });
     return NextResponse.json(
       { error: "De foto kon niet worden verwerkt. Vul het gerecht handmatig in." },
