@@ -37,6 +37,10 @@ const OPEN: (string | RegExp)[] = [
   // Je horloge stuurt activiteiten in met een eigen sleutel, buiten de browser
   // om. Die route controleert die sleutel zelf en kan verder niets.
   "/api/tracker/beweging/extern",
+  // Claude (het AI-dorp op claude.ai) komt binnen met een eigen sleutel in het
+  // adres. Die route controleert de sleutel zelf en kan alleen bij recepten,
+  // weekmenu, boodschappen en voorraad — nooit bij de tracker.
+  /^\/api\/mcp\/[A-Za-z0-9_-]+$/,
   "/manifest.webmanifest",
   "/favicon.ico",
   "/apple-touch-icon.png",

@@ -7,6 +7,7 @@ import {
 import { T } from "./stijl";
 import Meldingen from "./Meldingen";
 import Koppeling from "./Koppeling";
+import ClaudeKoppeling from "./ClaudeKoppeling";
 
 // Account, mensen en back-up. Staat onderaan het instellingenscherm en haalt
 // zijn eigen gegevens op: het heeft niets te maken met het profiel erboven en
@@ -87,6 +88,8 @@ export default function Account() {
       <Meldingen />
 
       <Koppeling />
+
+      <ClaudeKoppeling />
 
       <Backup onFout={setFout} onMelding={(m) => { setMelding(m); setFout(""); }} />
     </>
