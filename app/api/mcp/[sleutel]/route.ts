@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { claudeSleutelGeldig } from "@/lib/claudesleutel";
+import { binnenClaudeLimiet } from "@/lib/claudelimiet";
+import { redis } from "@/lib/redis";
 import { verwerkMcp } from "@/lib/mcp";
 import { maakKookboekGereedschap } from "@/lib/claude-gereedschap";
 import {
@@ -36,6 +38,11 @@ type Ctx = { params: Promise<{ sleutel: string }> };
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { sleutel } = await ctx.params;
   if (!(await claudeSleutelGeldig(sleutel))) return new NextResponse(null, { status: 404 });
+  const limiet = await binnenClaudeLimiet(redis);
+  if (!limiet.ok) {
+    return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32000, message: "Te veel verzoeken dit uur. Probeer het straks opnieuw." } },
+      { status: 429, headers: { "Retry-After": String(limiet.wachtSeconden), "Cache-Control": "no-store" } });
+  }
   let body: unknown;
   try { body = await req.json(); } catch {
     return NextResponse.json({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Geen geldige JSON" } }, { status: 400 });
